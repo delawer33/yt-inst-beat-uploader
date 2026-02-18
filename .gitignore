@@ -1,0 +1,7 @@
+__pycache__/
+test_data/
+.env/
+.venv/
+yt-secrets.json
+token.json
+
