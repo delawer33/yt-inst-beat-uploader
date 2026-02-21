@@ -4,4 +4,4 @@ test_data/
 .venv/
 yt-secrets.json
 token.json
-
+session-*
