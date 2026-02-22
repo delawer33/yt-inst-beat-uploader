@@ -1,6 +1,6 @@
-# YouTube/Instagram Beat Uploader
+# YouTube Beat Uploader
 
-A Python CLI tool that can save lots of time on distributing your beats on Youtube (later Instagram). It produces a YouTube-ready video from a beat (audio + cover image), then uploads it via the YouTube Data API v3.
+A Python CLI tool that can save lots of time on distributing your beats on Youtube. It produces a YouTube-ready video from a beat (audio + cover image), then uploads it via the YouTube Data API v3.
 
 > **Status: WIP** — Instagram support is planned but not yet implemented. Later you will be able to install tool system-wide.
 
