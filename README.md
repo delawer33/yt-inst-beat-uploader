@@ -85,6 +85,19 @@ Add `--json` to any read command for machine-readable output. The token needs th
 `youtube` and `yt-analytics.readonly` scopes; tokens created by older versions lack them,
 so run `login` again once.
 
+### 6. Web UI
+
+```bash
+beat-upload serve                 # http://127.0.0.1:8765
+beat-upload serve --port 9000 --open-browser
+```
+
+The server serves the built frontend from `web/dist` (see `web/README.md`; without a build
+`/` shows a plain "alive" page) and the API under `/api` (`/api/health`, `/docs`). Its data
+lives in the platform data directory (Linux: `~/.local/share/beat-upload/`, sqlite database
+and beat files); credentials stay in the config directory above. Override with
+`BEAT_UPLOAD_DATA_DIR`, `BEAT_UPLOAD_CONFIG_DIR`, `BEAT_UPLOAD_PORT`.
+
 ### config.yaml
 
 ```yaml
@@ -111,7 +124,10 @@ beat_upload/
   stats.py                reads channel and video statistics (Data API)
   analytics.py            per-video watch time and view duration (Analytics API)
   auth.py                 OAuth2 client secrets and token storage
+  workspace.py            where one channel owner's files live (config dir, data dir)
   errors.py               exceptions the CLI reports without a traceback
+beat_server/              FastAPI app for `serve`: settings, SQLite models/repos, migrations
+web/                      React frontend, built into web/dist and served by beat_server
 tests/                    pytest unit tests (no network, no ffmpeg)
 ```
 
@@ -121,4 +137,9 @@ tests/                    pytest unit tests (no network, no ffmpeg)
 pip install -e '.[dev]'
 ruff check . && ruff format .
 pytest
+cd web && npm install && npm run lint:tokens && npm run api:check && npm test && npm run build
 ```
+
+Database schema changes: edit `beat_server/db/models.py`, then
+`alembic revision --autogenerate -m "..."` (config in `alembic.ini`, scripts in
+`beat_server/db/migrations/`). The server applies migrations itself on startup.
