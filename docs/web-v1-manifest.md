@@ -20,7 +20,7 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 | 2 | Google connection | verify (1cb97bd, done-cond verified; review running) | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
 | 3 | Jobs/worker/SSE | verify (2070f41, done-cond verified; review running) | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
 | 7 | systemd | ready (7ce46d0, verified) | slice-7 | pytest + ruff | 0 | |
-| 4 | Library/sync | todo | | pytest tests/server/test_sync.py + suite + web build | 0 | |
+| 4 | Library/sync | in-progress@s4 | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
 | 5 | New beat pipeline | todo | | pytest test_video + test_pipeline + suite + web build | 0 | |
 | 6 | Stats/scheduler | todo | | pytest tests/server/test_stats.py + suite + web build | 0 | |
 
@@ -39,3 +39,6 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - #7 done and verified by coordinator (63 tests, ruff clean). Waiting on #2, #3.
 - #3 done, done condition verified (71 tests, 5 vitest). Review dispatched (seam). Deviations accepted: JobContext has `queue` arg + `enqueue()`; SSE uses `event:` field; /api/events excluded from OpenAPI.
 - #2 done, done condition verified (75 tests, 4 vitest). Review dispatched (auth). Noted: ScheduleForm UI deferred to #6; BEAT_UPLOAD_PORT ignored by serve (out of scope, log only). Starting W2 integration merge.
+- W2 integrated: `integration` = cd75386 (slices 2,3,7 merged; 99 py tests, 8 vitest, smoke boot OK).
+- #3 review: 2 high (worker loop dies on DB error; per-beat jobs cache pollution), 4 med (paused retry dup, session thread-safety, SSE reconnect refetch, unbounded subscriber queues). Fix cycle 1 dispatched on slice-3. Accepted residual: cli.py→beat_server lazy import (pre-existing #8 deviation).
+- W3 started: #4 → s4 off integration cd75386 (#3 fixes will be merged into integration afterwards).
