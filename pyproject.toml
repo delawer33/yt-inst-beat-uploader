@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beat-upload"
+version = "0.1.0"
+description = "Render a YouTube video from a beat (audio + cover image) and upload it."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "typer>=0.12",
+    "PyYAML>=6.0",
+    "platformdirs>=4.0",
+    "google-api-python-client>=2.100",
+    "google-auth>=2.20",
+    "google-auth-oauthlib>=1.0",
+    "google-auth-httplib2>=0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+beat-upload = "beat_upload.cli:app"
+
+[tool.setuptools]
+packages = ["beat_upload"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

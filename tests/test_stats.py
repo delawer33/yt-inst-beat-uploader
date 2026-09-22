@@ -1,0 +1,49 @@
+import pytest
+
+from beat_upload.stats import ChannelStats, parse_channel, parse_duration, parse_video
+
+
+@pytest.mark.parametrize(
+    ("iso", "seconds"),
+    [("PT3M25S", 205), ("PT1H2M3S", 3723), ("PT45S", 45), ("PT2M", 120), ("", 0), ("junk", 0)],
+)
+def test_parse_duration(iso: str, seconds: int) -> None:
+    assert parse_duration(iso) == seconds
+
+
+def test_parse_channel() -> None:
+    item = {
+        "id": "UC123",
+        "snippet": {"title": "DELAWER"},
+        "statistics": {"subscriberCount": "12", "viewCount": "3400", "videoCount": "7"},
+        "contentDetails": {"relatedPlaylists": {"uploads": "UU123"}},
+    }
+    assert parse_channel(item) == ChannelStats(
+        id="UC123", title="DELAWER", subscribers=12, views=3400, videos=7, uploads_playlist="UU123"
+    )
+
+
+def test_parse_video_full() -> None:
+    item = {
+        "id": "abc",
+        "snippet": {
+            "title": "Villain",
+            "publishedAt": "2026-02-22T10:00:00Z",
+            "tags": ["typebeat"],
+            "description": "prod",
+        },
+        "statistics": {"viewCount": "100", "likeCount": "5", "commentCount": "1"},
+        "status": {"privacyStatus": "public"},
+        "contentDetails": {"duration": "PT2M30S"},
+    }
+    v = parse_video(item)
+    assert (v.title, v.views, v.likes, v.comments) == ("Villain", 100, 5, 1)
+    assert v.duration_seconds == 150
+    assert v.privacy == "public"
+    assert v.url == "https://youtu.be/abc"
+    assert v.to_dict()["url"] == v.url
+
+
+def test_parse_video_missing_counts_default_to_zero() -> None:
+    v = parse_video({"id": "x", "snippet": {}, "statistics": {}})
+    assert (v.views, v.likes, v.comments, v.duration_seconds, v.tags) == (0, 0, 0, 0, [])

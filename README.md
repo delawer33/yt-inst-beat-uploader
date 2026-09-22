@@ -1,79 +1,124 @@
 # YouTube Beat Uploader
 
-A Python CLI tool that can save lots of time on distributing your beats on Youtube. It produces a YouTube-ready video from a beat (audio + cover image), then uploads it via the YouTube Data API v3.
+CLI that turns a beat (audio + cover image) into a 1080p video with ffmpeg and uploads it to YouTube via the Data API v3.
 
-> **Status: WIP** — Instagram support is planned but not yet implemented. Later you will be able to install tool system-wide.
+Status: WIP. Instagram upload is planned, not implemented.
 
-## Features
-
-- Combine audio (MP3/WAV) with a cover image into a 1080p video using ffmpeg
-- Upload directly to YouTube with metadata (title, description, tags, category, privacy)
-- OAuth2 authentication with Google
-- Configurable per-beat via YAML
-
-## Prerequisites
+## Requirements
 
 - Python 3.13+
-- [ffmpeg](https://ffmpeg.org/) installed system-wide
+- `ffmpeg` on PATH
+- A Google Cloud OAuth client (Desktop app) with the YouTube Data API enabled
 
-## Installation
+## Install
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
+
+This gives you the `beat-upload` command. `python main.py` works the same way.
 
 ## Usage
 
 ### 1. Login
 
-[Get Client ID and Client Secret for your Google account](https://developers.google.com/youtube/registering_an_application)
-
-Authenticate with obtained credentials:
+Get a client ID and secret from [Google Cloud Console](https://developers.google.com/youtube/registering_an_application), then:
 
 ```bash
-python main.py login --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
+beat-upload login --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
 ```
 
-You can also run without flags to be prompted interactively:
+Without flags the command prompts for both values. A browser opens for authorization. The token and client secrets are stored in the platform config directory:
+
+| OS      | Path                                          |
+|---------|-----------------------------------------------|
+| Linux   | `~/.config/beat-upload/`                      |
+| macOS   | `~/Library/Application Support/beat-upload/`  |
+| Windows | `%APPDATA%\beat-upload\`                      |
+
+If the token expires or is revoked, run `login` again.
+
+### 2. Upload
+
+Put these in one folder:
+
+- exactly one audio file (`.mp3`, `.wav`)
+- exactly one image (`.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`)
+- `config.yaml`
+
 ```bash
-python main.py login
+beat-upload upload /path/to/beat
 ```
 
-This opens a browser for OAuth authorization. Credentials are stored in your platform config directory.
+The video is rendered to `video.mp4` in the same folder. If `video.mp4` already exists it is uploaded as is, so delete it to re-render.
 
-### 2. Upload a Beat
-
-Prepare a folder with:
-- One audio file (`.mp3` or `.wav`)
-- One image file (`.jpg`, `.jpeg`, `.png`, `.gif`, or `.bmp`)
-- A `config.yaml` file
+### 3. Stats
 
 ```bash
-python main.py upload /path/to/beat/folder
+beat-upload channel            # subscribers, views, video count
+beat-upload videos             # all uploads, newest first
+beat-upload videos -n 10       # last 10
+beat-upload video VIDEO_ID     # one video with tags and description
 ```
+
+### 4. Analytics
+
+```bash
+beat-upload analytics          # last 28 days: views, watch time, average view duration per video
+beat-upload analytics -d 7     # last 7 days
+```
+
+`avd` is the average view duration, `avd%` the share of the video an average viewer
+watches. Beats with `avd%` around 50 or more are the ones worth replicating. Videos with
+no views in the range are omitted.
+
+### 5. Privacy
+
+```bash
+beat-upload privacy unlisted VIDEO_ID [VIDEO_ID ...]
+beat-upload privacy private VIDEO_ID
+```
+
+Add `--json` to any read command for machine-readable output. The token needs the
+`youtube` and `yt-analytics.readonly` scopes; tokens created by older versions lack them,
+so run `login` again once.
 
 ### config.yaml
 
 ```yaml
 youtube:
-  title: "My Beat Title"
-  description: "Produced by ..."
-  tags:
+  title: "My Beat Title"          # required, <= 100 chars
+  description: "Produced by ..."  # optional, <= 5000 chars
+  tags:                           # optional
     - beats
     - instrumental
-  category_id: 10         # Music
-  privacy_status: private  # private | public | unlisted
+  category_id: 10                 # optional, default 10 (Music)
+  privacy_status: private         # optional: private (default) | public | unlisted
 ```
 
-## Configuration
+## Project layout
 
-Credentials are stored in the platform-specific config directory:
+```
+main.py                   entry point (python main.py ...)
+beat_upload/
+  cli.py                  Typer commands: login, upload, channel, videos, video, analytics, privacy
+  beat_folder.py          finds the audio and image in a beat folder
+  config.py               loads and validates config.yaml
+  video.py                renders the video with ffmpeg
+  youtube.py              uploads and edits privacy through the YouTube Data API
+  stats.py                reads channel and video statistics (Data API)
+  analytics.py            per-video watch time and view duration (Analytics API)
+  auth.py                 OAuth2 client secrets and token storage
+  errors.py               exceptions the CLI reports without a traceback
+tests/                    pytest unit tests (no network, no ffmpeg)
+```
 
-| OS      | Path                          |
-|---------|-------------------------------|
-| Linux   | `~/.config/beat-upload/`     |
-| macOS   | `~/Library/Application Support/beat-upload/` |
-| Windows | `%APPDATA%\beat-upload\`     |
+## Development
 
+```bash
+pip install -e '.[dev]'
+ruff check . && ruff format .
+pytest
+```
