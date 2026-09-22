@@ -44,8 +44,8 @@ def install_service(home: Path, exec_start: str) -> Path:
 
 
 def current_exec_start(port: int) -> str:
-    """``ExecStart`` for the ``beat-upload`` executable of the running interpreter's venv."""
-    executable = Path(sys.executable).resolve().parent / UNIT_NAME
+    """``ExecStart`` for the ``beat-upload`` executable of the running venv (``sys.prefix``)."""
+    executable = Path(sys.prefix) / "bin" / UNIT_NAME
     return f"{executable} serve --port {port}"
 
 

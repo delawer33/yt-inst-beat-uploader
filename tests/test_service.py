@@ -56,7 +56,7 @@ def test_install_service_overwrites(tmp_path: Path) -> None:
 def test_current_exec_start_points_next_to_interpreter() -> None:
     exec_start = service.current_exec_start(8765)
     executable, *args = exec_start.split(" ")
-    assert Path(executable).parent == Path(sys.executable).resolve().parent
+    assert Path(executable).parent == Path(sys.prefix) / "bin"
     assert Path(executable).name == "beat-upload"
     assert args == ["serve", "--port", "8765"]
 
