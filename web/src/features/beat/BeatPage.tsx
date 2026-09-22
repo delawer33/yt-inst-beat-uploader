@@ -1,17 +1,23 @@
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { ExternalLink, Eye, MessageSquare, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { JobList } from "@/features/jobs/JobList";
+import { useJobs } from "@/features/jobs/queries";
 import { Cover } from "@/features/library/Cover";
 import { StatusBadge } from "@/features/library/StatusBadge";
 import { useBeat, useSetPrivacy, type Beat } from "@/features/library/queries";
 import { formatDate, formatViews } from "@/lib/format";
+import { MetadataForm } from "./MetadataForm";
 import { PrivacySelect } from "./PrivacySelect";
+import { useDeleteBeat, usePatchBeat, useUploadBeat } from "./queries";
 
 /**
  * One Beat. Layout, top to bottom:
- *   header  — cover, title, status, counters, published date, "Open on YouTube"
- *   metadata — read-only today; slice 5 swaps in MetadataForm for DRAFT/QUEUED beats
+ *   header  — cover, title, status, counters, published date, "Open on YouTube";
+ *             a draft gets "Upload to YouTube" / "Delete draft", a running render or
+ *             upload job its progress line
+ *   metadata — MetadataForm for DRAFT/QUEUED beats, read-only Metadata afterwards
  *   (slice 6: ViewsChart goes between metadata and jobs)
  *   jobs    — JobList beatId=id
  */
@@ -35,7 +41,10 @@ export function BeatPage() {
   return <BeatView beat={beat.data} />;
 }
 
+const EDITABLE = new Set<Beat["status"]>(["draft", "queued"]);
+
 function BeatView({ beat }: { beat: Beat }) {
+  const editable = EDITABLE.has(beat.status);
   return (
     <div className="flex flex-col gap-8">
       <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
@@ -64,11 +73,86 @@ function BeatView({ beat }: { beat: Beat }) {
               </a>
             </Button>
           )}
+          {beat.status === "draft" && <DraftActions beat={beat} />}
+          <CurrentJob beatId={beat.id} />
         </div>
       </header>
-      <Metadata beat={beat} />
+      {editable ? <EditableMetadata beat={beat} /> : <Metadata beat={beat} />}
       <JobList beatId={beat.id} />
     </div>
+  );
+}
+
+/** Upload (render then upload) and delete, for drafts only. */
+function DraftActions({ beat }: { beat: Beat }) {
+  const navigate = useNavigate();
+  const upload = useUploadBeat();
+  const remove = useDeleteBeat();
+  const error = upload.error ?? remove.error;
+
+  function onDelete() {
+    if (!window.confirm(`Delete the draft "${beat.title || "Untitled"}" and its files?`)) return;
+    remove.mutate(beat.id, { onSuccess: () => navigate("/") });
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button
+        size="sm"
+        disabled={!beat.has_files || upload.isPending}
+        onClick={() => upload.mutate(beat.id)}
+      >
+        Upload to YouTube
+      </Button>
+      <Button variant="outline" size="sm" disabled={remove.isPending} onClick={onDelete}>
+        Delete draft
+      </Button>
+      {!beat.has_files && (
+        <span className="text-sm text-muted-foreground">Audio and cover are missing.</span>
+      )}
+      {error && (
+        <span role="alert" className="text-sm text-destructive">
+          {error.message}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const JOB_LABEL: Record<string, string> = { render: "Rendering", upload: "Uploading" };
+
+/** A compact progress line while a RENDER or UPLOAD job of this beat is queued or running. */
+function CurrentJob({ beatId }: { beatId: string }) {
+  const jobs = useJobs(beatId);
+  const job = jobs.data?.find(
+    (j) => (j.kind === "render" || j.kind === "upload") && (j.status === "running" || j.status === "queued"),
+  );
+  if (!job) return null;
+  const percent = Math.round(job.progress * 100);
+  return (
+    <div className="flex flex-col gap-1.5" aria-live="polite">
+      <span className="text-sm text-muted-foreground">
+        {job.status === "queued" ? `${JOB_LABEL[job.kind]} queued` : `${JOB_LABEL[job.kind]}… ${percent}%`}
+      </span>
+      <Progress value={percent} aria-label={`${job.kind} progress`} />
+    </div>
+  );
+}
+
+/** MetadataForm wired to PATCH; the server's 422 message lands next to the Save button. */
+function EditableMetadata({ beat }: { beat: Beat }) {
+  const patch = usePatchBeat();
+  return (
+    <section>
+      <MetadataForm
+        key={beat.updated_at}
+        beat={beat}
+        onSave={(p) => patch.mutate({ id: beat.id, patch: p })}
+        saving={patch.isPending}
+        error={patch.error?.message ?? null}
+        saved={patch.isSuccess}
+      />
+    </section>
   );
 }
 
@@ -95,7 +179,7 @@ function Counters({ beat }: { beat: Beat }) {
   );
 }
 
-/** Read-only metadata plus the privacy selector. Slice 5 replaces this with MetadataForm. */
+/** Read-only metadata plus the privacy selector, for beats past the draft stage. */
 function Metadata({ beat }: { beat: Beat }) {
   const setPrivacy = useSetPrivacy();
   const onYouTube = beat.youtube_id !== null;

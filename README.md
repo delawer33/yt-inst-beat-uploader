@@ -110,6 +110,19 @@ channel title. The secret is stored in the config directory and never shown agai
 **Disconnect** deletes the token and keeps the client. A banner at the top of every page
 says when the connection is missing or expired.
 
+#### Add a beat from the web UI
+
+On the Library page drop one audio file (`.mp3`/`.wav`) and one cover image
+(`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`) onto the **New beat** area, or click it to pick them.
+This creates a draft with the title, description and tags from your templates
+(`title_template`, `description_template`, `tags_template` in `PUT /api/settings`; `{name}` is
+the audio file name without extension) and opens its page. Edit the metadata there (same
+limits as `config.yaml`: title 100, description 5000, tags 500 characters in total) and press
+**Upload to YouTube**: the server renders the video with ffmpeg and uploads it, showing the
+progress of both steps; when it is done the page links to the video. A draft can be deleted
+with **Delete draft**; anything already on YouTube cannot be deleted from here. If YouTube is
+not connected the upload job pauses and continues after you connect in Settings.
+
 ### 7. Run as a service
 
 To keep the web UI running permanently (Linux, systemd):
