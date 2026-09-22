@@ -98,6 +98,25 @@ lives in the platform data directory (Linux: `~/.local/share/beat-upload/`, sqli
 and beat files); credentials stay in the config directory above. Override with
 `BEAT_UPLOAD_DATA_DIR`, `BEAT_UPLOAD_CONFIG_DIR`, `BEAT_UPLOAD_PORT`.
 
+### 7. Run as a service
+
+To keep the web UI running permanently (Linux, systemd):
+
+```bash
+beat-upload install-service               # writes ~/.config/systemd/user/beat-upload.service
+beat-upload install-service --port 9000   # default port is 8765
+systemctl --user daemon-reload
+systemctl --user enable --now beat-upload
+loginctl enable-linger $USER              # start at boot, without logging in
+```
+
+The unit runs `<venv>/bin/beat-upload serve --port 8765` from the virtualenv you installed
+into, restarts on failure and opens `http://127.0.0.1:8765` after every reboot. A copy of
+the unit with placeholders is in `deploy/beat-upload.service`.
+
+Data stays where `serve` keeps it: `~/.local/share/beat-upload/` (sqlite database, beat files)
+and `~/.config/beat-upload/` (client secrets, token). Logs: `journalctl --user -u beat-upload -f`.
+
 ### config.yaml
 
 ```yaml

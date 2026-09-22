@@ -230,3 +230,19 @@ def _ensure_video(beat: BeatFolder) -> None:
 def _fail(message: str) -> NoReturn:
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(1)
+
+
+@app.command("install-service")
+def install_service(
+    port: Annotated[int, typer.Option("--port", help="Port the service listens on")] = 8765,
+) -> None:
+    """Write a systemd user unit that runs `beat-upload serve` permanently."""
+    from beat_upload import service
+
+    path = service.install_service(Path.home(), service.current_exec_start(port))
+    typer.echo(f"Unit written to {path}")
+    typer.echo("Enable it with:")
+    for command in service.enable_commands():
+        typer.echo(f"  {command}")
+    typer.echo("(enable-linger starts the service at boot without an interactive login.)")
+    typer.echo("Logs: journalctl --user -u beat-upload -f")
