@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router";
 import { cn } from "@/lib/utils";
+import { useEvents } from "@/api/events";
 
 const links = [
   { to: "/", label: "Library", end: true },
@@ -7,6 +8,7 @@ const links = [
 ];
 
 export function AppShell() {
+  useEvents();
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">

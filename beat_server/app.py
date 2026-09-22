@@ -5,6 +5,8 @@ built frontend (``web/dist``) is served at ``/`` with an SPA fallback; when it i
 ``/`` answers with a plain "alive" page so the server is still usable for the API.
 """
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,8 +15,13 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
+from beat_server.api import events, jobs, sync
 from beat_server.db.engine import make_engine, make_session_factory
 from beat_server.db.migrate import upgrade_to_head
+from beat_server.jobs.events import EventBus
+from beat_server.jobs.handlers import HANDLERS
+from beat_server.jobs.queue import JobQueue
+from beat_server.jobs.worker import Worker
 from beat_server.settings import ServerSettings
 from beat_upload.workspace import Workspace
 
@@ -41,18 +48,28 @@ def create_app(
     web_dist: Path | None = WEB_DIST,
     db_path: Path | str | None = None,
     migrate: bool = True,
+    start_worker: bool = True,
 ) -> FastAPI:
     """Build the app.
 
     ``db_path`` overrides ``workspace.db_file`` (tests pass ``":memory:"``); ``migrate=False``
-    lets tests create tables themselves.
+    lets tests create tables themselves; ``start_worker=False`` skips the background job
+    worker (tests drive ``Worker.run_one`` directly).
     """
     db_path = workspace.db_file if db_path is None else db_path
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Worker and scheduler start here in later slices.
-        yield
+        app.state.queue.recover()
+        worker_task = asyncio.create_task(app.state.worker.run_forever()) if start_worker else None
+        # Scheduler starts here in a later slice.
+        try:
+            yield
+        finally:
+            if worker_task is not None:
+                worker_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await worker_task
 
     app = FastAPI(title="beat-upload", version="0.1.0", lifespan=lifespan)
     app.state.workspace = workspace
@@ -64,6 +81,13 @@ def create_app(
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
 
+    bus = EventBus()
+    queue = JobQueue(app.state.session_factory, bus)
+    app.state.bus = bus
+    app.state.queue = queue
+    app.state.worker = Worker(queue, HANDLERS, app.state.session_factory, workspace, bus)
+    app.state.on_reconnect = queue.resume_paused  # the auth callback calls it after login
+
     _include_routers(app)
     _mount_web(app, web_dist)
     return app
@@ -71,6 +95,9 @@ def create_app(
 
 def _include_routers(app: FastAPI) -> None:
     app.include_router(api)
+    app.include_router(jobs.router)
+    app.include_router(sync.router)
+    app.include_router(events.router)
 
 
 def _mount_web(app: FastAPI, web_dist: Path | None) -> None:
