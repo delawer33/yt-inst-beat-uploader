@@ -16,10 +16,10 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 
 | # | title | status | branch | done condition | retries | notes |
 |---|-------|--------|--------|----------------|---------|-------|
-| 8 | Foundation | in-progress@s1 | slice-1-foundation | `PYTHONPATH=wt pytest -q && ruff check . && (cd web && npm run build)` + health test | 0 | |
-| 2 | Google connection | todo | | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
-| 3 | Jobs/worker/SSE | todo | | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
-| 7 | systemd | todo | | pytest + ruff | 0 | |
+| 8 | Foundation | ready (7a651f6, verified) | slice-1-foundation | `PYTHONPATH=wt pytest -q && ruff check . && (cd web && npm run build)` + health test | 0 | |
+| 2 | Google connection | in-progress@s2 | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
+| 3 | Jobs/worker/SSE | in-progress@s3 | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
+| 7 | systemd | in-progress@s7 | slice-7 | pytest + ruff | 0 | |
 | 4 | Library/sync | todo | | pytest tests/server/test_sync.py + suite + web build | 0 | |
 | 5 | New beat pipeline | todo | | pytest test_video + test_pipeline + suite + web build | 0 | |
 | 6 | Stats/scheduler | todo | | pytest tests/server/test_stats.py + suite + web build | 0 | |
@@ -34,3 +34,5 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 ## Log
 
 - W1 started: #8 → s1.
+- W1 done: #8 verified (55 py tests, ruff, web build). Branch `integration` = slice-1-foundation. W2 started: #2→s2, #3→s3, #7→s7 off integration.
+- Deviation accepted (#8): cli.py imports beat_server lazily inside serve(); layering test exempts cli.py. AppShell nav has 2 links.
