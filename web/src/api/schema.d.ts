@@ -21,6 +21,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Beats */
+        get: operations["list_beats_api_beats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Beat */
+        get: operations["get_beat_api_beats__beat_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cover
+         * @description The local cover image; 404 when the beat only exists on YouTube.
+         */
+        get: operations["get_cover_api_beats__beat_id__cover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/privacy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Privacy
+         * @description Change the privacy of an uploaded beat on YouTube, then mirror it locally.
+         */
+        post: operations["change_privacy_api_beats__beat_id__privacy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -206,6 +280,57 @@ export interface components {
             status: components["schemas"]["AuthStatus"];
             channel: components["schemas"]["ChannelOut"] | null;
         };
+        /**
+         * BeatOut
+         * @description A Beat as the Library and Beat pages see it. Build with ``from_beat``.
+         */
+        BeatOut: {
+            /** Id */
+            id: string;
+            status: components["schemas"]["BeatStatus"];
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Tags */
+            tags: string[];
+            /** Category Id */
+            category_id: number;
+            privacy: components["schemas"]["PrivacyStatus"];
+            /** Youtube Id */
+            youtube_id: string | null;
+            /** Youtube Url */
+            youtube_url: string | null;
+            /** Published At */
+            published_at: string | null;
+            /** Views */
+            views: number;
+            /** Likes */
+            likes: number;
+            /** Comments */
+            comments: number;
+            /** Has Files */
+            has_files: boolean;
+            /** Cover Url */
+            cover_url: string | null;
+            /** Synced At */
+            synced_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * BeatStatus
+         * @enum {string}
+         */
+        BeatStatus: "draft" | "queued" | "rendering" | "uploading" | "uploaded" | "published";
         /** ChannelOut */
         ChannelOut: {
             /** Id */
@@ -259,6 +384,15 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "running" | "done" | "failed" | "paused";
+        /** PrivacyIn */
+        PrivacyIn: {
+            privacy: components["schemas"]["PrivacyStatus"];
+        };
+        /**
+         * PrivacyStatus
+         * @enum {string}
+         */
+        PrivacyStatus: "private" | "public" | "unlisted";
         /** SettingsIn */
         SettingsIn: {
             /** Stats Hour */
@@ -313,6 +447,121 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    list_beats_api_beats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"][];
+                };
+            };
+        };
+    };
+    get_beat_api_beats__beat_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cover_api_beats__beat_id__cover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_privacy_api_beats__beat_id__privacy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivacyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
