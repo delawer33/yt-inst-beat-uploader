@@ -119,3 +119,9 @@ class SettingsRepo:
     def set(self, key: str, value: str) -> None:
         self.session.merge(Setting(key=key, value=value))
         self.session.commit()
+
+    def delete(self, key: str) -> None:
+        row = self.session.get(Setting, key)
+        if row is not None:
+            self.session.delete(row)
+            self.session.commit()
