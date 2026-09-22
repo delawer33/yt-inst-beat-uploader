@@ -15,6 +15,7 @@ from beat_upload.config import PrivacyStatus, load_youtube_metadata
 from beat_upload.errors import BeatUploadError
 from beat_upload.stats import VideoStats, YouTubeStats
 from beat_upload.video import render_video
+from beat_upload.workspace import Workspace
 from beat_upload.youtube import set_privacy, upload_video, video_url
 
 app = typer.Typer(
@@ -41,15 +42,16 @@ def login(
     ],
 ) -> None:
     """Store Google API client credentials and authorize via the browser."""
-    auth.save_client_secrets(client_id, client_secret)
-    typer.echo(f"Client secrets saved to {auth.SECRETS_FILE}")
+    ws = Workspace.default()
+    auth.save_client_secrets(ws, client_id, client_secret)
+    typer.echo(f"Client secrets saved to {ws.secrets_file}")
 
     typer.echo("Opening browser for Google authentication...")
     try:
-        auth.run_login_flow()
+        auth.run_login_flow(ws)
     except BeatUploadError as e:
         _fail(str(e))
-    typer.echo(f"Authentication successful. Token saved to {auth.TOKEN_FILE}")
+    typer.echo(f"Authentication successful. Token saved to {ws.token_file}")
 
 
 @app.command()
@@ -73,7 +75,7 @@ JsonFlag = Annotated[bool, typer.Option("--json", help="Print machine-readable J
 def channel(as_json: JsonFlag = False) -> None:
     """Show subscriber, view and video counts of your channel."""
     try:
-        stats = YouTubeStats(auth.get_valid_credentials()).channel()
+        stats = YouTubeStats(auth.get_valid_credentials(Workspace.default())).channel()
     except BeatUploadError as e:
         _fail(str(e))
     if as_json:
@@ -94,7 +96,7 @@ def videos(
 ) -> None:
     """List your uploads with views, likes and comments, newest first."""
     try:
-        items = YouTubeStats(auth.get_valid_credentials()).videos(limit)
+        items = YouTubeStats(auth.get_valid_credentials(Workspace.default())).videos(limit)
     except BeatUploadError as e:
         _fail(str(e))
     if as_json:
@@ -110,7 +112,7 @@ def video(
 ) -> None:
     """Show statistics, tags and description of one video."""
     try:
-        item = YouTubeStats(auth.get_valid_credentials()).video(video_id)
+        item = YouTubeStats(auth.get_valid_credentials(Workspace.default())).video(video_id)
     except BeatUploadError as e:
         _fail(str(e))
     if as_json:
@@ -131,7 +133,7 @@ def analytics(
     end = date.today()
     start = end - timedelta(days=days - 1)
     try:
-        credentials = auth.get_valid_credentials()
+        credentials = auth.get_valid_credentials(Workspace.default())
         rows = YouTubeAnalytics(credentials).videos(start, end)
         titles = {v.id: v.title for v in YouTubeStats(credentials).videos()}
     except BeatUploadError as e:
@@ -157,12 +159,36 @@ def privacy(
 ) -> None:
     """Change the privacy status of existing videos."""
     try:
-        credentials = auth.get_valid_credentials()
+        credentials = auth.get_valid_credentials(Workspace.default())
         for video_id in video_ids:
             set_privacy(video_id, status, credentials)
             typer.echo(f"{video_id}: {status.value}")
     except BeatUploadError as e:
         _fail(str(e))
+
+
+@app.command()
+def serve(
+    port: Annotated[int, typer.Option("--port", help="Port to listen on")] = 8765,
+    open_browser: Annotated[
+        bool, typer.Option("--open-browser", help="Open the UI in the default browser")
+    ] = False,
+) -> None:
+    """Run the local web server (UI + API) on http://127.0.0.1:PORT."""
+    import uvicorn
+
+    from beat_server.app import create_app
+    from beat_server.settings import ServerSettings
+
+    settings = ServerSettings.from_env(port=port)
+    ws = settings.workspace()
+    url = f"http://{settings.host}:{settings.port}"
+    typer.echo(f"Serving on {url} (data in {ws.data_dir})")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(url)
+    uvicorn.run(create_app(ws, settings), host=settings.host, port=settings.port)
 
 
 def _print_video_table(items: Iterable[VideoStats]) -> None:
@@ -183,7 +209,7 @@ def _print_json(data: Any) -> None:
 def _upload(folder: Path) -> None:
     beat = find_beat_folder(folder)
     metadata = load_youtube_metadata(beat.config_path)
-    credentials = auth.get_valid_credentials()
+    credentials = auth.get_valid_credentials(Workspace.default())
 
     _ensure_video(beat)
 

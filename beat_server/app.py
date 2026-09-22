@@ -1,0 +1,97 @@
+"""FastAPI application factory.
+
+Later slices register their routers in ``_include_routers`` (all under ``/api``). The
+built frontend (``web/dist``) is served at ``/`` with an SPA fallback; when it is not built,
+``/`` answers with a plain "alive" page so the server is still usable for the API.
+"""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
+from starlette.staticfiles import StaticFiles
+
+from beat_server.db.engine import make_engine, make_session_factory
+from beat_server.db.migrate import upgrade_to_head
+from beat_server.settings import ServerSettings
+from beat_upload.workspace import Workspace
+
+WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+
+_ALIVE_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><title>beat-upload</title></head>
+<body><p>beat-upload server is alive. The web UI is not built; run <code>npm run build</code>
+in <code>web/</code>.</p></body></html>
+"""
+
+api = APIRouter(prefix="/api")
+
+
+@api.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+def create_app(
+    workspace: Workspace,
+    settings: ServerSettings,
+    *,
+    web_dist: Path | None = WEB_DIST,
+    db_path: Path | str | None = None,
+    migrate: bool = True,
+) -> FastAPI:
+    """Build the app.
+
+    ``db_path`` overrides ``workspace.db_file`` (tests pass ``":memory:"``); ``migrate=False``
+    lets tests create tables themselves.
+    """
+    db_path = workspace.db_file if db_path is None else db_path
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Worker and scheduler start here in later slices.
+        yield
+
+    app = FastAPI(title="beat-upload", version="0.1.0", lifespan=lifespan)
+    app.state.workspace = workspace
+    app.state.settings = settings
+
+    if migrate:
+        upgrade_to_head(db_path)
+    engine = make_engine(db_path)
+    app.state.engine = engine
+    app.state.session_factory = make_session_factory(engine)
+
+    _include_routers(app)
+    _mount_web(app, web_dist)
+    return app
+
+
+def _include_routers(app: FastAPI) -> None:
+    app.include_router(api)
+
+
+def _mount_web(app: FastAPI, web_dist: Path | None) -> None:
+    index = web_dist / "index.html" if web_dist else None
+    if index is None or not index.is_file():
+
+        @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+        def alive() -> str:
+            return _ALIVE_HTML
+
+        return
+
+    assets = web_dist / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        candidate = (web_dist / path).resolve() if path else index
+        if path and candidate.is_file() and web_dist.resolve() in candidate.parents:
+            return FileResponse(candidate)
+        return FileResponse(index)
