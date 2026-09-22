@@ -1,7 +1,13 @@
-"""Rendering a still-image video from an audio track with ffmpeg."""
+"""Rendering a still-image video from an audio track with ffmpeg.
+
+``render_video`` optionally reports progress: with ``on_progress`` ffmpeg runs with
+``-progress pipe:1`` and every ``out_time_us`` line becomes a fraction of the audio duration
+(from ``ffprobe``). Without it the behaviour is the plain blocking call the CLI has always used.
+"""
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from beat_upload.errors import VideoError
@@ -9,13 +15,52 @@ from beat_upload.errors import VideoError
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
 
+ProgressFn = Callable[[float], None]  # fraction 0..1
+
+_MICROSECONDS = 1_000_000.0
+_TIME_KEYS = frozenset({"out_time_us", "out_time_ms"})  # both are microseconds in ffmpeg
+
 
 def ensure_ffmpeg() -> None:
     if shutil.which("ffmpeg") is None:
         raise VideoError("ffmpeg is not installed or not on PATH")
 
 
-def render_video(audio: Path, image: Path, output: Path) -> Path:
+def probe_duration(audio: Path) -> float:
+    """Length of ``audio`` in seconds, via ``ffprobe``."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "csv=p=0",
+        str(audio),
+    ]  # fmt: skip
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise VideoError(f"ffprobe failed:\n{result.stderr.strip()}")
+    try:
+        return float(result.stdout.strip())
+    except ValueError as e:
+        raise VideoError(f"ffprobe returned no duration for {audio.name}") from e
+
+
+def parse_ffmpeg_progress(line: str, duration: float) -> float | None:
+    """Pure. ``out_time_us=30000000`` with ``duration`` 120 -> 0.25; anything else -> None.
+
+    ffmpeg prints ``out_time_ms`` in microseconds too (historical name); both are accepted.
+    """
+    key, sep, value = line.strip().partition("=")
+    if not sep or key not in _TIME_KEYS or duration <= 0:
+        return None
+    try:
+        seconds = int(value) / _MICROSECONDS
+    except ValueError:
+        return None
+    return max(0.0, min(1.0, seconds / duration))
+
+
+def render_video(
+    audio: Path, image: Path, output: Path, on_progress: ProgressFn | None = None
+) -> Path:
     """Loop ``image`` for the duration of ``audio`` and write an H.264/AAC mp4."""
     ensure_ffmpeg()
 
@@ -34,10 +79,29 @@ def render_video(audio: Path, image: Path, output: Path) -> Path:
         "-c:a", "aac",
         "-pix_fmt", "yuv420p",
         "-shortest",
-        str(output),
     ]  # fmt: skip
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise VideoError(f"ffmpeg failed:\n{result.stderr.strip()}")
+    if on_progress is None:
+        result = subprocess.run([*cmd, str(output)], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise VideoError(f"ffmpeg failed:\n{result.stderr.strip()}")
+        return output
+
+    duration = probe_duration(audio)
+    with subprocess.Popen(
+        [*cmd, "-loglevel", "error", "-progress", "pipe:1", "-nostats", str(output)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    ) as proc:
+        assert proc.stdout is not None and proc.stderr is not None
+        # stderr is tiny at loglevel error, so draining stdout first cannot block ffmpeg.
+        for line in proc.stdout:
+            fraction = parse_ffmpeg_progress(line, duration)
+            if fraction is not None:
+                on_progress(fraction)
+        stderr = proc.stderr.read()
+        returncode = proc.wait()
+    if returncode != 0:
+        raise VideoError(f"ffmpeg failed:\n{stderr.strip()}")
     return output
