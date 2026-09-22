@@ -9,10 +9,21 @@ from googleapiclient.errors import HttpError
 
 from beat_upload.config import PrivacyStatus, YouTubeMetadata
 from beat_upload.errors import UploadError
+from beat_upload.video import ProgressFn
+
+CHUNK_SIZE = 8 * 1024 * 1024
 
 
-def upload_video(video: Path, metadata: YouTubeMetadata, credentials: Credentials) -> str:
-    """Upload ``video`` with ``metadata`` and return the new YouTube video id."""
+def upload_video(
+    video: Path,
+    metadata: YouTubeMetadata,
+    credentials: Credentials,
+    on_progress: ProgressFn | None = None,
+) -> str:
+    """Upload ``video`` with ``metadata`` and return the new YouTube video id.
+
+    Resumable in 8 MiB chunks; ``on_progress`` gets the uploaded fraction after each one.
+    """
     youtube = googleapiclient.discovery.build("youtube", "v3", credentials=credentials)
 
     body = {
@@ -27,12 +38,15 @@ def upload_video(video: Path, metadata: YouTubeMetadata, credentials: Credential
             "selfDeclaredMadeForKids": False,
         },
     }
-    media = googleapiclient.http.MediaFileUpload(str(video), chunksize=-1, resumable=True)
+    media = googleapiclient.http.MediaFileUpload(str(video), chunksize=CHUNK_SIZE, resumable=True)
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
+    response = None
     try:
-        response = (
-            youtube.videos().insert(part="snippet,status", body=body, media_body=media).execute()
-        )
+        while response is None:
+            status, response = request.next_chunk()
+            if status is not None and on_progress is not None:
+                on_progress(status.progress())
     except HttpError as e:
         raise UploadError(f"YouTube API error: {e}") from e
 

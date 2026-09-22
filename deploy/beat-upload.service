@@ -1,0 +1,21 @@
+# systemd user unit for beat-upload. `beat-upload install-service` writes this file with
+# the placeholders filled in to ~/.config/systemd/user/beat-upload.service.
+#
+#   <venv>  the virtualenv where beat-upload is installed (the dir of `python -c 'import sys; print(sys.executable)'`)
+#   <port>  port of the web UI, default 8765
+#
+# Enable:  systemctl --user daemon-reload && systemctl --user enable --now beat-upload
+# Boot:    loginctl enable-linger $USER   (start without an interactive login)
+# Logs:    journalctl --user -u beat-upload -f
+
+[Unit]
+Description=beat-upload web server
+After=network-online.target
+
+[Service]
+ExecStart=<venv>/bin/beat-upload serve --port <port>
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

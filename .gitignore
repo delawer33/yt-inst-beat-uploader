@@ -6,3 +6,6 @@ yt-secrets.json
 token.json
 session-*
 *.egg-info/
+dev.sqlite3
+web/node_modules/
+web/dist/

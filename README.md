@@ -85,6 +85,71 @@ Add `--json` to any read command for machine-readable output. The token needs th
 `youtube` and `yt-analytics.readonly` scopes; tokens created by older versions lack them,
 so run `login` again once.
 
+### 6. Web UI
+
+```bash
+beat-upload serve                 # http://127.0.0.1:8765
+beat-upload serve --port 9000 --open-browser
+```
+
+The server serves the built frontend from `web/dist` (see `web/README.md`; without a build
+`/` shows a plain "alive" page) and the API under `/api` (`/api/health`, `/docs`). Its data
+lives in the platform data directory (Linux: `~/.local/share/beat-upload/`, sqlite database
+and beat files); credentials stay in the config directory above. Override with
+`BEAT_UPLOAD_DATA_DIR`, `BEAT_UPLOAD_CONFIG_DIR`, `BEAT_UPLOAD_PORT`.
+
+#### Connect Google from the web UI
+
+In [Google Cloud Console](https://console.cloud.google.com/apis/credentials) create an
+OAuth client of type **Web application** (the CLI `login` uses a Desktop client; the web UI
+needs its own) with the authorised redirect URI
+`http://localhost:8765/api/auth/google/callback` (adjust the port if you run `serve` with
+another one). Open Settings in the UI, paste the client ID and secret, click **Save**, then
+**Connect YouTube**: Google asks for consent and sends you back to Settings, which shows the
+channel title. The secret is stored in the config directory and never shown again.
+**Disconnect** deletes the token and keeps the client. A banner at the top of every page
+says when the connection is missing or expired.
+
+#### Add a beat from the web UI
+
+On the Library page drop one audio file (`.mp3`/`.wav`) and one cover image
+(`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`) onto the **New beat** area, or click it to pick them.
+This creates a draft with the title, description and tags from your templates
+(`title_template`, `description_template`, `tags_template` in `PUT /api/settings`; `{name}` is
+the audio file name without extension) and opens its page. Edit the metadata there (same
+limits as `config.yaml`: title 100, description 5000, tags 500 characters in total) and press
+**Upload to YouTube**: the server renders the video with ffmpeg and uploads it, showing the
+progress of both steps; when it is done the page links to the video. A draft can be deleted
+with **Delete draft**; anything already on YouTube cannot be deleted from here. If YouTube is
+not connected the upload job pauses and continues after you connect in Settings.
+
+#### Statistics
+
+The server collects daily views and watch time per video from the Analytics API once a
+night (hour in Settings, default 04:00 local; a run missed while the machine was asleep
+happens at the next start). The first run backfills the last 90 days. The Library shows
+the channel totals for the last 28 days, each Beat page its own chart. "Collect stats now"
+on the Library page (or `POST /api/stats/collect`) runs the job immediately.
+
+### 7. Run as a service
+
+To keep the web UI running permanently (Linux, systemd):
+
+```bash
+beat-upload install-service               # writes ~/.config/systemd/user/beat-upload.service
+beat-upload install-service --port 9000   # default port is 8765
+systemctl --user daemon-reload
+systemctl --user enable --now beat-upload
+loginctl enable-linger $USER              # start at boot, without logging in
+```
+
+The unit runs `<venv>/bin/beat-upload serve --port 8765` from the virtualenv you installed
+into, restarts on failure and opens `http://127.0.0.1:8765` after every reboot. A copy of
+the unit with placeholders is in `deploy/beat-upload.service`.
+
+Data stays where `serve` keeps it: `~/.local/share/beat-upload/` (sqlite database, beat files)
+and `~/.config/beat-upload/` (client secrets, token). Logs: `journalctl --user -u beat-upload -f`.
+
 ### config.yaml
 
 ```yaml
@@ -111,7 +176,10 @@ beat_upload/
   stats.py                reads channel and video statistics (Data API)
   analytics.py            per-video watch time and view duration (Analytics API)
   auth.py                 OAuth2 client secrets and token storage
+  workspace.py            where one channel owner's files live (config dir, data dir)
   errors.py               exceptions the CLI reports without a traceback
+beat_server/              FastAPI app for `serve`: settings, SQLite models/repos, migrations
+web/                      React frontend, built into web/dist and served by beat_server
 tests/                    pytest unit tests (no network, no ffmpeg)
 ```
 
@@ -121,4 +189,9 @@ tests/                    pytest unit tests (no network, no ffmpeg)
 pip install -e '.[dev]'
 ruff check . && ruff format .
 pytest
+cd web && npm install && npm run lint:tokens && npm run api:check && npm test && npm run build
 ```
+
+Database schema changes: edit `beat_server/db/models.py`, then
+`alembic revision --autogenerate -m "..."` (config in `alembic.ini`, scripts in
+`beat_server/db/migrations/`). The server applies migrations itself on startup.
