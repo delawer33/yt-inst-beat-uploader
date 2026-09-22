@@ -98,6 +98,18 @@ lives in the platform data directory (Linux: `~/.local/share/beat-upload/`, sqli
 and beat files); credentials stay in the config directory above. Override with
 `BEAT_UPLOAD_DATA_DIR`, `BEAT_UPLOAD_CONFIG_DIR`, `BEAT_UPLOAD_PORT`.
 
+#### Connect Google from the web UI
+
+In [Google Cloud Console](https://console.cloud.google.com/apis/credentials) create an
+OAuth client of type **Web application** (the CLI `login` uses a Desktop client; the web UI
+needs its own) with the authorised redirect URI
+`http://localhost:8765/api/auth/google/callback` (adjust the port if you run `serve` with
+another one). Open Settings in the UI, paste the client ID and secret, click **Save**, then
+**Connect YouTube**: Google asks for consent and sends you back to Settings, which shows the
+channel title. The secret is stored in the config directory and never shown again.
+**Disconnect** deletes the token and keeps the client. A banner at the top of every page
+says when the connection is missing or expired.
+
 ### config.yaml
 
 ```yaml
