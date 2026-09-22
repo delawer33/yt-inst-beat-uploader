@@ -376,4 +376,10 @@ def test_lifespan_recovers_and_can_start_worker(workspace: Workspace) -> None:
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
     with app.state.session_factory() as s:
-        assert JobRepo(s).list()[0].status in {JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.DONE}
+        # The worker may already have picked the job up; without a token a real SYNC pauses.
+        assert JobRepo(s).list()[0].status in {
+            JobStatus.QUEUED,
+            JobStatus.RUNNING,
+            JobStatus.DONE,
+            JobStatus.PAUSED,
+        }

@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from beat_server.api import auth as auth_api
-from beat_server.api import events, jobs, sync
+from beat_server.api import beats, events, jobs, sync
 from beat_server.api import settings as settings_api
 from beat_server.api.csrf import install_csrf
 from beat_server.api.errors import register_error_handlers
@@ -119,6 +119,7 @@ def _log_worker_exit(task: asyncio.Task[None]) -> None:
 
 def _include_routers(app: FastAPI) -> None:
     app.include_router(api)
+    app.include_router(beats.router)
     app.include_router(jobs.router)
     app.include_router(sync.router)
     app.include_router(events.router)

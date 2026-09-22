@@ -1,16 +1,12 @@
 """Registry of job handlers. Bodies live in ``beat_server/services``; this maps kinds to them.
 
-SYNC is a stub until the library sync service lands; RENDER/UPLOAD/STATS until the pipeline.
+RENDER/UPLOAD/STATS are stubs until the pipeline and stats services land.
 """
 
 from beat_server.db.models import JobKind
 from beat_server.jobs.worker import JobContext, JobHandler
+from beat_server.services.sync import run_sync
 from beat_upload.errors import BeatUploadError
-
-
-async def run_sync(ctx: JobContext) -> None:
-    ctx.log("sync not implemented yet")
-    ctx.progress(1.0, "sync not implemented yet")
 
 
 async def run_render(ctx: JobContext) -> None:

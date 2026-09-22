@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from beat_server.db.models import Beat, Job, JobStatus, Setting, VideoStatsDaily
@@ -19,8 +19,9 @@ class BeatRepo:
         return self.session.scalar(select(Beat).where(Beat.youtube_id == youtube_id))
 
     def list(self) -> list[Beat]:
-        """Newest first."""
-        stmt = select(Beat).order_by(Beat.created_at.desc(), Beat.id)
+        """Newest first: by publish date, drafts by the day they were added."""
+        newest = func.coalesce(Beat.published_at, Beat.created_at)
+        stmt = select(Beat).order_by(newest.desc(), Beat.created_at.desc(), Beat.id)
         return list(self.session.scalars(stmt))
 
     def add(self, beat: Beat) -> Beat:
