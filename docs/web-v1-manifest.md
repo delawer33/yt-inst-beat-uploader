@@ -17,10 +17,10 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 | # | title | status | branch | done condition | retries | notes |
 |---|-------|--------|--------|----------------|---------|-------|
 | 8 | Foundation | ready (7a651f6, verified) | slice-1-foundation | `PYTHONPATH=wt pytest -q && ruff check . && (cd web && npm run build)` + health test | 0 | |
-| 2 | Google connection | verify (1cb97bd, done-cond verified; review running) | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
+| 2 | Google connection | ready (7cc9182 fixes verified; merging into integration) | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
 | 3 | Jobs/worker/SSE | ready (3db8419 fixes; merged into integration c37cd59) | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
 | 7 | systemd | ready (7ce46d0, verified) | slice-7 | pytest + ruff | 0 | |
-| 4 | Library/sync | in-progress@s4 | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
+| 4 | Library/sync | ready (1212918, verified; awaiting integration) | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
 | 5 | New beat pipeline | todo | | pytest test_video + test_pipeline + suite + web build | 0 | |
 | 6 | Stats/scheduler | todo | | pytest tests/server/test_stats.py + suite + web build | 0 | |
 
@@ -44,3 +44,5 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - W3 started: #4 → s4 off integration cd75386 (#3 fixes will be merged into integration afterwards).
 - #2 review: no high; med: CSRF on disconnect/start, token/secrets file perms, OAUTHLIB_INSECURE_TRANSPORT process-wide, redirect_uri from Host header. Fix cycle 1 dispatched on slice-2 (findings 1-8). Accepted residual: access log may contain OAuth code (single-use, localhost); GoogleForm requires re-typing client id; design doc signature drift (web_flow state kwarg).
 - #3 fix cycle done (all 8 findings), verified; merged → integration c37cd59 (106 py tests, 12 vitest). Note: worktree s3 now holds `integration` (used as the integration checkout). s7 removed. JobContext now takes session_factory; ctx.progress no longer commits ctx.session.
+- #2 fix cycle done (findings 1-8 incl. CSRF middleware, 0600 files, no OAUTHLIB env, redirect_uri from settings, NetworkError), verified (90 tests). Merge into integration conflicted in app.py → fix agent resolving.
+- #4 done, verified (112 py tests, 11 vitest). Deviations accepted: run_sync body in services/sync.py; SyncResult.beat_ids; ConflictError/BeatStateError added; BeatRepo.list ordering by coalesce(published_at, created_at). Will merge after slice-2 merge lands.
