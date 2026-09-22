@@ -17,6 +17,8 @@ from beat_server.db.models import BeatStatus, Job
 
 EventType = Literal["job", "beat"]
 
+SUBSCRIBER_QUEUE_SIZE = 256
+
 
 @dataclass(frozen=True)
 class Event:
@@ -27,6 +29,13 @@ class Event:
 def job_payload(job: Job) -> dict[str, Any]:
     """The ``JobOut`` dict, exactly what ``GET /api/jobs/{id}`` would return."""
     return JobOut.model_validate(job).model_dump(mode="json")
+
+
+def _deliver(queue: asyncio.Queue[Event], event: Event) -> None:
+    """Runs on the subscriber's loop thread. A slow consumer loses its oldest events."""
+    if queue.full():
+        queue.get_nowait()
+    queue.put_nowait(event)
 
 
 class EventBus:
@@ -40,7 +49,7 @@ class EventBus:
             targets = list(self._subscribers.items())
         for queue, loop in targets:
             if not loop.is_closed():
-                loop.call_soon_threadsafe(queue.put_nowait, event)
+                loop.call_soon_threadsafe(_deliver, queue, event)
 
     def publish_job(self, job: Job) -> None:
         self.publish(Event("job", job_payload(job)))
@@ -52,7 +61,7 @@ class EventBus:
     def subscription(self) -> Iterator[asyncio.Queue[Event]]:
         """Register a queue on the running loop; ``subscribe`` and the SSE endpoint use it."""
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[Event] = asyncio.Queue()
+        queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_SIZE)
         with self._lock:
             self._subscribers[queue] = loop
         try:

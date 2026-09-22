@@ -12,7 +12,7 @@ from beat_server.api.events import event_stream
 from beat_server.db.models import Job, JobKind, JobStatus
 from beat_server.db.repo import JobRepo
 from beat_server.jobs.events import Event, EventBus
-from beat_server.jobs.queue import JobQueue
+from beat_server.jobs.queue import SUPERSEDED_ERROR, JobQueue
 from beat_server.jobs.worker import JobContext, Worker
 from beat_upload.errors import AuthError, VideoError
 from beat_upload.workspace import Workspace
@@ -151,6 +151,94 @@ async def test_handler_can_enqueue_follow_up(
     assert (follow_up.kind, follow_up.beat_id) == (JobKind.UPLOAD, "b1")
 
 
+async def test_progress_from_thread_does_not_touch_handler_session(
+    app: FastAPI, queue: JobQueue, session: Session
+) -> None:
+    """``ctx.session`` stays loop-thread-only; ``_update`` writes through its own session."""
+    seen: dict[str, object] = {}
+
+    async def handler(ctx: JobContext) -> None:
+        ctx.session.begin_nested()  # an open transaction on the handler's session
+        await asyncio.to_thread(ctx.progress, 0.3, "from thread")
+        seen["job"] = (ctx.job.progress, ctx.job.message)
+        with app.state.session_factory() as other:
+            seen["db"] = (other.get(Job, ctx.job.id).progress, other.get(Job, ctx.job.id).message)
+        ctx.session.rollback()
+
+    job = queue.enqueue(JobKind.RENDER)
+    await make_worker(app, {JobKind.RENDER: handler}).run_one(job)
+
+    assert seen["job"] == (0.3, "from thread")
+    assert seen["db"] == (0.3, "from thread")
+    assert reload(session, job).message == "from thread"
+
+
+async def test_run_forever_survives_db_errors(
+    app: FastAPI, queue: JobQueue, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"n": 0}
+    original = JobRepo.next_queued
+
+    def flaky(self: JobRepo) -> Job | None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("database is locked")
+        return original(self)
+
+    monkeypatch.setattr(JobRepo, "next_queued", flaky)
+    done = asyncio.Event()
+
+    async def handler(ctx: JobContext) -> None:
+        done.set()
+
+    queue.enqueue(JobKind.SYNC)
+    with caplog.at_level(logging.ERROR, logger="beat_server.jobs.worker"):
+        task = asyncio.create_task(make_worker(app, {JobKind.SYNC: handler}).run_forever())
+        await asyncio.wait_for(done.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert "database is locked" in caplog.text
+    assert calls["n"] >= 2
+
+
+async def test_cancel_mid_job_requeues_it(app: FastAPI, queue: JobQueue, session: Session) -> None:
+    started = asyncio.Event()
+
+    async def handler(ctx: JobContext) -> None:
+        started.set()
+        await asyncio.sleep(10)
+
+    job = queue.enqueue(JobKind.SYNC)
+    task = asyncio.create_task(make_worker(app, {JobKind.SYNC: handler}).run_one(job))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    job = reload(session, job)
+    assert job.status == JobStatus.QUEUED
+    assert job.started_at is None and job.finished_at is None
+
+
+async def test_run_one_skips_missing_or_non_queued_jobs(
+    app: FastAPI, queue: JobQueue, session: Session
+) -> None:
+    ran: list[str] = []
+
+    async def handler(ctx: JobContext) -> None:
+        ran.append(ctx.job.id)
+
+    worker = make_worker(app, {JobKind.SYNC: handler})
+    done = JobRepo(session).add(Job(kind=JobKind.SYNC, status=JobStatus.DONE))
+    await worker.run_one(done)
+    ghost = Job(id="ghost", kind=JobKind.SYNC)  # never persisted
+    await worker.run_one(ghost)
+
+    assert ran == []
+    assert reload(session, done).status == JobStatus.DONE
+    assert JobRepo(session).get(ghost.id) is None
+
+
 async def test_run_forever_picks_up_queued_jobs(
     app: FastAPI, queue: JobQueue, session: Session
 ) -> None:
@@ -186,6 +274,43 @@ def test_resume_paused_flips_paused_to_queued(queue: JobQueue, session: Session)
     paused = reload(session, paused)
     assert paused.status == JobStatus.QUEUED
     assert paused.error is None
+
+
+def test_retry_paused_supersedes_original(queue: JobQueue, session: Session, bus: EventBus) -> None:
+    published: list[Event] = []
+    bus.publish = published.append  # type: ignore[method-assign]
+    repo = JobRepo(session)
+    paused = repo.add(Job(kind=JobKind.UPLOAD, beat_id="b1", status=JobStatus.PAUSED, error="x"))
+
+    retried = queue.retry(paused.id)
+
+    paused = reload(session, paused)
+    assert paused.status == JobStatus.FAILED
+    assert paused.error == SUPERSEDED_ERROR
+    assert retried.status == JobStatus.QUEUED and retried.beat_id == "b1"
+    assert queue.resume_paused() == 0  # nothing left to rerun
+    assert [(e.payload["id"], e.payload["status"]) for e in published] == [
+        (paused.id, "failed"),
+        (retried.id, "queued"),
+    ]
+
+
+def test_retry_failed_leaves_original_alone(queue: JobQueue, session: Session) -> None:
+    failed = JobRepo(session).add(Job(kind=JobKind.UPLOAD, status=JobStatus.FAILED, error="x"))
+    queue.retry(failed.id)
+    failed = reload(session, failed)
+    assert failed.status == JobStatus.FAILED and failed.error == "x"
+
+
+async def test_slow_subscriber_drops_oldest_events(bus: EventBus) -> None:
+    from beat_server.jobs.events import SUBSCRIBER_QUEUE_SIZE
+
+    with bus.subscription() as queue:
+        for i in range(SUBSCRIBER_QUEUE_SIZE + 5):
+            bus.publish_beat(f"b{i}", "rendering")
+        await asyncio.sleep(0)  # run the call_soon_threadsafe callbacks
+        assert queue.qsize() == SUBSCRIBER_QUEUE_SIZE
+        assert queue.get_nowait().payload["id"] == "b5"
 
 
 def test_app_exposes_on_reconnect(app: FastAPI, queue: JobQueue) -> None:

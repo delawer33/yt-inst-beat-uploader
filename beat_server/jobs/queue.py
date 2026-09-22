@@ -8,6 +8,7 @@ from beat_server.jobs.events import EventBus
 from beat_upload.errors import BeatUploadError
 
 RETRYABLE = frozenset({JobStatus.FAILED, JobStatus.PAUSED})
+SUPERSEDED_ERROR = "superseded by retry"
 
 
 class JobError(BeatUploadError):
@@ -42,16 +43,30 @@ class JobQueue:
         return self._requeue(JobStatus.PAUSED)
 
     def retry(self, job_id: str) -> Job:
-        """New job of the same kind and beat. Only FAILED or PAUSED jobs can be retried."""
+        """New job of the same kind and beat. Only FAILED or PAUSED jobs can be retried.
+
+        A PAUSED original becomes FAILED ("superseded by retry") in the same transaction,
+        otherwise ``resume_paused`` would run it again next to the retry.
+        """
         with self._session_factory() as session:
-            job = JobRepo(session).get(job_id)
-        if job is None:
-            raise JobNotFound(f"Job {job_id} does not exist.")
-        if job.status not in RETRYABLE:
-            raise JobNotRetryable(
-                f"Job {job_id} is {job.status}; only failed or paused jobs can be retried."
-            )
-        return self.enqueue(job.kind, job.beat_id)
+            repo = JobRepo(session)
+            job = repo.get(job_id)
+            if job is None:
+                raise JobNotFound(f"Job {job_id} does not exist.")
+            if job.status not in RETRYABLE:
+                raise JobNotRetryable(
+                    f"Job {job_id} is {job.status}; only failed or paused jobs can be retried."
+                )
+            superseded = job.status == JobStatus.PAUSED
+            if superseded:
+                job.status = JobStatus.FAILED
+                job.error = SUPERSEDED_ERROR
+                session.add(job)
+            new_job = repo.add(Job(kind=job.kind, beat_id=job.beat_id))
+        if superseded:
+            self._bus.publish_job(job)
+        self._bus.publish_job(new_job)
+        return new_job
 
     def _requeue(self, status: JobStatus) -> int:
         with self._session_factory() as session:
