@@ -22,7 +22,7 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 | 7 | systemd | ready (7ce46d0, verified) | slice-7 | pytest + ruff | 0 | |
 | 4 | Library/sync | ready (merged, integration 26a10e0) | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
 | 5 | New beat pipeline | in-progress@s5 | slice-5 | pytest test_video + test_pipeline + suite + web build | 0 | |
-| 6 | Stats/scheduler | in-progress@s6 | slice-6 | pytest tests/server/test_stats.py + suite + web build | 0 | |
+| 6 | Stats/scheduler | ready (628cd52 verified; merged, integration 628cd52) | slice-6 | pytest tests/server/test_stats.py + suite + web build | 0 | |
 
 ## Decisions
 
@@ -47,3 +47,4 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - #2 fix cycle done (findings 1-8 incl. CSRF middleware, 0600 files, no OAUTHLIB env, redirect_uri from settings, NetworkError), verified (90 tests). Merge into integration conflicted in app.py → fix agent resolving.
 - #4 done, verified (112 py tests, 11 vitest). Deviations accepted: run_sync body in services/sync.py; SyncResult.beat_ids; ConflictError/BeatStateError added; BeatRepo.list ordering by coalesce(published_at, created_at). Will merge after slice-2 merge lands.
 - W3 integrated: integration = 26a10e0 (134 py tests, 15 vitest, smoke boot OK: sync job pauses on missing token as designed). W4 started: #5→s5, #6→s6 off 26a10e0.
+- #6 done, verified (153 py tests, 17 vitest); merged clean into integration 628cd52. Deviations accepted: next_due static with hour kwarg; missing_days caps backfill; stats windows end yesterday; recharts 3.2.1 added. Waiting on #5.
