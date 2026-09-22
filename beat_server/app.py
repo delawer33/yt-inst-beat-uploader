@@ -5,6 +5,7 @@ built frontend (``web/dist``) is served at ``/`` with an SPA fallback; when it i
 ``/`` answers with a plain "alive" page so the server is still usable for the API.
 """
 
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,6 +16,7 @@ from starlette.staticfiles import StaticFiles
 
 from beat_server.api import auth as auth_api
 from beat_server.api import settings as settings_api
+from beat_server.api.csrf import install_csrf
 from beat_server.api.errors import register_error_handlers
 from beat_server.db.engine import make_engine, make_session_factory
 from beat_server.db.migrate import upgrade_to_head
@@ -60,6 +62,8 @@ def create_app(
     app = FastAPI(title="beat-upload", version="0.1.0", lifespan=lifespan)
     app.state.workspace = workspace
     app.state.settings = settings
+    # Signs the OAuth ``state`` cookie; per process, a state from an earlier run is useless.
+    app.state.oauth_state_secret = secrets.token_urlsafe(32)
 
     if migrate:
         upgrade_to_head(db_path)
@@ -68,6 +72,7 @@ def create_app(
     app.state.session_factory = make_session_factory(engine)
 
     register_error_handlers(app)
+    install_csrf(app)
     _include_routers(app)
     _mount_web(app, web_dist)
     return app

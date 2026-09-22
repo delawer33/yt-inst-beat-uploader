@@ -9,10 +9,14 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import googleapiclient.discovery
+import httplib2
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 
-from beat_upload.errors import UploadError
+from beat_upload.errors import NetworkError, UploadError
+
+# Transport failures below the API: DNS, refused connection, timeout, TLS.
+TRANSPORT_ERRORS = (httplib2.HttpLib2Error, OSError)
 
 PAGE_SIZE = 50  # API maximum for playlistItems.list and videos.list
 
@@ -55,7 +59,10 @@ class YouTubeStats:
     """Thin wrapper over the Data API client. One instance per credentials."""
 
     def __init__(self, credentials: Credentials) -> None:
-        self._api = googleapiclient.discovery.build("youtube", "v3", credentials=credentials)
+        try:
+            self._api = googleapiclient.discovery.build("youtube", "v3", credentials=credentials)
+        except TRANSPORT_ERRORS as e:
+            raise NetworkError(f"Could not reach YouTube: {e}") from e
 
     def channel(self) -> ChannelStats:
         response = self._call(
@@ -112,6 +119,8 @@ class YouTubeStats:
             return request.execute()
         except HttpError as e:
             raise UploadError(f"YouTube API error: {e}") from e
+        except TRANSPORT_ERRORS as e:
+            raise NetworkError(f"Could not reach YouTube: {e}") from e
 
 
 def parse_channel(item: dict[str, Any]) -> ChannelStats:

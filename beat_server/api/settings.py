@@ -30,6 +30,7 @@ class SettingsOut(BaseModel):
     google_client_id: str | None
     stats_hour: int
     port: int
+    redirect_uri: str  # what to register on the Google OAuth client
 
 
 class SettingsIn(BaseModel):
@@ -69,10 +70,12 @@ def stats_hour(settings: SettingsRepo) -> int:
 
 
 def _out(request: Request, ws: Workspace, settings: SettingsRepo) -> SettingsOut:
+    server = request.app.state.settings
     return SettingsOut(
         google_client_id=stored_client_id(ws),
         stats_hour=stats_hour(settings),
-        port=request.app.state.settings.port,
+        port=server.port,
+        redirect_uri=server.redirect_uri,
     )
 
 

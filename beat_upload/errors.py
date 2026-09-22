@@ -21,6 +21,10 @@ class AuthError(BeatUploadError):
     """No usable Google credentials are available."""
 
 
+class NetworkError(BeatUploadError):
+    """Google could not be reached (DNS, connection, timeout). Retry later; not an auth issue."""
+
+
 class VideoError(BeatUploadError):
     """ffmpeg is unavailable or failed to render the video."""
 

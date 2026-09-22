@@ -73,6 +73,7 @@ def test_put_google_then_get_settings_hides_secret(
     assert body["google_client_id"] == GOOGLE["client_id"]
     assert body["stats_hour"] == 4
     assert body["port"] == 8765
+    assert body["redirect_uri"] == "http://localhost:8765/api/auth/google/callback"
     assert "top-secret" not in response.text
     assert client.get("/api/auth/status").json()["status"] == "not_connected"
 
@@ -96,8 +97,70 @@ def test_start_redirects_to_google_with_state_cookie(client: TestClient) -> None
     assert response.status_code == 307
     location = response.headers["location"]
     assert location.startswith("https://accounts.google.com/o/oauth2/auth")
-    assert "redirect_uri=http%3A%2F%2Ftestserver%2Fapi%2Fauth%2Fgoogle%2Fcallback" in location
+    assert "redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fapi%2Fauth%2Fgoogle%2Fcallback" in location
     assert "oauth_state" in response.cookies
+
+
+def test_redirect_uri_follows_settings_port_not_host_header(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from beat_server.app import create_app
+    from beat_server.db.engine import MEMORY
+    from beat_server.db.models import Base
+    from beat_server.settings import ServerSettings
+
+    settings = ServerSettings(
+        port=9999, data_dir=workspace.data_dir, config_dir=workspace.config_dir
+    )
+    app = create_app(workspace, settings, web_dist=None, db_path=MEMORY, migrate=False)
+    Base.metadata.create_all(app.state.engine)
+    with TestClient(app) as client:
+        client.put("/api/settings/google", json=GOOGLE)
+        assert client.get("/api/settings").json()["redirect_uri"] == (
+            "http://localhost:9999/api/auth/google/callback"
+        )
+        response = client.get(
+            "/api/auth/google/start", follow_redirects=False, headers={"host": "evil.example"}
+        )
+        assert "redirect_uri=http%3A%2F%2Flocalhost%3A9999%2F" in response.headers["location"]
+
+
+@pytest.mark.parametrize("site", ["same-origin", "none"])
+def test_start_allows_own_navigation(client: TestClient, site: str) -> None:
+    client.put("/api/settings/google", json=GOOGLE)
+    response = client.get(
+        "/api/auth/google/start", follow_redirects=False, headers={"sec-fetch-site": site}
+    )
+    assert response.status_code == 307
+
+
+@pytest.mark.parametrize("site", ["cross-site", "same-site"])
+def test_start_refuses_foreign_navigation(client: TestClient, site: str) -> None:
+    client.put("/api/settings/google", json=GOOGLE)
+    response = client.get(
+        "/api/auth/google/start", follow_redirects=False, headers={"sec-fetch-site": site}
+    )
+    assert response.status_code == 403
+
+
+def test_csrf_rejects_cross_site_posts(client: TestClient) -> None:
+    foreign = {"origin": "http://evil.example"}
+    assert client.post("/api/auth/disconnect", headers=foreign).status_code == 403
+    assert client.put("/api/settings/google", json=GOOGLE, headers=foreign).status_code == 403
+    by_fetch_site = {"sec-fetch-site": "cross-site"}
+    assert client.post("/api/auth/disconnect", headers=by_fetch_site).status_code == 403
+    assert client.post("/api/auth/disconnect", headers={"origin": "null"}).status_code == 403
+    # Safe methods and non-API paths are not the middleware's business.
+    assert client.get("/api/auth/status", headers=foreign).status_code == 200
+    assert client.get("/", headers=foreign).status_code == 200
+
+
+def test_csrf_allows_same_origin_and_missing_origin(client: TestClient) -> None:
+    same = {"origin": "http://testserver", "sec-fetch-site": "same-origin"}
+    assert client.post("/api/auth/disconnect", headers=same).status_code == 204
+    mixed_case = {"origin": "HTTP://TestServer"}
+    assert client.post("/api/auth/disconnect", headers=mixed_case).status_code == 204
+    assert client.post("/api/auth/disconnect").status_code == 204  # curl / tests
 
 
 def test_callback_without_state_redirects_with_error(client: TestClient) -> None:
@@ -129,13 +192,35 @@ def test_callback_finishes_flow_and_calls_on_reconnect(
     )
     assert response.status_code == 302
     assert response.headers["location"] == "/settings?connected=1"
-    assert seen["redirect_uri"] == "http://testserver/api/auth/google/callback"
+    assert seen["redirect_uri"] == "http://localhost:8765/api/auth/google/callback"
     assert seen["response_url"].endswith("/api/auth/google/callback?state=whatever&code=abc")
     assert reconnected == [True]
     assert "oauth_state" not in response.cookies or not response.cookies["oauth_state"]
 
     status = client.get("/api/auth/status").json()
     assert status == {"status": "connected", "channel": {"id": "UC1", "title": "My Beats"}}
+
+
+def test_callback_passes_fresh_credentials_to_channel_lookup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.put("/api/settings/google", json=GOOGLE)
+    client.get("/api/auth/google/start", follow_redirects=False)
+    token = object()
+    received: list[object] = []
+
+    class RecordingStats(FakeStats):
+        def __init__(self, credentials: object) -> None:
+            received.append(credentials)
+
+    def fake_finish(ws: Workspace, redirect_uri: str, state: str, response_url: str) -> object:
+        write_valid_token(ws)
+        return token
+
+    monkeypatch.setattr("beat_server.api.auth.finish_web_flow", fake_finish)
+    monkeypatch.setattr("beat_server.api.auth.YouTubeStats", RecordingStats)
+    client.get("/api/auth/google/callback?state=x&code=abc", follow_redirects=False)
+    assert received == [token]
 
 
 def test_status_caches_channel(
@@ -163,6 +248,29 @@ def test_status_connected_even_when_channel_lookup_fails(
     monkeypatch.setattr("beat_server.api.auth.YouTubeStats", FailingStats)
 
     assert client.get("/api/auth/status").json() == {"status": "connected", "channel": None}
+
+
+def test_status_connected_without_channel_when_google_unreachable(
+    client: TestClient, workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from google.auth.exceptions import TransportError
+    from google.oauth2.credentials import Credentials
+
+    client.put("/api/settings/google", json=GOOGLE)
+    write_valid_token(workspace)
+    expired = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
+    payload = json.loads(workspace.token_file.read_text(encoding="utf-8"))
+    payload["expiry"] = expired.strftime("%Y-%m-%dT%H:%M:%SZ")
+    workspace.token_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    def offline_refresh(self: Credentials, request: object) -> None:
+        raise TransportError("offline")
+
+    monkeypatch.setattr(Credentials, "refresh", offline_refresh)
+    FakeStats.calls = 0
+    monkeypatch.setattr("beat_server.api.auth.YouTubeStats", FakeStats)
+    assert client.get("/api/auth/status").json() == {"status": "connected", "channel": None}
+    assert FakeStats.calls == 0
 
 
 def test_disconnect_deletes_token_and_cache(
