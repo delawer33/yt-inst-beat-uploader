@@ -21,7 +21,7 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 | 3 | Jobs/worker/SSE | ready (3db8419 fixes; merged into integration c37cd59) | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
 | 7 | systemd | ready (7ce46d0, verified) | slice-7 | pytest + ruff | 0 | |
 | 4 | Library/sync | ready (merged, integration 26a10e0) | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
-| 5 | New beat pipeline | in-progress@s5 | slice-5 | pytest test_video + test_pipeline + suite + web build | 0 | |
+| 5 | New beat pipeline | ready (aed5c67 verified; merged, integration d06e145) | slice-5 | pytest test_video + test_pipeline + suite + web build | 0 | |
 | 6 | Stats/scheduler | ready (628cd52 verified; merged, integration 628cd52) | slice-6 | pytest tests/server/test_stats.py + suite + web build | 0 | |
 
 ## Decisions
@@ -48,3 +48,5 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - #4 done, verified (112 py tests, 11 vitest). Deviations accepted: run_sync body in services/sync.py; SyncResult.beat_ids; ConflictError/BeatStateError added; BeatRepo.list ordering by coalesce(published_at, created_at). Will merge after slice-2 merge lands.
 - W3 integrated: integration = 26a10e0 (134 py tests, 15 vitest, smoke boot OK: sync job pauses on missing token as designed). W4 started: #5→s5, #6→s6 off 26a10e0.
 - #6 done, verified (153 py tests, 17 vitest); merged clean into integration 628cd52. Deviations accepted: next_due static with hour kwarg; missing_days caps backfill; stats windows end yesterday; recharts 3.2.1 added. Waiting on #5.
+- #5 done, verified (180 py tests, 27 vitest). W4 integrated: integration d06e145 (199 py tests, 29 vitest; smoke: draft→render done via real ffmpeg→upload paused on missing token). Deviations accepted: MAX_TAGS_LENGTH=500 in core validator; failed render/upload returns beat to DRAFT; create_draft takes template dict.
+- Integration fallout fix cycle 1: beat stays `rendering` after render done + upload paused (should be `queued`); AuthError text inside jobs says 'Run beat-upload login' (web wording needed).
