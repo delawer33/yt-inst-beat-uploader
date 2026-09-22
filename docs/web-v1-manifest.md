@@ -42,3 +42,4 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - W2 integrated: `integration` = cd75386 (slices 2,3,7 merged; 99 py tests, 8 vitest, smoke boot OK).
 - #3 review: 2 high (worker loop dies on DB error; per-beat jobs cache pollution), 4 med (paused retry dup, session thread-safety, SSE reconnect refetch, unbounded subscriber queues). Fix cycle 1 dispatched on slice-3. Accepted residual: cli.py→beat_server lazy import (pre-existing #8 deviation).
 - W3 started: #4 → s4 off integration cd75386 (#3 fixes will be merged into integration afterwards).
+- #2 review: no high; med: CSRF on disconnect/start, token/secrets file perms, OAUTHLIB_INSECURE_TRANSPORT process-wide, redirect_uri from Host header. Fix cycle 1 dispatched on slice-2 (findings 1-8). Accepted residual: access log may contain OAuth code (single-use, localhost); GoogleForm requires re-typing client id; design doc signature drift (web_flow state kwarg).
