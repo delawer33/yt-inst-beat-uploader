@@ -37,6 +37,8 @@ packages = [
     "beat_server.db",
     "beat_server.db.migrations",
     "beat_server.db.migrations.versions",
+    "beat_server.api",
+    "beat_server.jobs",
 ]
 
 [tool.setuptools.package-data]
