@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router";
 import { cn } from "@/lib/utils";
 import { useEvents } from "@/api/events";
+import { AuthBanner } from "./AuthBanner";
 
 const links = [
   { to: "/", label: "Library", end: true },
@@ -31,7 +32,7 @@ export function AppShell() {
           ))}
         </nav>
       </header>
-      {/* AuthBanner slot (slice 7) */}
+      <AuthBanner />
       <main className="mx-auto max-w-6xl px-6 py-8">
         <Outlet />
       </main>

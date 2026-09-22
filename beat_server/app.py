@@ -15,7 +15,10 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
+from beat_server.api import auth as auth_api
 from beat_server.api import events, jobs, sync
+from beat_server.api import settings as settings_api
+from beat_server.api.errors import register_error_handlers
 from beat_server.db.engine import make_engine, make_session_factory
 from beat_server.db.migrate import upgrade_to_head
 from beat_server.jobs.events import EventBus
@@ -88,6 +91,7 @@ def create_app(
     app.state.worker = Worker(queue, HANDLERS, app.state.session_factory, workspace, bus)
     app.state.on_reconnect = queue.resume_paused  # the auth callback calls it after login
 
+    register_error_handlers(app)
     _include_routers(app)
     _mount_web(app, web_dist)
     return app
@@ -98,6 +102,8 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(jobs.router)
     app.include_router(sync.router)
     app.include_router(events.router)
+    app.include_router(auth_api.router)
+    app.include_router(settings_api.router)
 
 
 def _mount_web(app: FastAPI, web_dist: Path | None) -> None:
