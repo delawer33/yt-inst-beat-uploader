@@ -23,6 +23,7 @@ export function GoogleForm() {
   const [clientSecret, setClientSecret] = useState("");
 
   const storedId = settings.data?.google_client_id ?? null;
+  const redirectUri = settings.data?.redirect_uri ?? "…";
   const status = auth.data?.status;
   const channel = auth.data?.channel ?? null;
   const label = status ? STATUS_LABEL[status] : null;
@@ -39,7 +40,7 @@ export function GoogleForm() {
         <CardTitle>Google</CardTitle>
         <CardDescription>
           OAuth client of type &ldquo;Web application&rdquo; from Google Cloud Console with the
-          redirect URI <code className="text-foreground">{window.location.origin}/api/auth/google/callback</code>.
+          redirect URI <code className="text-foreground">{redirectUri}</code>.
           The secret is stored on this machine and never shown again.
         </CardDescription>
       </CardHeader>

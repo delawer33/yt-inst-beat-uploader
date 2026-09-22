@@ -1,6 +1,14 @@
+import httplib2
 import pytest
 
-from beat_upload.stats import ChannelStats, parse_channel, parse_duration, parse_video
+from beat_upload.errors import NetworkError
+from beat_upload.stats import (
+    ChannelStats,
+    YouTubeStats,
+    parse_channel,
+    parse_duration,
+    parse_video,
+)
 
 
 @pytest.mark.parametrize(
@@ -47,3 +55,19 @@ def test_parse_video_full() -> None:
 def test_parse_video_missing_counts_default_to_zero() -> None:
     v = parse_video({"id": "x", "snippet": {}, "statistics": {}})
     assert (v.views, v.likes, v.comments, v.duration_seconds, v.tags) == (0, 0, 0, 0, [])
+
+
+class _Failing:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def execute(self) -> dict[str, object]:
+        raise self._exc
+
+
+@pytest.mark.parametrize(
+    "exc", [httplib2.ServerNotFoundError("Unable to find the server"), ConnectionRefusedError()]
+)
+def test_call_wraps_transport_errors(exc: Exception) -> None:
+    with pytest.raises(NetworkError, match="Could not reach YouTube"):
+        YouTubeStats._call(_Failing(exc))

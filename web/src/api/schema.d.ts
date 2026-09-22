@@ -272,6 +272,8 @@ export interface components {
             stats_hour: number;
             /** Port */
             port: number;
+            /** Redirect Uri */
+            redirect_uri: string;
         };
         /** ValidationError */
         ValidationError: {
