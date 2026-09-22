@@ -18,7 +18,7 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 |---|-------|--------|--------|----------------|---------|-------|
 | 8 | Foundation | ready (7a651f6, verified) | slice-1-foundation | `PYTHONPATH=wt pytest -q && ruff check . && (cd web && npm run build)` + health test | 0 | |
 | 2 | Google connection | verify (1cb97bd, done-cond verified; review running) | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
-| 3 | Jobs/worker/SSE | verify (2070f41, done-cond verified; review running) | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
+| 3 | Jobs/worker/SSE | ready (3db8419 fixes; merged into integration c37cd59) | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
 | 7 | systemd | ready (7ce46d0, verified) | slice-7 | pytest + ruff | 0 | |
 | 4 | Library/sync | in-progress@s4 | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
 | 5 | New beat pipeline | todo | | pytest test_video + test_pipeline + suite + web build | 0 | |
@@ -43,3 +43,4 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - #3 review: 2 high (worker loop dies on DB error; per-beat jobs cache pollution), 4 med (paused retry dup, session thread-safety, SSE reconnect refetch, unbounded subscriber queues). Fix cycle 1 dispatched on slice-3. Accepted residual: cli.py→beat_server lazy import (pre-existing #8 deviation).
 - W3 started: #4 → s4 off integration cd75386 (#3 fixes will be merged into integration afterwards).
 - #2 review: no high; med: CSRF on disconnect/start, token/secrets file perms, OAUTHLIB_INSECURE_TRANSPORT process-wide, redirect_uri from Host header. Fix cycle 1 dispatched on slice-2 (findings 1-8). Accepted residual: access log may contain OAuth code (single-use, localhost); GoogleForm requires re-typing client id; design doc signature drift (web_flow state kwarg).
+- #3 fix cycle done (all 8 findings), verified; merged → integration c37cd59 (106 py tests, 12 vitest). Note: worktree s3 now holds `integration` (used as the integration checkout). s7 removed. JobContext now takes session_factory; ctx.progress no longer commits ctx.session.
