@@ -24,6 +24,7 @@ from beat_upload.workspace import Workspace
 log = logging.getLogger(__name__)
 
 POLL_INTERVAL = 0.5
+MISSING_CONNECTION_ERROR = "Google connection is missing or expired. Reconnect in Settings."
 
 
 class JobContext:
@@ -61,8 +62,15 @@ class JobContext:
         self._update(message=line)
 
     def credentials(self) -> Credentials:
-        """Raises ``AuthError``; the worker then pauses the job until reconnect."""
-        return auth.get_valid_credentials(self.workspace)
+        """Raises ``AuthError``; the worker then pauses the job until reconnect.
+
+        The CLI's message ("run `beat-upload login`") is replaced with one that makes
+        sense in the web UI, where the job's error is shown.
+        """
+        try:
+            return auth.get_valid_credentials(self.workspace)
+        except AuthError as exc:
+            raise AuthError(MISSING_CONNECTION_ERROR) from exc
 
     def enqueue(self, kind: JobKind, beat_id: str | None = None) -> Job:
         """Follow-up job (render → upload)."""

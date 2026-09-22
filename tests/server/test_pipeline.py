@@ -210,8 +210,8 @@ async def test_run_render_sets_video_and_enqueues_upload(
     assert job.status == JobStatus.DONE, job.error
     beat = reload_beat(session, draft)
     assert beat.video_path == "video.mp4"
-    assert beat.status == BeatStatus.RENDERING
-    assert beat_events == [(draft.id, "rendering")]
+    assert beat.status == BeatStatus.QUEUED  # waiting for the UPLOAD job, not "rendering"
+    assert beat_events == [(draft.id, "rendering"), (draft.id, "queued")]
     follow_up = JobRepo(session).next_queued()
     assert follow_up is not None
     assert (follow_up.kind, follow_up.beat_id) == (JobKind.UPLOAD, draft.id)
@@ -281,7 +281,7 @@ async def test_run_render_missing_beat_fails(app: FastAPI, session: Session) -> 
 def rendered(workspace: Workspace, repo: BeatRepo, draft: Beat) -> Beat:
     (workspace.beat_dir(draft.id) / "video.mp4").write_bytes(b"mp4")
     draft.video_path = "video.mp4"
-    draft.status = BeatStatus.RENDERING
+    draft.status = BeatStatus.QUEUED
     return repo.save(draft)
 
 
@@ -338,7 +338,7 @@ async def test_run_upload_without_credentials_pauses(
     job = reload_job(session, job)
     assert job.status == JobStatus.PAUSED and job.error == "Not connected"
     beat = reload_beat(session, rendered)
-    assert beat.status == BeatStatus.RENDERING and beat.youtube_id is None
+    assert beat.status == BeatStatus.QUEUED and beat.youtube_id is None
 
 
 async def test_run_upload_without_video_fails(

@@ -14,6 +14,7 @@ from beat_server.db.repo import JobRepo
 from beat_server.jobs.events import Event, EventBus
 from beat_server.jobs.queue import SUPERSEDED_ERROR, JobQueue
 from beat_server.jobs.worker import JobContext, Worker
+from beat_upload import auth
 from beat_upload.errors import AuthError, VideoError
 from beat_upload.workspace import Workspace
 
@@ -55,6 +56,28 @@ async def test_auth_error_pauses_job(app: FastAPI, queue: JobQueue, session: Ses
     assert job.status == JobStatus.PAUSED
     assert job.error == "Not logged in. Run `beat-upload login` first."
     assert job.started_at is not None and job.finished_at is not None
+
+
+async def test_credentials_auth_error_points_to_settings(
+    app: FastAPI, queue: JobQueue, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inside a job the CLI's "run `beat-upload login`" wording is replaced for the web UI."""
+
+    def no_token(workspace: Workspace) -> None:
+        raise AuthError("Not logged in. Run `beat-upload login` first.")
+
+    monkeypatch.setattr(auth, "get_valid_credentials", no_token)
+
+    async def handler(ctx: JobContext) -> None:
+        ctx.credentials()
+
+    job = queue.enqueue(JobKind.UPLOAD, beat_id="b1")
+    await make_worker(app, {JobKind.UPLOAD: handler}).run_one(job)
+
+    job = reload(session, job)
+    assert job.status == JobStatus.PAUSED
+    assert job.error == "Google connection is missing or expired. Reconnect in Settings."
+    assert "beat-upload login" not in (job.error or "")
 
 
 async def test_video_error_fails_job_with_message(

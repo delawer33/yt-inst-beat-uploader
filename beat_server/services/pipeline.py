@@ -28,7 +28,12 @@ RENDERABLE = frozenset({BeatStatus.DRAFT, BeatStatus.QUEUED})
 
 
 async def run_render(ctx: JobContext) -> None:
-    """DRAFT/QUEUED -> RENDERING -> video.mp4 on disk -> UPLOAD job enqueued."""
+    """DRAFT/QUEUED -> RENDERING -> video.mp4 on disk -> QUEUED, UPLOAD job enqueued.
+
+    The beat goes back to QUEUED once the file exists so that a beat waiting for its
+    UPLOAD job (queued, or paused on a missing Google connection) is not shown as
+    ``rendering``; ``run_upload`` moves it to UPLOADING when it actually starts.
+    """
     repo = BeatRepo(ctx.session)
     beat = _load(ctx, repo)
     if beat.status not in RENDERABLE:
@@ -54,7 +59,7 @@ async def run_render(ctx: JobContext) -> None:
         _set_status(ctx, repo, beat, BeatStatus.DRAFT)
         raise
     beat.video_path = VIDEO_FILENAME
-    repo.save(beat)
+    _set_status(ctx, repo, beat, BeatStatus.QUEUED)
     ctx.progress(1.0, "Rendered")
     ctx.enqueue(JobKind.UPLOAD, beat.id)
 
