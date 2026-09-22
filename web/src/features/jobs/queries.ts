@@ -1,8 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { applyJobEvent, jobKey, jobsKey, type Job } from "@/api/events";
+import {
+  applyJobEvent,
+  beatJobsKey,
+  jobKey,
+  jobsKey,
+  type Job,
+} from "@/api/events";
 
-async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown }>): Promise<T> {
+async function unwrap<T>(
+  promise: Promise<{ data?: T; error?: unknown }>,
+): Promise<T> {
   const { data, error } = await promise;
   if (error !== undefined || data === undefined) {
     throw new Error(describe(error));
@@ -20,16 +28,23 @@ function describe(error: unknown): string {
 /** All recent jobs, or the jobs of one beat. Live-patched by `useEvents`. */
 export function useJobs(beatId?: string) {
   return useQuery({
-    queryKey: beatId ? [...jobsKey, { beatId }] : jobsKey,
+    queryKey: beatId ? beatJobsKey(beatId) : jobsKey,
     queryFn: () =>
-      unwrap(api.GET("/api/jobs", { params: { query: beatId ? { beat_id: beatId } : {} } })),
+      unwrap(
+        api.GET("/api/jobs", {
+          params: { query: beatId ? { beat_id: beatId } : {} },
+        }),
+      ),
   });
 }
 
 export function useJob(id: string) {
   return useQuery({
     queryKey: jobKey(id),
-    queryFn: () => unwrap(api.GET("/api/jobs/{job_id}", { params: { path: { job_id: id } } })),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/jobs/{job_id}", { params: { path: { job_id: id } } }),
+      ),
   });
 }
 
@@ -43,7 +58,11 @@ function useJobMutation<TVars>(run: (vars: TVars) => Promise<Job>) {
 
 export function useRetryJob() {
   return useJobMutation((id: string) =>
-    unwrap(api.POST("/api/jobs/{job_id}/retry", { params: { path: { job_id: id } } })),
+    unwrap(
+      api.POST("/api/jobs/{job_id}/retry", {
+        params: { path: { job_id: id } },
+      }),
+    ),
   );
 }
 

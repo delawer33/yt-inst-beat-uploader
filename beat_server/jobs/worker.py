@@ -10,6 +10,7 @@ import threading
 from collections.abc import Awaitable, Callable, Mapping
 
 from google.oauth2.credentials import Credentials
+from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from beat_server.db.models import Job, JobKind, JobStatus, utcnow
@@ -26,7 +27,12 @@ POLL_INTERVAL = 0.5
 
 
 class JobContext:
-    """What a handler gets: the job row, a session, the workspace and ways to report."""
+    """What a handler gets: the job row, a session, the workspace and ways to report.
+
+    ``session`` belongs to the loop thread (the handler's own reads/writes). ``progress`` and
+    ``log`` may be called from ``to_thread`` workers: they write through a short session of
+    their own and mirror the values onto ``job``, so the handler always sees what was saved.
+    """
 
     def __init__(
         self,
@@ -35,9 +41,11 @@ class JobContext:
         workspace: Workspace,
         bus: EventBus,
         queue: JobQueue,
+        session_factory: sessionmaker[Session],
     ) -> None:
         self.job = job
         self.session = session
+        self._session_factory = session_factory
         self.workspace = workspace
         self.bus = bus
         self.queue = queue
@@ -61,12 +69,17 @@ class JobContext:
         return self.queue.enqueue(kind, beat_id)
 
     def _update(self, *, progress: float | None = None, message: str | None = None) -> None:
+        values: dict[str, float | str] = {}
+        if progress is not None:
+            values["progress"] = progress
+        if message is not None:
+            values["message"] = message
         with self._lock:
-            if progress is not None:
-                self.job.progress = progress
-            if message is not None:
-                self.job.message = message
-            JobRepo(self.session).save(self.job)
+            with self._session_factory() as session:
+                session.execute(update(Job).where(Job.id == self.job.id).values(**values))
+                session.commit()
+            for name, value in values.items():
+                setattr(self.job, name, value)
             self.bus.publish_job(self.job)
 
 
@@ -94,27 +107,46 @@ class Worker:
     async def run_forever(self) -> None:
         """Poll for queued jobs until cancelled. One job at a time."""
         while True:
-            with self._session_factory() as session:
-                job = JobRepo(session).next_queued()
-            if job is None:
+            try:
+                with self._session_factory() as session:
+                    job = JobRepo(session).next_queued()
+                if job is None:
+                    await asyncio.sleep(self._poll_interval)
+                    continue
+                await self.run_one(job)
+            except Exception:  # noqa: BLE001
+                # Design (web-v1 §Slice 4): the worker loop outlives DB hiccups (locked
+                # sqlite, disk full, ...). Log and try again after a pause; cancellation
+                # is a BaseException and still stops the loop.
+                log.exception("worker loop iteration failed; retrying")
                 await asyncio.sleep(self._poll_interval)
-                continue
-            await self.run_one(job)
 
     async def run_one(self, job: Job) -> None:
+        """Run ``job`` if it is still QUEUED; a job that vanished or moved on is skipped."""
         session = self._session_factory()
         try:
-            job = session.get(Job, job.id) or session.merge(job)
+            row = session.get(Job, job.id)
+            if row is None or row.status != JobStatus.QUEUED:
+                return
+            job = row
             job.status = JobStatus.RUNNING
             job.started_at = utcnow()
             job.error = None
             self._save(session, job)
-            ctx = JobContext(job, session, self._workspace, self._bus, self._queue)
+            ctx = JobContext(
+                job, session, self._workspace, self._bus, self._queue, self._session_factory
+            )
             try:
                 handler = self._handlers.get(job.kind)
                 if handler is None:
                     raise BeatUploadError(f"No handler for job kind {job.kind}.")
                 await handler(ctx)
+            except asyncio.CancelledError:
+                # Server shutdown mid-job: back to QUEUED so the next start picks it up.
+                job.status = JobStatus.QUEUED
+                job.started_at = None
+                self._save(session, job)
+                raise
             except AuthError as e:
                 job.status = JobStatus.PAUSED
                 job.error = str(e)

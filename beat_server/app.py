@@ -7,6 +7,7 @@ built frontend (``web/dist``) is served at ``/`` with an SPA fallback; when it i
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,6 +25,8 @@ from beat_server.jobs.queue import JobQueue
 from beat_server.jobs.worker import Worker
 from beat_server.settings import ServerSettings
 from beat_upload.workspace import Workspace
+
+log = logging.getLogger(__name__)
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -61,7 +64,10 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.queue.recover()
-        worker_task = asyncio.create_task(app.state.worker.run_forever()) if start_worker else None
+        worker_task = None
+        if start_worker:
+            worker_task = asyncio.create_task(app.state.worker.run_forever())
+            worker_task.add_done_callback(_log_worker_exit)
         # Scheduler starts here in a later slice.
         try:
             yield
@@ -91,6 +97,15 @@ def create_app(
     _include_routers(app)
     _mount_web(app, web_dist)
     return app
+
+
+def _log_worker_exit(task: asyncio.Task[None]) -> None:
+    """The worker loop is meant to run forever; anything but cancellation is a bug."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.error("job worker stopped unexpectedly", exc_info=exc)
 
 
 def _include_routers(app: FastAPI) -> None:
