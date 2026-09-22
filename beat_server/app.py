@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from beat_server.api import auth as auth_api
-from beat_server.api import events, jobs, sync
+from beat_server.api import beats, events, jobs, sync
 from beat_server.api import settings as settings_api
 from beat_server.api.errors import register_error_handlers
 from beat_server.db.engine import make_engine, make_session_factory
@@ -99,6 +99,7 @@ def create_app(
 
 def _include_routers(app: FastAPI) -> None:
     app.include_router(api)
+    app.include_router(beats.router)
     app.include_router(jobs.router)
     app.include_router(sync.router)
     app.include_router(events.router)
