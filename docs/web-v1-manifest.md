@@ -16,13 +16,13 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 
 | # | title | status | branch | done condition | retries | notes |
 |---|-------|--------|--------|----------------|---------|-------|
-| 8 | Foundation | ready (7a651f6, verified) | slice-1-foundation | `PYTHONPATH=wt pytest -q && ruff check . && (cd web && npm run build)` + health test | 0 | |
-| 2 | Google connection | ready (merged, integration aaa5a72) | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
-| 3 | Jobs/worker/SSE | ready (3db8419 fixes; merged into integration c37cd59) | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
-| 7 | systemd | ready (7ce46d0, verified) | slice-7 | pytest + ruff | 0 | |
-| 4 | Library/sync | ready (merged, integration 26a10e0) | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
-| 5 | New beat pipeline | ready (aed5c67 verified; merged, integration d06e145) | slice-5 | pytest test_video + test_pipeline + suite + web build | 0 | |
-| 6 | Stats/scheduler | ready (628cd52 verified; merged, integration 628cd52) | slice-6 | pytest tests/server/test_stats.py + suite + web build | 0 | |
+| 8 | Foundation | merged | slice-1-foundation | `PYTHONPATH=wt pytest -q && ruff check . && (cd web && npm run build)` + health test | 0 | |
+| 2 | Google connection | merged | slice-2 | pytest (tests/test_auth_web.py + server) + ruff + web build | 0 | review: yes (auth) |
+| 3 | Jobs/worker/SSE | merged | slice-3 | pytest tests/server/test_worker.py + suite + ruff + web build | 0 | review: yes (seam) |
+| 7 | systemd | merged | slice-7 | pytest + ruff | 0 | |
+| 4 | Library/sync | merged | slice-4 | pytest tests/server/test_sync.py + suite + web build | 0 | |
+| 5 | New beat pipeline | merged | slice-5 | pytest test_video + test_pipeline + suite + web build | 0 | |
+| 6 | Stats/scheduler | merged | slice-6 | pytest tests/server/test_stats.py + suite + web build | 0 | |
 
 ## Decisions
 
@@ -50,3 +50,4 @@ Shared venv: main checkout `.venv` (server deps preinstalled). Subagents must us
 - #6 done, verified (153 py tests, 17 vitest); merged clean into integration 628cd52. Deviations accepted: next_due static with hour kwarg; missing_days caps backfill; stats windows end yesterday; recharts 3.2.1 added. Waiting on #5.
 - #5 done, verified (180 py tests, 27 vitest). W4 integrated: integration d06e145 (199 py tests, 29 vitest; smoke: draft→render done via real ffmpeg→upload paused on missing token). Deviations accepted: MAX_TAGS_LENGTH=500 in core validator; failed render/upload returns beat to DRAFT; create_draft takes template dict.
 - Integration fallout fix cycle 1: beat stays `rendering` after render done + upload paused (should be `queued`); AuthError text inside jobs says 'Run beat-upload login' (web wording needed).
+- Fallout fix 4205459 (beat → QUEUED after render; web-facing auth error in jobs). integration → main e2ad4a0; full gate on main green (200 pytest, 29 vitest, ruff, tokens, api:check, build). Tickets #1–#8 closed. Not pushed. Worktrees removed, slice branches kept.
