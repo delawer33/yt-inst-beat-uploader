@@ -1,22 +1,10 @@
-"""Registry of job handlers. Bodies live in ``beat_server/services``; this maps kinds to them.
-
-RENDER/UPLOAD are stubs until the pipeline service lands.
-"""
+"""Registry of job handlers. Bodies live in ``beat_server/services``; this maps kinds to them."""
 
 from beat_server.db.models import JobKind
-from beat_server.jobs.worker import JobContext, JobHandler
+from beat_server.jobs.worker import JobHandler
+from beat_server.services.pipeline import run_render, run_upload
 from beat_server.services.stats import run_stats
 from beat_server.services.sync import run_sync
-from beat_upload.errors import BeatUploadError
-
-
-async def run_render(ctx: JobContext) -> None:
-    raise BeatUploadError("Render is not implemented yet.")
-
-
-async def run_upload(ctx: JobContext) -> None:
-    raise BeatUploadError("Upload is not implemented yet.")
-
 
 HANDLERS: dict[JobKind, JobHandler] = {
     JobKind.SYNC: run_sync,

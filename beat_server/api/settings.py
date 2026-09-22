@@ -1,8 +1,10 @@
 """Settings: the Google OAuth client (secret write-only) and scheduler options.
 
 Keys in ``SettingsRepo``: ``stats_hour`` (hour of day, 0..23, for the daily stats job; the
-scheduler slice reads it, default ``DEFAULT_STATS_HOUR``). The Google client id and secret
-are not in the database: they live in the Workspace secrets file via ``auth``.
+scheduler slice reads it, default ``DEFAULT_STATS_HOUR``) and the new-beat templates
+``title_template``/``description_template``/``tags_template`` (``services.beats``). The
+Google client id and secret are not in the database: they live in the Workspace secrets
+file via ``auth``.
 """
 
 import json
@@ -14,6 +16,13 @@ from sqlalchemy.orm import Session
 
 from beat_server.db.repo import SettingsRepo
 from beat_server.deps import get_session, get_workspace
+from beat_server.services.beats import (
+    KEY_DESCRIPTION_TEMPLATE,
+    KEY_TAGS_TEMPLATE,
+    KEY_TITLE_TEMPLATE,
+    default_metadata,
+    save_templates,
+)
 from beat_upload.auth import save_client_secrets
 from beat_upload.workspace import Workspace
 
@@ -31,10 +40,16 @@ class SettingsOut(BaseModel):
     stats_hour: int
     port: int
     redirect_uri: str  # what to register on the Google OAuth client
+    title_template: str  # ``{name}`` = audio file name without extension
+    description_template: str
+    tags_template: list[str]
 
 
 class SettingsIn(BaseModel):
     stats_hour: int = Field(ge=0, le=23)
+    title_template: str | None = None
+    description_template: str | None = None
+    tags_template: list[str] | None = None
 
 
 class GoogleClientIn(BaseModel):
@@ -71,11 +86,15 @@ def stats_hour(settings: SettingsRepo) -> int:
 
 def _out(request: Request, ws: Workspace, settings: SettingsRepo) -> SettingsOut:
     server = request.app.state.settings
+    templates = default_metadata(settings)
     return SettingsOut(
         google_client_id=stored_client_id(ws),
         stats_hour=stats_hour(settings),
         port=server.port,
         redirect_uri=server.redirect_uri,
+        title_template=templates[KEY_TITLE_TEMPLATE],
+        description_template=templates[KEY_DESCRIPTION_TEMPLATE],
+        tags_template=templates[KEY_TAGS_TEMPLATE],
     )
 
 
@@ -90,6 +109,12 @@ def put_settings(
 ) -> SettingsOut:
     settings = SettingsRepo(session)
     settings.set(KEY_STATS_HOUR, str(body.stats_hour))
+    save_templates(
+        settings,
+        title=body.title_template,
+        description=body.description_template,
+        tags=body.tags_template,
+    )
     return _out(request, ws, settings)
 
 

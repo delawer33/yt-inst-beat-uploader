@@ -1,12 +1,12 @@
 import { JobList } from "@/features/jobs/JobList";
 import { OverviewCard } from "@/features/stats/OverviewCard";
 import { BeatGrid } from "./BeatGrid";
+import { DropZone } from "./DropZone";
 import { useBeats } from "./queries";
 
 /**
- * Library: the Sync button and recent jobs (JobList), the stats overview, then every Beat
- * as a card.
- * Slice 5 adds the DropZone for a new Beat between the header and the grid.
+ * Library: the Sync button and recent jobs (JobList), the DropZone for a new Beat, the
+ * stats overview, then every Beat as a card.
  */
 export function LibraryPage() {
   const beats = useBeats();
@@ -14,6 +14,7 @@ export function LibraryPage() {
     <div className="flex flex-col gap-8">
       <h1 className="text-2xl font-semibold">Library</h1>
       <JobList />
+      <DropZone />
       <OverviewCard />
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Beats</h2>

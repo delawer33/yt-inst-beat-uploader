@@ -31,7 +31,11 @@ export interface paths {
         /** List Beats */
         get: operations["list_beats_api_beats_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Beat
+         * @description A new DRAFT from an audio file and a cover image (multipart form).
+         */
+        post: operations["create_beat_api_beats_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -49,6 +53,34 @@ export interface paths {
         get: operations["get_beat_api_beats__beat_id__get"];
         put?: never;
         post?: never;
+        /**
+         * Delete Beat
+         * @description Remove a DRAFT and its files. Uploaded beats stay (they live on YouTube).
+         */
+        delete: operations["delete_beat_api_beats__beat_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Patch Beat
+         * @description Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
+         */
+        patch: operations["patch_beat_api_beats__beat_id__patch"];
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Beat
+         * @description Queue the RENDER job (which chains UPLOAD). The beat becomes QUEUED.
+         */
+        post: operations["upload_beat_api_beats__beat_id__upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -387,10 +419,37 @@ export interface components {
             updated_at: string;
         };
         /**
+         * BeatPatch
+         * @description Editable metadata (slice 5, ``PATCH /api/beats/{id}``). Declared here so the schema
+         *     file is one place; validation reuses ``YouTubeMetadata.from_mapping``.
+         */
+        BeatPatch: {
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+            privacy?: components["schemas"]["PrivacyStatus"] | null;
+        };
+        /**
          * BeatStatus
          * @enum {string}
          */
         BeatStatus: "draft" | "queued" | "rendering" | "uploading" | "uploaded" | "published";
+        /** Body_create_beat_api_beats_post */
+        Body_create_beat_api_beats_post: {
+            /**
+             * Audio
+             * @description one .mp3 or .wav
+             */
+            audio: string;
+            /**
+             * Image
+             * @description one .png/.jpg/.jpeg/.gif/.bmp
+             */
+            image: string;
+        };
         /** ChannelOut */
         ChannelOut: {
             /** Id */
@@ -482,6 +541,12 @@ export interface components {
         SettingsIn: {
             /** Stats Hour */
             stats_hour: number;
+            /** Title Template */
+            title_template?: string | null;
+            /** Description Template */
+            description_template?: string | null;
+            /** Tags Template */
+            tags_template?: string[] | null;
         };
         /** SettingsOut */
         SettingsOut: {
@@ -493,6 +558,12 @@ export interface components {
             port: number;
             /** Redirect Uri */
             redirect_uri: string;
+            /** Title Template */
+            title_template: string;
+            /** Description Template */
+            description_template: string;
+            /** Tags Template */
+            tags_template: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -558,6 +629,39 @@ export interface operations {
             };
         };
     };
+    create_beat_api_beats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_beat_api_beats_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_beat_api_beats__beat_id__get: {
         parameters: {
             query?: never;
@@ -576,6 +680,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_beat_api_beats__beat_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_beat_api_beats__beat_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeatPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_beat_api_beats__beat_id__upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
                 };
             };
             /** @description Validation Error */
