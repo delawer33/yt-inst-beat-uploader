@@ -163,6 +163,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Beat Stats
+         * @description Daily points of one beat; empty when it is not on YouTube.
+         */
+        get: operations["beat_stats_api_beats__beat_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description Channel totals for the window and the per-day series behind them.
+         */
+        get: operations["overview_api_stats_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stats/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect Now
+         * @description Run the STATS job now instead of waiting for the nightly hour.
+         */
+        post: operations["collect_now_api_stats_collect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;
@@ -338,6 +398,22 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** DayPoint */
+        DayPoint: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Views */
+            views: number;
+            /** Watch Minutes */
+            watch_minutes: number;
+            /** Avg View Seconds */
+            avg_view_seconds: number;
+            /** Avg View Percent */
+            avg_view_percent: number;
+        };
         /** GoogleClientIn */
         GoogleClientIn: {
             /** Client Id */
@@ -384,6 +460,15 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "running" | "done" | "failed" | "paused";
+        /** OverviewOut */
+        OverviewOut: {
+            /** Views */
+            views: number;
+            /** Watch Minutes */
+            watch_minutes: number;
+            /** Per Day */
+            per_day: components["schemas"]["DayPoint"][];
+        };
         /** PrivacyIn */
         PrivacyIn: {
             privacy: components["schemas"]["PrivacyStatus"];
@@ -663,6 +748,90 @@ export interface operations {
         };
     };
     trigger_sync_api_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+        };
+    };
+    beat_stats_api_beats__beat_id__stats_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPoint"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_stats_overview_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collect_now_api_stats_collect_post: {
         parameters: {
             query?: never;
             header?: never;

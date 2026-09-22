@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from beat_server.db.models import Beat, Job, JobStatus, Setting, VideoStatsDaily
+from beat_server.db.models import Beat, Job, JobKind, JobStatus, Setting, VideoStatsDaily
 
 
 class BeatRepo:
@@ -77,6 +77,11 @@ class JobRepo:
             stmt = stmt.limit(limit)
         return list(self.session.scalars(stmt))
 
+    def latest(self, kind: JobKind) -> Job | None:
+        """The most recently created job of ``kind``, whatever its status."""
+        stmt = select(Job).where(Job.kind == kind).order_by(Job.created_at.desc(), Job.id).limit(1)
+        return self.session.scalar(stmt)
+
     def save(self, job: Job) -> Job:
         self.session.add(job)
         self.session.commit()
@@ -101,6 +106,15 @@ class StatsRepo:
                 VideoStatsDaily.day <= end,
             )
             .order_by(VideoStatsDaily.day)
+        )
+        return list(self.session.scalars(stmt))
+
+    def daily_all(self, start: date, end: date) -> list[VideoStatsDaily]:
+        """Every video's rows in the range, ordered by day."""
+        stmt = (
+            select(VideoStatsDaily)
+            .where(VideoStatsDaily.day >= start, VideoStatsDaily.day <= end)
+            .order_by(VideoStatsDaily.day, VideoStatsDaily.youtube_id)
         )
         return list(self.session.scalars(stmt))
 

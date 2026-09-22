@@ -18,15 +18,18 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from beat_server.api import auth as auth_api
-from beat_server.api import beats, events, jobs, sync
+from beat_server.api import beats, events, jobs, stats, sync
 from beat_server.api import settings as settings_api
 from beat_server.api.csrf import install_csrf
 from beat_server.api.errors import register_error_handlers
+from beat_server.api.settings import stats_hour
 from beat_server.db.engine import make_engine, make_session_factory
 from beat_server.db.migrate import upgrade_to_head
+from beat_server.db.repo import SettingsRepo
 from beat_server.jobs.events import EventBus
 from beat_server.jobs.handlers import HANDLERS
 from beat_server.jobs.queue import JobQueue
+from beat_server.jobs.scheduler import Scheduler
 from beat_server.jobs.worker import Worker
 from beat_server.settings import ServerSettings
 from beat_upload.workspace import Workspace
@@ -57,30 +60,34 @@ def create_app(
     db_path: Path | str | None = None,
     migrate: bool = True,
     start_worker: bool = True,
+    start_scheduler: bool = True,
 ) -> FastAPI:
     """Build the app.
 
     ``db_path`` overrides ``workspace.db_file`` (tests pass ``":memory:"``); ``migrate=False``
     lets tests create tables themselves; ``start_worker=False`` skips the background job
-    worker (tests drive ``Worker.run_one`` directly).
+    worker (tests drive ``Worker.run_one`` directly); ``start_scheduler=False`` skips the nightly
+    STATS scheduler (tests call ``Scheduler.tick`` directly).
     """
     db_path = workspace.db_file if db_path is None else db_path
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.queue.recover()
-        worker_task = None
+        tasks: list[asyncio.Task[None]] = []
         if start_worker:
-            worker_task = asyncio.create_task(app.state.worker.run_forever())
-            worker_task.add_done_callback(_log_worker_exit)
-        # Scheduler starts here in a later slice.
+            tasks.append(asyncio.create_task(app.state.worker.run_forever()))
+        if start_scheduler:
+            tasks.append(asyncio.create_task(app.state.scheduler.run_forever()))
+        for task in tasks:
+            task.add_done_callback(_log_task_exit)
         try:
             yield
         finally:
-            if worker_task is not None:
-                worker_task.cancel()
+            for task in tasks:
+                task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await worker_task
+                    await task
 
     app = FastAPI(title="beat-upload", version="0.1.0", lifespan=lifespan)
     app.state.workspace = workspace
@@ -99,6 +106,11 @@ def create_app(
     app.state.bus = bus
     app.state.queue = queue
     app.state.worker = Worker(queue, HANDLERS, app.state.session_factory, workspace, bus)
+    app.state.scheduler = Scheduler(
+        queue,
+        app.state.session_factory,
+        hour_getter=lambda session: stats_hour(SettingsRepo(session)),
+    )
     app.state.on_reconnect = queue.resume_paused  # the auth callback calls it after login
 
     register_error_handlers(app)
@@ -108,13 +120,13 @@ def create_app(
     return app
 
 
-def _log_worker_exit(task: asyncio.Task[None]) -> None:
-    """The worker loop is meant to run forever; anything but cancellation is a bug."""
+def _log_task_exit(task: asyncio.Task[None]) -> None:
+    """Worker and scheduler loops run forever; anything but cancellation is a bug."""
     if task.cancelled():
         return
     exc = task.exception()
     if exc is not None:
-        log.error("job worker stopped unexpectedly", exc_info=exc)
+        log.error("background loop stopped unexpectedly", exc_info=exc)
 
 
 def _include_routers(app: FastAPI) -> None:
@@ -122,6 +134,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(beats.router)
     app.include_router(jobs.router)
     app.include_router(sync.router)
+    app.include_router(stats.router)
     app.include_router(events.router)
     app.include_router(auth_api.router)
     app.include_router(settings_api.router)

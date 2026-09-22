@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { authStatusKey } from "./authQueries";
 import { GoogleForm } from "./GoogleForm";
+import { ScheduleForm } from "./ScheduleForm";
 
 /**
  * The OAuth callback lands here with `?connected=1` or `?error=<message>`. Both refetch the
@@ -44,6 +45,7 @@ export function SettingsPage() {
         </p>
       )}
       <GoogleForm />
+      <ScheduleForm />
     </div>
   );
 }

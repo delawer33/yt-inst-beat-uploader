@@ -110,6 +110,14 @@ channel title. The secret is stored in the config directory and never shown agai
 **Disconnect** deletes the token and keeps the client. A banner at the top of every page
 says when the connection is missing or expired.
 
+#### Statistics
+
+The server collects daily views and watch time per video from the Analytics API once a
+night (hour in Settings, default 04:00 local; a run missed while the machine was asleep
+happens at the next start). The first run backfills the last 90 days. The Library shows
+the channel totals for the last 28 days, each Beat page its own chart. "Collect stats now"
+on the Library page (or `POST /api/stats/collect`) runs the job immediately.
+
 ### 7. Run as a service
 
 To keep the web UI running permanently (Linux, systemd):

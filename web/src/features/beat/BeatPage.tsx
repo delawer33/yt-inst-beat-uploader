@@ -5,6 +5,8 @@ import { JobList } from "@/features/jobs/JobList";
 import { Cover } from "@/features/library/Cover";
 import { StatusBadge } from "@/features/library/StatusBadge";
 import { useBeat, useSetPrivacy, type Beat } from "@/features/library/queries";
+import { useBeatStats } from "@/features/stats/queries";
+import { ViewsChart } from "@/features/stats/ViewsChart";
 import { formatDate, formatViews } from "@/lib/format";
 import { PrivacySelect } from "./PrivacySelect";
 
@@ -12,7 +14,7 @@ import { PrivacySelect } from "./PrivacySelect";
  * One Beat. Layout, top to bottom:
  *   header  — cover, title, status, counters, published date, "Open on YouTube"
  *   metadata — read-only today; slice 5 swaps in MetadataForm for DRAFT/QUEUED beats
- *   (slice 6: ViewsChart goes between metadata and jobs)
+ *   stats   — ViewsChart of the last 28 days, only for beats on YouTube
  *   jobs    — JobList beatId=id
  */
 export function BeatPage() {
@@ -67,6 +69,7 @@ function BeatView({ beat }: { beat: Beat }) {
         </div>
       </header>
       <Metadata beat={beat} />
+      {beat.youtube_id && <Stats beatId={beat.id} />}
       <JobList beatId={beat.id} />
     </div>
   );
@@ -129,6 +132,22 @@ function Metadata({ beat }: { beat: Beat }) {
           )}
         </dd>
       </dl>
+    </section>
+  );
+}
+
+function Stats({ beatId }: { beatId: string }) {
+  const stats = useBeatStats(beatId);
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="text-lg font-semibold">Views, last 28 days</h2>
+      {stats.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {stats.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {stats.error.message}
+        </p>
+      )}
+      {stats.data && <ViewsChart points={stats.data} />}
     </section>
   );
 }

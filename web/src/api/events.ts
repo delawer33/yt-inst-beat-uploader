@@ -52,6 +52,9 @@ export function applyJobEvent(queryClient: QueryClient, job: Job): void {
     );
   }
   queryClient.setQueryData<Job>(jobKey(job.id), job);
+  if (job.kind === "stats" && job.status === "done") {
+    void queryClient.invalidateQueries({ queryKey: ["stats"] });
+  }
 }
 
 /** The stream (re)opened. After an outage, whatever we missed is refetched. */

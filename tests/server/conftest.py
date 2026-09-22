@@ -34,7 +34,13 @@ def settings(workspace: Workspace) -> ServerSettings:
 @pytest.fixture
 def app(workspace: Workspace, settings: ServerSettings) -> FastAPI:
     app = create_app(
-        workspace, settings, web_dist=None, db_path=MEMORY, migrate=False, start_worker=False
+        workspace,
+        settings,
+        web_dist=None,
+        db_path=MEMORY,
+        migrate=False,
+        start_worker=False,
+        start_scheduler=False,
     )
     Base.metadata.create_all(app.state.engine)
     return app
