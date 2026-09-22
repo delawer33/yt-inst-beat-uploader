@@ -86,3 +86,12 @@ def test_load_rejects_bad_files(tmp_path: Path, content: str | None, message: st
         cfg.write_text(content)
     with pytest.raises(ConfigError, match=message):
         load_youtube_metadata(cfg)
+
+
+def test_tags_total_length_limit() -> None:
+    from beat_upload.config import MAX_TAGS_LENGTH
+
+    ok = {"title": "t", "tags": ["a" * MAX_TAGS_LENGTH]}
+    assert YouTubeMetadata.from_mapping(ok).tags == ["a" * MAX_TAGS_LENGTH]
+    with pytest.raises(ConfigError, match="tags must be <="):
+        YouTubeMetadata.from_mapping({"title": "t", "tags": ["a" * 300, "b" * 201]})

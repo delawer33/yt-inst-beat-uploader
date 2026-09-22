@@ -38,9 +38,7 @@ def upload_video(
             "selfDeclaredMadeForKids": False,
         },
     }
-    media = googleapiclient.http.MediaFileUpload(
-        str(video), chunksize=CHUNK_SIZE, resumable=True
-    )
+    media = googleapiclient.http.MediaFileUpload(str(video), chunksize=CHUNK_SIZE, resumable=True)
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
     response = None

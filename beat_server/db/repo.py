@@ -34,6 +34,10 @@ class BeatRepo:
         self.session.commit()
         return beat
 
+    def delete(self, beat: Beat) -> None:
+        self.session.delete(beat)
+        self.session.commit()
+
 
 class JobRepo:
     def __init__(self, session: Session) -> None:
