@@ -513,6 +513,10 @@ export interface components {
             started_at: string | null;
             /** Finished At */
             finished_at: string | null;
+            /** Attempts */
+            attempts: number;
+            /** Not Before */
+            not_before: string | null;
         };
         /**
          * JobStatus

@@ -84,6 +84,9 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Retry bookkeeping for transient (network) failures, see ``jobs/worker.py``.
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    not_before: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class VideoStatsDaily(Base):

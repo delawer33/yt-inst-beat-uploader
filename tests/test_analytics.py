@@ -1,3 +1,5 @@
+import pytest
+
 from beat_upload.analytics import VideoAnalytics, parse_video_report
 
 
@@ -37,3 +39,25 @@ def test_parse_video_report_to_dict() -> None:
         "avg_view_seconds": 1,
         "avg_view_percent": 1.0,
     }
+
+
+def test_videos_transport_error_is_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import date
+
+    from beat_upload import analytics
+    from beat_upload.errors import NetworkError
+
+    class Offline:
+        def reports(self) -> "Offline":
+            return self
+
+        def query(self, **kwargs: object) -> "Offline":
+            return self
+
+        def execute(self) -> None:
+            raise TimeoutError("timed out")
+
+    monkeypatch.setattr(analytics.googleapiclient.discovery, "build", lambda *a, **k: Offline())
+    api = analytics.YouTubeAnalytics("creds")  # type: ignore[arg-type]
+    with pytest.raises(NetworkError, match="Could not reach YouTube"):
+        api.videos(date(2026, 9, 1), date(2026, 9, 1))

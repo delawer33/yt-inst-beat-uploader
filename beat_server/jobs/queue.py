@@ -43,16 +43,25 @@ class JobQueue:
         return self._requeue(JobStatus.PAUSED)
 
     def retry(self, job_id: str) -> Job:
-        """New job of the same kind and beat. Only FAILED or PAUSED jobs can be retried.
+        """Run ``job_id`` again: a new job for a FAILED/PAUSED one, "now" for a waiting one.
 
-        A PAUSED original becomes FAILED ("superseded by retry") in the same transaction,
+        FAILED or PAUSED: a new job of the same kind and beat is created and returned. A
+        PAUSED original becomes FAILED ("superseded by retry") in the same transaction,
         otherwise ``resume_paused`` would run it again next to the retry.
+        QUEUED with ``not_before`` (waiting out a network-retry delay): the same job is
+        returned with the delay dropped, so the worker picks it up now.
+        Anything else raises ``JobNotRetryable``.
         """
         with self._session_factory() as session:
             repo = JobRepo(session)
             job = repo.get(job_id)
             if job is None:
                 raise JobNotFound(f"Job {job_id} does not exist.")
+            if job.status == JobStatus.QUEUED and job.not_before is not None:
+                job.not_before = None
+                repo.save(job)
+                self._bus.publish_job(job)
+                return job
             if job.status not in RETRYABLE:
                 raise JobNotRetryable(
                     f"Job {job_id} is {job.status}; only failed or paused jobs can be retried."

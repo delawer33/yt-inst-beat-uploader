@@ -1,11 +1,11 @@
 """Thin, typed data access. No business rules live here."""
 
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from beat_server.db.models import Beat, Job, JobKind, JobStatus, Setting, VideoStatsDaily
+from beat_server.db.models import Beat, Job, JobKind, JobStatus, Setting, VideoStatsDaily, utcnow
 
 
 class BeatRepo:
@@ -52,10 +52,12 @@ class JobRepo:
         return job
 
     def next_queued(self) -> Job | None:
-        """The oldest job still waiting to run."""
+        """The oldest job still waiting to run whose retry delay (``not_before``) has passed."""
+        now = utcnow()
         stmt = (
             select(Job)
             .where(Job.status == JobStatus.QUEUED)
+            .where(or_(Job.not_before.is_(None), Job.not_before <= now))
             .order_by(Job.created_at, Job.id)
             .limit(1)
         )
@@ -80,6 +82,15 @@ class JobRepo:
         if limit is not None:
             stmt = stmt.limit(limit)
         return list(self.session.scalars(stmt))
+
+    def count_finished_since(self, kind: JobKind, status: JobStatus, since: datetime) -> int:
+        """How many jobs of ``kind`` reached ``status`` at or after ``since`` (naive UTC)."""
+        stmt = (
+            select(func.count())
+            .select_from(Job)
+            .where(Job.kind == kind, Job.status == status, Job.finished_at >= since)
+        )
+        return self.session.scalar(stmt) or 0
 
     def latest(self, kind: JobKind) -> Job | None:
         """The most recently created job of ``kind``, whatever its status."""

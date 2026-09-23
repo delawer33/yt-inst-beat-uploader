@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -9,13 +10,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from beat_server.api.events import event_stream
-from beat_server.db.models import Job, JobKind, JobStatus
+from beat_server.db.models import Job, JobKind, JobStatus, utcnow
 from beat_server.db.repo import JobRepo
 from beat_server.jobs.events import Event, EventBus
 from beat_server.jobs.queue import SUPERSEDED_ERROR, JobQueue
-from beat_server.jobs.worker import JobContext, Worker
+from beat_server.jobs.worker import MAX_ATTEMPTS, JobContext, Worker, retry_delay
 from beat_upload import auth
-from beat_upload.errors import AuthError, VideoError
+from beat_upload.errors import AuthError, NetworkError, VideoError
 from beat_upload.workspace import Workspace
 
 
@@ -78,6 +79,77 @@ async def test_credentials_auth_error_points_to_settings(
     assert job.status == JobStatus.PAUSED
     assert job.error == "Google connection is missing or expired. Reconnect in Settings."
     assert "beat-upload login" not in (job.error or "")
+
+
+async def test_network_error_requeues_with_delay(
+    app: FastAPI, queue: JobQueue, session: Session
+) -> None:
+    async def handler(ctx: JobContext) -> None:
+        raise NetworkError("Could not reach YouTube: timed out")
+
+    job = queue.enqueue(JobKind.UPLOAD, beat_id="b1")
+    await make_worker(app, {JobKind.UPLOAD: handler}).run_one(job)
+
+    job = reload(session, job)
+    assert job.status == JobStatus.QUEUED
+    assert job.attempts == 1
+    assert job.error == "Could not reach YouTube: timed out"
+    assert job.started_at is None and job.finished_at is None
+    assert job.not_before is not None
+    assert job.not_before > utcnow() + timedelta(seconds=retry_delay(1) - 5)
+    assert job.progress == 0.0 and job.message == ""
+    # Not picked up before ``not_before``.
+    assert JobRepo(session).next_queued() is None
+
+
+def test_retry_of_a_waiting_job_runs_it_now(queue: JobQueue, session: Session) -> None:
+    waiting = queue.enqueue(JobKind.UPLOAD, beat_id="b1")
+    waiting.attempts = 2
+    waiting.not_before = utcnow() + timedelta(minutes=30)
+    waiting.error = "Could not reach YouTube"
+    JobRepo(session).save(waiting)
+
+    same = queue.retry(waiting.id)
+
+    assert same.id == waiting.id
+    assert same.status == JobStatus.QUEUED and same.not_before is None
+    assert same.attempts == 2  # the retry budget is not reset by "run now"
+    assert JobRepo(session).next_queued().id == waiting.id  # type: ignore[union-attr]
+
+
+async def test_network_error_fails_after_max_attempts(
+    app: FastAPI, queue: JobQueue, session: Session
+) -> None:
+    async def handler(ctx: JobContext) -> None:
+        raise NetworkError("offline")
+
+    job = queue.enqueue(JobKind.STATS)
+    job.attempts = MAX_ATTEMPTS - 1
+    JobRepo(session).save(job)
+    await make_worker(app, {JobKind.STATS: handler}).run_one(job)
+
+    job = reload(session, job)
+    assert job.status == JobStatus.FAILED
+    assert job.attempts == MAX_ATTEMPTS
+    assert job.error == "offline"
+    assert job.finished_at is not None
+
+
+def test_retry_delay_backs_off() -> None:
+    assert retry_delay(1) == 120
+    assert retry_delay(2) == 240
+    assert retry_delay(3) == 480
+    assert retry_delay(1) < retry_delay(MAX_ATTEMPTS - 1) <= 3600
+
+
+def test_next_queued_honours_not_before(queue: JobQueue, session: Session) -> None:
+    later = queue.enqueue(JobKind.SYNC)
+    later.not_before = utcnow() + timedelta(hours=1)
+    JobRepo(session).save(later)
+    assert JobRepo(session).next_queued() is None
+    later.not_before = utcnow() - timedelta(seconds=1)
+    JobRepo(session).save(later)
+    assert JobRepo(session).next_queued().id == later.id  # type: ignore[union-attr]
 
 
 async def test_video_error_fails_job_with_message(

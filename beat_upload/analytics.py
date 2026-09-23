@@ -14,7 +14,7 @@ import googleapiclient.discovery
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 
-from beat_upload.errors import AnalyticsError
+from beat_upload.errors import TRANSPORT_ERRORS, AnalyticsError, NetworkError
 
 METRICS = "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage"
 MAX_RESULTS = 200  # API maximum when grouping by video
@@ -36,9 +36,12 @@ class YouTubeAnalytics:
     """Thin wrapper over the Analytics API client. One instance per credentials."""
 
     def __init__(self, credentials: Credentials) -> None:
-        self._api = googleapiclient.discovery.build(
-            "youtubeAnalytics", "v2", credentials=credentials
-        )
+        try:
+            self._api = googleapiclient.discovery.build(
+                "youtubeAnalytics", "v2", credentials=credentials
+            )
+        except TRANSPORT_ERRORS as e:
+            raise NetworkError(f"Could not reach YouTube: {e}") from e
 
     def videos(self, start: date, end: date) -> list[VideoAnalytics]:
         """Metrics per video for the inclusive date range, most viewed first.
@@ -60,6 +63,8 @@ class YouTubeAnalytics:
             response = request.execute()
         except HttpError as e:
             raise AnalyticsError(f"YouTube Analytics API error: {e}") from e
+        except TRANSPORT_ERRORS as e:
+            raise NetworkError(f"Could not reach YouTube: {e}") from e
         return parse_video_report(response)
 
 

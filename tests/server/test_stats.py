@@ -7,10 +7,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from beat_server.db.models import Beat, BeatStatus, JobKind, JobStatus, VideoStatsDaily
+from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus, VideoStatsDaily
 from beat_server.db.repo import BeatRepo, JobRepo, StatsRepo
 from beat_server.jobs.handlers import HANDLERS
-from beat_server.jobs.scheduler import Scheduler
+from beat_server.jobs.scheduler import (
+    FAILED_RETRY_INTERVAL,
+    MAX_FAILED_RETRIES_PER_DAY,
+    Scheduler,
+    local_to_utc,
+)
 from beat_server.jobs.worker import JobContext, Worker
 from beat_server.services import stats as stats_service
 from beat_server.services.stats import collect_day, missing_days
@@ -181,6 +186,29 @@ def test_next_due_never_ran_is_due_now() -> None:
     assert Scheduler.next_due(NOON, None, hour=HOUR) <= NOON
 
 
+def test_next_due_after_failure_retries_later_today() -> None:
+    failed = datetime(2026, 9, 22, 4, 1)
+    due = Scheduler.next_due(NOON, failed, hour=HOUR, last_failed=True)
+    assert due == failed + FAILED_RETRY_INTERVAL
+    assert due <= NOON
+
+
+def test_next_due_failure_before_the_hour_does_not_shift_it() -> None:
+    # A failed manual run at 01:00 must not make the 04:00 run happen at 02:00.
+    failed = datetime(2026, 9, 22, 1, 0)
+    now = datetime(2026, 9, 22, 2, 30)
+    due = Scheduler.next_due(now, failed, hour=HOUR, last_failed=True)
+    assert due == datetime(2026, 9, 22, 4, 0)
+
+
+def test_next_due_failure_late_evening_waits_for_next_days_hour() -> None:
+    # 23:30 + 1h would be 00:30: yesterday's data is not complete yet, wait for 04:00.
+    failed = datetime(2026, 9, 22, 23, 30)
+    now = datetime(2026, 9, 23, 0, 45)
+    due = Scheduler.next_due(now, failed, hour=HOUR, last_failed=True)
+    assert due == datetime(2026, 9, 23, 4, 0)
+
+
 def make_scheduler(app: FastAPI, now: datetime, hour: int = HOUR) -> Scheduler:
     return Scheduler(
         app.state.queue,
@@ -199,6 +227,49 @@ def test_tick_enqueues_once_per_day(app: FastAPI, session: Session) -> None:
     assert first is not None and first.kind == JobKind.STATS and first.status == JobStatus.QUEUED
     assert second is None
     assert len(JobRepo(session).list()) == 1
+
+
+def test_tick_retries_a_failed_run_after_the_interval(app: FastAPI, session: Session) -> None:
+    now = datetime.now().replace(hour=20, minute=0)
+    scheduler = make_scheduler(app, now)
+    first = scheduler.tick()
+    assert first is not None
+    first.status = JobStatus.FAILED
+    first.finished_at = local_to_utc(now)
+    JobRepo(session).save(first)
+
+    assert scheduler.tick() is None  # too soon
+    later = make_scheduler(app, now + FAILED_RETRY_INTERVAL + timedelta(minutes=1))
+    second = later.tick()
+    assert second is not None and second.id != first.id
+    assert later.tick() is None
+
+
+def test_tick_stops_retrying_failed_runs_after_the_daily_cap(
+    app: FastAPI, session: Session
+) -> None:
+    now = datetime.now().replace(hour=5, minute=0)
+    repo = JobRepo(session)
+    for i in range(MAX_FAILED_RETRIES_PER_DAY):
+        job = Job(kind=JobKind.STATS, status=JobStatus.FAILED, error="x")
+        repo.add(job)
+        job.finished_at = local_to_utc(now - timedelta(hours=i))
+        repo.save(job)
+    scheduler = make_scheduler(app, now + timedelta(hours=8))
+    assert scheduler.tick() is None
+    assert len(repo.list()) == MAX_FAILED_RETRIES_PER_DAY
+
+
+def test_tick_counts_a_run_by_its_creation_day(app: FastAPI, session: Session) -> None:
+    # Created 23:50 yesterday, finished 00:05 today: that was yesterday's run.
+    now = datetime.now().replace(hour=5, minute=0)
+    job = Job(kind=JobKind.STATS, status=JobStatus.DONE)
+    JobRepo(session).add(job)
+    day_start = now.replace(hour=0, minute=0)
+    job.created_at = local_to_utc(day_start - timedelta(minutes=10))
+    job.finished_at = local_to_utc(day_start + timedelta(minutes=5))
+    JobRepo(session).save(job)
+    assert make_scheduler(app, now).tick() is not None
 
 
 def test_tick_waits_for_the_hour(app: FastAPI, session: Session) -> None:

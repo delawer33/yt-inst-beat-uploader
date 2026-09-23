@@ -7,7 +7,9 @@ called from there, never ``ctx.session``.
 Failure rules: a render or upload error puts the beat back to DRAFT so the user can fix
 things and press Upload again (the rendered ``video.mp4`` is kept and reused). A missing
 Google connection (``AuthError``) leaves the status alone: the worker pauses the job and
-reruns it after reconnect.
+reruns it after reconnect. A ``NetworkError`` during the upload (laptop went to sleep,
+Wi-Fi down) puts the beat back to QUEUED while the worker retries the job; only when the
+retries are exhausted does it become a DRAFT again.
 """
 
 import asyncio
@@ -15,12 +17,12 @@ from pathlib import Path
 
 from beat_server.db.models import Beat, BeatStatus, JobKind, utcnow
 from beat_server.db.repo import BeatRepo
-from beat_server.jobs.worker import JobContext
+from beat_server.jobs.worker import JobContext, has_retries_left
 from beat_server.services.beats import metadata_of
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_server.services.sync import status_from_privacy
 from beat_upload.beat_folder import VIDEO_FILENAME
-from beat_upload.errors import AuthError, BeatUploadError
+from beat_upload.errors import AuthError, BeatUploadError, NetworkError
 from beat_upload.video import render_video
 from beat_upload.youtube import upload_video
 
@@ -73,14 +75,18 @@ async def run_upload(ctx: JobContext) -> None:
     video = _video_file(ctx, beat)
     metadata = metadata_of(beat)
 
-    creds = ctx.credentials()  # AuthError -> the worker pauses this job
-    _set_status(ctx, repo, beat, BeatStatus.UPLOADING)
-    ctx.progress(0.0, "Uploading")
     try:
+        creds = ctx.credentials()  # AuthError -> the worker pauses this job
+        _set_status(ctx, repo, beat, BeatStatus.UPLOADING)
+        ctx.progress(0.0, "Uploading")
         youtube_id = await asyncio.to_thread(
             upload_video, video, metadata, creds, lambda f: ctx.progress(f, "Uploading")
         )
     except AuthError:
+        raise
+    except NetworkError:
+        retrying = has_retries_left(ctx.job)
+        _set_status(ctx, repo, beat, BeatStatus.QUEUED if retrying else BeatStatus.DRAFT)
         raise
     except BeatUploadError:
         _set_status(ctx, repo, beat, BeatStatus.DRAFT)

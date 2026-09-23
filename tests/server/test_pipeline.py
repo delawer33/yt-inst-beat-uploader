@@ -14,7 +14,7 @@ from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus
 from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
 from beat_server.jobs.events import Event
 from beat_server.jobs.handlers import HANDLERS
-from beat_server.jobs.worker import JobContext, Worker
+from beat_server.jobs.worker import MAX_ATTEMPTS, JobContext, Worker
 from beat_server.services import beats as beats_service
 from beat_server.services import pipeline
 from beat_server.services.beats import (
@@ -26,7 +26,7 @@ from beat_server.services.beats import (
 )
 from beat_server.services.errors import BeatStateError
 from beat_upload.config import PrivacyStatus, YouTubeMetadata
-from beat_upload.errors import AuthError, BeatFolderError, ConfigError, VideoError
+from beat_upload.errors import AuthError, BeatFolderError, ConfigError, NetworkError, VideoError
 from beat_upload.workspace import Workspace
 
 MP3 = b"ID3" + b"\x00" * 32
@@ -339,6 +339,53 @@ async def test_run_upload_without_credentials_pauses(
     assert job.status == JobStatus.PAUSED and job.error == "Not connected"
     beat = reload_beat(session, rendered)
     assert beat.status == BeatStatus.QUEUED and beat.youtube_id is None
+
+
+async def test_run_upload_network_error_keeps_beat_queued_for_retry(
+    app: FastAPI, session: Session, rendered: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def offline(*a: object) -> str:
+        raise NetworkError("Could not reach YouTube")
+
+    monkeypatch.setattr(pipeline, "upload_video", offline)
+    monkeypatch.setattr(JobContext, "credentials", lambda self: "creds")
+    job = app.state.queue.enqueue(JobKind.UPLOAD, rendered.id)
+    await make_worker(app).run_one(job)
+    job = reload_job(session, job)
+    assert job.status == JobStatus.QUEUED and job.attempts == 1
+    assert reload_beat(session, rendered).status == BeatStatus.QUEUED
+
+
+async def test_run_upload_network_error_on_last_attempt_returns_to_draft(
+    app: FastAPI, session: Session, rendered: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def offline(*a: object) -> str:
+        raise NetworkError("Could not reach YouTube")
+
+    monkeypatch.setattr(pipeline, "upload_video", offline)
+    monkeypatch.setattr(JobContext, "credentials", lambda self: "creds")
+    job = app.state.queue.enqueue(JobKind.UPLOAD, rendered.id)
+    job.attempts = MAX_ATTEMPTS - 1
+    JobRepo(session).save(job)
+    await make_worker(app).run_one(job)
+    assert reload_job(session, job).status == JobStatus.FAILED
+    assert reload_beat(session, rendered).status == BeatStatus.DRAFT
+
+
+async def test_run_upload_credentials_network_error_follows_the_same_rules(
+    app: FastAPI, session: Session, rendered: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def offline(self: JobContext) -> None:
+        raise NetworkError("Could not reach Google to refresh credentials")
+
+    monkeypatch.setattr(JobContext, "credentials", offline)
+    monkeypatch.setattr(pipeline, "upload_video", lambda *a: pytest.fail("must not upload"))
+    job = app.state.queue.enqueue(JobKind.UPLOAD, rendered.id)
+    job.attempts = MAX_ATTEMPTS - 1
+    JobRepo(session).save(job)
+    await make_worker(app).run_one(job)
+    assert reload_job(session, job).status == JobStatus.FAILED
+    assert reload_beat(session, rendered).status == BeatStatus.DRAFT
 
 
 async def test_run_upload_without_video_fails(

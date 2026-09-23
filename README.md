@@ -121,13 +121,17 @@ limits as `config.yaml`: title 100, description 5000, tags 500 characters in tot
 **Upload to YouTube**: the server renders the video with ffmpeg and uploads it, showing the
 progress of both steps; when it is done the page links to the video. A draft can be deleted
 with **Delete draft**; anything already on YouTube cannot be deleted from here. If YouTube is
-not connected the upload job pauses and continues after you connect in Settings.
+not connected the upload job pauses and continues after you connect in Settings. If the
+network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
+over about an hour, before giving up; **Retry now** on the job skips the wait.
 
 #### Statistics
 
 The server collects daily views and watch time per video from the Analytics API once a
 night (hour in Settings, default 04:00 local; a run missed while the machine was asleep
-happens at the next start). The first run backfills the last 90 days. The Library shows
+happens at the next start, a run that failed is retried an hour later, up to three
+times a day). The first run
+backfills the last 90 days. The Library shows
 the channel totals for the last 28 days, each Beat page its own chart. "Collect stats now"
 on the Library page (or `POST /api/stats/collect`) runs the job immediately.
 

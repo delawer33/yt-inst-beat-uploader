@@ -22,6 +22,8 @@ class JobOut(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    attempts: int
+    not_before: datetime | None
 
 
 THUMBNAIL_URL = "https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg"

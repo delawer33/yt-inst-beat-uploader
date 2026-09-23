@@ -9,14 +9,10 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import googleapiclient.discovery
-import httplib2
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 
-from beat_upload.errors import NetworkError, UploadError
-
-# Transport failures below the API: DNS, refused connection, timeout, TLS.
-TRANSPORT_ERRORS = (httplib2.HttpLib2Error, OSError)
+from beat_upload.errors import TRANSPORT_ERRORS, NetworkError, UploadError
 
 PAGE_SIZE = 50  # API maximum for playlistItems.list and videos.list
 

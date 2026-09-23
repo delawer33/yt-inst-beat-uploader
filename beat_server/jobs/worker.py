@@ -8,6 +8,7 @@ import asyncio
 import logging
 import threading
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import timedelta
 
 from google.oauth2.credentials import Credentials
 from sqlalchemy import update
@@ -18,13 +19,32 @@ from beat_server.db.repo import JobRepo
 from beat_server.jobs.events import EventBus
 from beat_server.jobs.queue import JobQueue
 from beat_upload import auth
-from beat_upload.errors import AuthError, BeatUploadError
+from beat_upload.errors import AuthError, BeatUploadError, NetworkError
 from beat_upload.workspace import Workspace
 
 log = logging.getLogger(__name__)
 
 POLL_INTERVAL = 0.5
 MISSING_CONNECTION_ERROR = "Google connection is missing or expired. Reconnect in Settings."
+
+# A ``NetworkError`` (laptop asleep, Wi-Fi not up yet, Google unreachable) does not fail the
+# job: it goes back to QUEUED with a growing delay. 6 attempts = 2+4+8+16+32 min of waiting.
+MAX_ATTEMPTS = 6
+RETRY_BASE_DELAY = 120.0
+
+
+def retry_delay(attempts: int) -> float:
+    """Seconds to wait before the next try, ``attempts`` being the number already made."""
+    return RETRY_BASE_DELAY * 2 ** (attempts - 1)
+
+
+def has_retries_left(job: Job) -> bool:
+    """Whether a network failure in the current attempt of ``job`` would be retried.
+
+    Handlers use it before raising ``NetworkError`` to pick the state they leave behind
+    (see ``services/pipeline.py``); the worker uses the same test to decide the outcome.
+    """
+    return job.attempts + 1 < MAX_ATTEMPTS
 
 
 class JobContext:
@@ -158,6 +178,29 @@ class Worker:
             except AuthError as e:
                 job.status = JobStatus.PAUSED
                 job.error = str(e)
+            except NetworkError as e:
+                retrying = has_retries_left(job)
+                job.attempts += 1
+                job.error = str(e)
+                if retrying:
+                    delay = retry_delay(job.attempts)
+                    log.warning(
+                        "job %s (%s) network error, retry %d/%d in %.0fs: %s",
+                        job.id,
+                        job.kind,
+                        job.attempts,
+                        MAX_ATTEMPTS - 1,
+                        delay,
+                        e,
+                    )
+                    job.status = JobStatus.QUEUED
+                    job.started_at = None
+                    job.progress = 0.0
+                    job.message = ""
+                    job.not_before = utcnow() + timedelta(seconds=delay)
+                    self._save(session, job)
+                    return
+                job.status = JobStatus.FAILED
             except BeatUploadError as e:
                 job.status = JobStatus.FAILED
                 job.error = str(e)

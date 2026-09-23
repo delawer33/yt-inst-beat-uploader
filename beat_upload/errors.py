@@ -4,6 +4,21 @@ The CLI catches ``BeatUploadError`` and prints its message without a traceback.
 Anything else is a bug and is allowed to propagate.
 """
 
+import socket
+import ssl
+
+import httplib2
+
+# Transport failures below the API: DNS, refused/reset connection, timeout, TLS. Deliberately
+# not the whole of ``OSError``: a local disk error must not look like "YouTube unreachable".
+TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    httplib2.HttpLib2Error,
+    ConnectionError,
+    TimeoutError,
+    socket.gaierror,
+    ssl.SSLError,
+)
+
 
 class BeatUploadError(Exception):
     """Base class for every error the CLI reports to the user."""

@@ -11,8 +11,25 @@ const labels: Record<Job["status"], string> = {
   paused: "Paused",
 };
 
+/** Queued with a delay: the worker is waiting out a network-retry backoff. */
+export function isWaitingForRetry(job: Job): boolean {
+  return job.status === "queued" && job.not_before !== null;
+}
+
 export function canRetry(job: Job): boolean {
-  return job.status === "failed" || job.status === "paused";
+  return (
+    job.status === "failed" || job.status === "paused" || isWaitingForRetry(job)
+  );
+}
+
+function retryTime(notBefore: string): string {
+  // The server sends naive UTC without a zone suffix.
+  return new Date(
+    notBefore.endsWith("Z") ? notBefore : `${notBefore}Z`,
+  ).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 type Props = {
@@ -23,8 +40,13 @@ type Props = {
 
 export function JobStatus({ job, onRetry, retrying = false }: Props) {
   const failed = job.status === "failed";
+  const waiting = isWaitingForRetry(job);
   return (
-    <div className="flex flex-col gap-1.5" data-testid="job-status" data-status={job.status}>
+    <div
+      className="flex flex-col gap-1.5"
+      data-testid="job-status"
+      data-status={job.status}
+    >
       <div className="flex items-center gap-3 text-sm">
         <span className="font-medium capitalize">{job.kind}</span>
         <span
@@ -33,7 +55,9 @@ export function JobStatus({ job, onRetry, retrying = false }: Props) {
         >
           {labels[job.status]}
         </span>
-        {job.message && <span className="truncate text-muted-foreground">{job.message}</span>}
+        {job.message && (
+          <span className="truncate text-muted-foreground">{job.message}</span>
+        )}
         {onRetry && canRetry(job) && (
           <Button
             variant="outline"
@@ -42,17 +66,27 @@ export function JobStatus({ job, onRetry, retrying = false }: Props) {
             disabled={retrying}
             onClick={() => onRetry(job.id)}
           >
-            Retry
+            {waiting ? "Retry now" : "Retry"}
           </Button>
         )}
       </div>
       {(job.status === "running" || job.status === "queued") && (
-        <Progress value={job.progress * 100} aria-label={`${job.kind} progress`} />
+        <Progress
+          value={job.progress * 100}
+          aria-label={`${job.kind} progress`}
+        />
       )}
-      {job.error && (
-        <p role="alert" className="text-sm text-destructive">
+      {waiting ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Retry {job.attempts + 1} at {retryTime(job.not_before as string)}:{" "}
           {job.error}
         </p>
+      ) : (
+        job.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {job.error}
+          </p>
+        )
       )}
     </div>
   );

@@ -6,9 +6,9 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from beat_upload import youtube
-from beat_upload.config import YouTubeMetadata
-from beat_upload.errors import UploadError
-from beat_upload.youtube import CHUNK_SIZE, upload_video
+from beat_upload.config import PrivacyStatus, YouTubeMetadata
+from beat_upload.errors import NetworkError, UploadError
+from beat_upload.youtube import CHUNK_RETRIES, CHUNK_RETRY_DELAY, CHUNK_SIZE, upload_video
 
 
 class FakeStatus:
@@ -92,3 +92,78 @@ def test_upload_http_error(
     monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
     with pytest.raises(UploadError, match="YouTube API error"):
         upload_video(tmp_path / "v.mp4", YouTubeMetadata(title="T"), "creds")  # type: ignore[arg-type]
+
+
+class Flaky(FakeRequest):
+    """``next_chunk`` raises ``failures`` transport errors before continuing the steps."""
+
+    def __init__(self, steps: list[tuple[object, object]], failures: int) -> None:
+        super().__init__(steps)
+        self.failures = failures
+        self.calls = 0
+
+    def next_chunk(self) -> tuple[object, object]:
+        self.calls += 1
+        if self.failures:
+            self.failures -= 1
+            raise ConnectionResetError("connection reset by peer")
+        return super().next_chunk()
+
+
+def test_upload_retries_a_chunk_on_transport_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, media: list[dict]
+) -> None:
+    request = Flaky([(FakeStatus(0.5), None), (None, {"id": "yt1"})], failures=2)
+    fake = FakeYouTube(request)
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
+    waits: list[float] = []
+
+    video_id = upload_video(
+        tmp_path / "v.mp4", YouTubeMetadata(title="T"), "creds", sleep=waits.append
+    )  # type: ignore[arg-type]
+
+    assert video_id == "yt1"
+    assert request.calls == 4  # 2 failures, then the two real steps on the same session
+    assert waits == [CHUNK_RETRY_DELAY, CHUNK_RETRY_DELAY * 2]
+
+
+def test_upload_transport_error_is_network_error_after_chunk_retries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, media: list[dict]
+) -> None:
+    request = Flaky([], failures=CHUNK_RETRIES + 1)
+    fake = FakeYouTube(request)
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
+    waits: list[float] = []
+    with pytest.raises(NetworkError, match="Could not reach YouTube"):
+        upload_video(tmp_path / "v.mp4", YouTubeMetadata(title="T"), "creds", sleep=waits.append)  # type: ignore[arg-type]
+    assert request.calls == CHUNK_RETRIES + 1
+    assert len(waits) == CHUNK_RETRIES
+
+
+def test_upload_does_not_retry_local_file_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, media: list[dict]
+) -> None:
+    class Unplugged(FakeRequest):
+        def next_chunk(self) -> tuple[object, object]:
+            raise OSError(5, "Input/output error")
+
+    fake = FakeYouTube(Unplugged([]))
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
+    with pytest.raises(OSError, match="Input/output error"):
+        upload_video(tmp_path / "v.mp4", YouTubeMetadata(title="T"), "creds", sleep=lambda s: None)  # type: ignore[arg-type]
+
+
+def test_set_privacy_transport_error_is_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Offline:
+        def videos(self) -> "Offline":
+            return self
+
+        def update(self, **kwargs: object) -> "Offline":
+            return self
+
+        def execute(self) -> None:
+            raise TimeoutError("timed out")
+
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: Offline())
+    with pytest.raises(NetworkError, match="Could not reach YouTube"):
+        youtube.set_privacy("v1", PrivacyStatus.UNLISTED, "creds")  # type: ignore[arg-type]

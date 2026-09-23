@@ -21,6 +21,8 @@ const job = (over: Partial<Job> = {}): Job => ({
   created_at: "2026-09-22T10:00:00",
   started_at: null,
   finished_at: null,
+  attempts: 0,
+  not_before: null,
   ...over,
 });
 
