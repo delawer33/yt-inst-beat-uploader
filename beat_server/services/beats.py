@@ -158,6 +158,23 @@ def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:
     return beat
 
 
+def metadata_with_privacy(
+    beat: Beat, privacy: PrivacyStatus, publish_at: datetime | None
+) -> YouTubeMetadata:
+    """The beat's Metadata with a new privacy and publish time, validated like a patch.
+
+    For an uploaded beat: the result is what ``set_privacy`` sends. A time makes the beat
+    Scheduled, and YouTube schedules private videos only, so unlisted plus a time is sent as
+    private. Public plus a time stays a ``ConfigError`` (the validator's message says why).
+    """
+    if publish_at is not None and privacy is PrivacyStatus.UNLISTED:
+        privacy = PrivacyStatus.PRIVATE
+    data = _mapping(beat)
+    data["privacy_status"] = privacy.value
+    data["publish_at"] = publish_at
+    return YouTubeMetadata.from_mapping(data)
+
+
 def delete_draft(ws: Workspace, repo: BeatRepo, beat: Beat) -> None:
     """Remove a DRAFT beat and its files. Anything further along is a ``BeatStateError``."""
     if beat.status != BeatStatus.DRAFT:

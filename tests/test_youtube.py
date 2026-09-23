@@ -189,3 +189,52 @@ def test_set_privacy_transport_error_is_network_error(monkeypatch: pytest.Monkey
     monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: Offline())
     with pytest.raises(NetworkError, match="Could not reach YouTube"):
         youtube.set_privacy("v1", PrivacyStatus.UNLISTED, "creds")  # type: ignore[arg-type]
+
+
+class Recorder:
+    """A ``videos().update(...).execute()`` chain that remembers the request."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def videos(self) -> "Recorder":
+        return self
+
+    def update(self, **kwargs: object) -> "Recorder":
+        self.calls.append(kwargs)
+        return self
+
+    def execute(self) -> dict:
+        return {}
+
+
+def test_set_privacy_sends_only_the_privacy_without_publish_at(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = Recorder()
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
+
+    youtube.set_privacy("v1", PrivacyStatus.UNLISTED, "creds")  # type: ignore[arg-type]
+
+    assert fake.calls == [
+        {"part": "status", "body": {"id": "v1", "status": {"privacyStatus": "unlisted"}}}
+    ]
+
+
+def test_set_privacy_with_publish_at_sends_private_and_the_utc_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = Recorder()
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
+
+    youtube.set_privacy(
+        "v1",
+        PrivacyStatus.PRIVATE,
+        "creds",  # type: ignore[arg-type]
+        publish_at=datetime(2026, 10, 1, 18, 0, tzinfo=UTC),
+    )
+
+    assert fake.calls[0]["body"]["status"] == {
+        "privacyStatus": "private",
+        "publishAt": "2026-10-01T18:00:00Z",
+    }

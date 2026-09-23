@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import googleapiclient.discovery
 import googleapiclient.http
@@ -74,10 +75,22 @@ def upload_video(
     return response["id"]
 
 
-def set_privacy(video_id: str, status: PrivacyStatus, credentials: Credentials) -> None:
-    """Change the privacy status of an existing video. Needs the ``youtube`` scope."""
+def set_privacy(
+    video_id: str,
+    status: PrivacyStatus,
+    credentials: Credentials,
+    publish_at: datetime | None = None,
+) -> None:
+    """Change the privacy status of an existing video. Needs the ``youtube`` scope.
+
+    ``videos.update(part="status")`` replaces the whole status part, so a call without
+    ``publish_at`` also removes an existing schedule; with it YouTube wants ``private`` and
+    keeps the video Scheduled for that time (ADR 0003).
+    """
     youtube = _client(credentials)
-    body = {"id": video_id, "status": {"privacyStatus": status.value}}
+    body: dict[str, Any] = {"id": video_id, "status": {"privacyStatus": status.value}}
+    if publish_at is not None:
+        body["status"]["publishAt"] = rfc3339_utc(publish_at)
     try:
         youtube.videos().update(part="status", body=body).execute()
     except HttpError as e:

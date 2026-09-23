@@ -100,4 +100,9 @@ class BeatPatch(BaseModel):
 
 
 class PrivacyIn(BaseModel):
+    """``POST /api/beats/{id}/privacy``. With ``publish_at`` the beat becomes Scheduled
+    (YouTube publishes it then; ``privacy`` is sent as private); without it any existing
+    schedule is removed. A naive value counts as local time, like in config.yaml."""
+
     privacy: PrivacyStatus
+    publish_at: datetime | None = None

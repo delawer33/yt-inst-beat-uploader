@@ -23,9 +23,11 @@ from beat_server.services.beats import (
     create_draft,
     default_metadata,
     delete_draft,
+    metadata_with_privacy,
+    to_naive_utc,
 )
 from beat_server.services.errors import BeatNotFound, BeatStateError
-from beat_server.services.sync import status_from_privacy
+from beat_server.services.sync import status_for
 from beat_upload.auth import get_valid_credentials
 from beat_upload.workspace import Workspace
 from beat_upload.youtube import set_privacy
@@ -128,13 +130,21 @@ def get_cover(beat_id: str, session: SessionDep, ws: WorkspaceDep) -> FileRespon
 def change_privacy(
     beat_id: str, body: PrivacyIn, session: SessionDep, ws: WorkspaceDep, bus: BusDep
 ) -> BeatOut:
-    """Change the privacy of an uploaded beat on YouTube, then mirror it locally."""
+    """Change the privacy of an uploaded beat on YouTube, then mirror it locally.
+
+    With ``publish_at`` the beat is (re)scheduled: sent as private with that time, status
+    SCHEDULED. Without it the status part is replaced without a time, so a Scheduled beat
+    loses its schedule: private/unlisted -> UPLOADED, public -> PUBLISHED (publish now).
+    """
     beat = load_beat(session, beat_id)
     if not beat.youtube_id:
         raise BeatStateError(f"Beat {beat_id} is not on YouTube yet; upload it first.")
-    set_privacy(beat.youtube_id, body.privacy, get_valid_credentials(ws))  # AuthError -> 409
-    beat.privacy = body.privacy.value
-    beat.status = status_from_privacy(beat.privacy)
+    metadata = metadata_with_privacy(beat, body.privacy, body.publish_at)  # ConfigError -> 422
+    credentials = get_valid_credentials(ws)  # AuthError -> 409
+    set_privacy(beat.youtube_id, metadata.privacy_status, credentials, metadata.publish_at)
+    beat.privacy = metadata.privacy_status.value
+    beat.publish_at = to_naive_utc(metadata.publish_at)
+    beat.status = status_for(beat.privacy, beat.publish_at)
     BeatRepo(session).save(beat)
     bus.publish_beat(beat.id, beat.status)
     return BeatOut.from_beat(beat)
