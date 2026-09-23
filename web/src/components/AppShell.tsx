@@ -5,6 +5,7 @@ import { AuthBanner } from "./AuthBanner";
 
 const links = [
   { to: "/", label: "Library", end: true },
+  { to: "/beats/new", label: "New beat", end: true },
   { to: "/settings", label: "Settings", end: false },
 ];
 

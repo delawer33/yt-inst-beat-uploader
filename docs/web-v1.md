@@ -23,7 +23,8 @@ Terms: see [CONTEXT.md](../CONTEXT.md). Why: see [ADR 0001](adr/0001-local-first
 
 ## Screens
 
-1. Library — grid of Beat cards (cover, title, status, views), drop-zone for new files.
+1. Library — grid of Beat cards (cover, title, status, views), a New beat button.
+   New beat (`/beats/new`) — two file slots (audio, cover) that can be filled from different folders.
 2. Beat — metadata form, Job log with progress, per-day views chart.
 3. Settings — Google client id/secret, "Connect YouTube", working folder, schedule.
 
@@ -34,7 +35,7 @@ Expired token shows as a banner; background Jobs pause instead of failing.
 Simple now, real design later in parallel. To make that cheap: all colours, spacing, radii and
 fonts are CSS variables in one `tokens.css`; features use only Tailwind classes bound to those
 tokens; no inline styles, no hex codes outside `tokens.css`; one component per domain thing
-(`BeatCard`, `JobStatus`, `DropZone`).
+(`BeatCard`, `JobStatus`, `FileSlot`).
 
 ## Code layout
 

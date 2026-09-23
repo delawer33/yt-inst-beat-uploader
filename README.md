@@ -112,9 +112,10 @@ says when the connection is missing or expired.
 
 #### Add a beat from the web UI
 
-On the Library page drop one audio file (`.mp3`/`.wav`) and one cover image
-(`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`) onto the **New beat** area, or click it to pick them.
-This creates a draft with the title, description and tags from your templates
+Press **New beat** (Library page or the top navigation). The page has two slots: one for
+the audio file (`.mp3`/`.wav`) and one for the cover image (`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`).
+Drop or pick each file on its own, from any folder; dropping both at once onto either slot
+also works. Press **Create beat**. This creates a draft with the title, description and tags from your templates
 (`title_template`, `description_template`, `tags_template` in `PUT /api/settings`; `{name}` is
 the audio file name without extension) and opens its page. Edit the metadata there (same
 limits as `config.yaml`: title 100, description 5000, tags 500 characters in total) and press
