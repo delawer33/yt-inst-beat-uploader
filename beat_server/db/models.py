@@ -14,6 +14,7 @@ class BeatStatus(StrEnum):
     RENDERING = "rendering"
     UPLOADING = "uploading"
     UPLOADED = "uploaded"
+    SCHEDULED = "scheduled"  # private on YouTube with a publish_at YouTube will honour
     PUBLISHED = "published"
 
 
@@ -59,6 +60,7 @@ class Beat(Base):
     image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     video_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # naive UTC
     views: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     likes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     comments: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

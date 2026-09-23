@@ -42,6 +42,7 @@ class BeatOut(BaseModel):
     youtube_id: str | None
     youtube_url: str | None
     published_at: datetime | None
+    publish_at: datetime | None
     views: int
     likes: int
     comments: int
@@ -64,6 +65,7 @@ class BeatOut(BaseModel):
             youtube_id=beat.youtube_id,
             youtube_url=video_url(beat.youtube_id) if beat.youtube_id else None,
             published_at=beat.published_at,
+            publish_at=beat.publish_at,
             views=beat.views,
             likes=beat.likes,
             comments=beat.comments,
@@ -92,6 +94,9 @@ class BeatPatch(BaseModel):
     description: str | None = None
     tags: list[str] | None = None
     privacy: PrivacyStatus | None = None
+    # Scheduled publish time; ``null`` clears it (check ``model_fields_set`` to tell the two
+    # apart from "not sent"). A naive value counts as local time, like in config.yaml.
+    publish_at: datetime | None = None
 
 
 class PrivacyIn(BaseModel):

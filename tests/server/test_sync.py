@@ -16,6 +16,7 @@ from beat_server.services import sync as sync_service
 from beat_server.services.sync import (
     SyncResult,
     merge_from_youtube,
+    status_for,
     status_from_privacy,
     sync_library,
 )
@@ -159,3 +160,12 @@ async def test_run_sync_handler(
     assert beats == {"v1": BeatStatus.PUBLISHED, "v2": BeatStatus.UPLOADED}
     beat_events = [e for e in received if e.type == "beat"]
     assert {e.payload["status"] for e in beat_events} == {"published", "uploaded"}
+
+
+def test_status_for() -> None:
+    when = datetime(2026, 10, 1, 18, 0)
+    assert status_for("private", when) is BeatStatus.SCHEDULED
+    assert status_for("private", None) is BeatStatus.UPLOADED
+    assert status_for("public", None) is BeatStatus.PUBLISHED
+    assert status_for("public", when) is BeatStatus.PUBLISHED  # YouTube ignores it once public
+    assert status_for("unlisted", when) is BeatStatus.UPLOADED
