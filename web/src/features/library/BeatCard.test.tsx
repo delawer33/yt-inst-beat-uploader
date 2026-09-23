@@ -14,6 +14,7 @@ const beat: Beat = {
   youtube_id: "abc123",
   youtube_url: "https://youtu.be/abc123",
   published_at: "2026-09-01T12:30:00",
+  publish_at: null,
   views: 1234,
   likes: 12,
   comments: 3,
@@ -46,4 +47,20 @@ test("a beat without a cover shows a placeholder instead of an image", () => {
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
   expect(screen.getByLabelText("status")).toHaveTextContent("Draft");
   expect(screen.getByLabelText("views")).toHaveTextContent("0");
+});
+
+test("a scheduled beat shows the Scheduled badge with its local publish time instead of views", () => {
+  const publishAt = new Date(2026, 8, 25, 18, 0);
+  renderCard({
+    ...beat,
+    status: "scheduled",
+    privacy: "private",
+    views: 0,
+    publish_at: publishAt.toISOString().replace(/\.\d{3}Z$/, ""),
+  });
+  expect(screen.getByLabelText("status")).toHaveTextContent("Scheduled");
+  expect(screen.getByLabelText("status")).toHaveAttribute("data-status", "scheduled");
+  expect(screen.getByLabelText("publish time")).toHaveTextContent(/2026/);
+  expect(screen.getByLabelText("publish time")).toHaveTextContent(/18:00|6:00/);
+  expect(screen.queryByLabelText("views")).not.toBeInTheDocument();
 });

@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { Eye } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { formatViews } from "@/lib/format";
+import { formatDateTime, formatViews } from "@/lib/format";
 import { Cover } from "./Cover";
 import type { Beat } from "./queries";
 import { StatusBadge } from "./StatusBadge";
@@ -17,10 +17,14 @@ export function BeatCard({ beat }: { beat: Beat }) {
           </h3>
           <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             <StatusBadge status={beat.status} />
-            <span className="inline-flex items-center gap-1" aria-label="views">
-              <Eye aria-hidden="true" className="size-4" />
-              {formatViews(beat.views)}
-            </span>
+            {beat.status === "scheduled" && beat.publish_at ? (
+              <span aria-label="publish time">{formatDateTime(beat.publish_at)}</span>
+            ) : (
+              <span className="inline-flex items-center gap-1" aria-label="views">
+                <Eye aria-hidden="true" className="size-4" />
+                {formatViews(beat.views)}
+              </span>
+            )}
           </div>
         </div>
       </Link>
