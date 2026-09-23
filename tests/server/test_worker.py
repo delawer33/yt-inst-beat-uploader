@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -10,11 +11,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from beat_server.api.events import event_stream
-from beat_server.db.models import Job, JobKind, JobStatus, utcnow
+from beat_server.app import create_app
+from beat_server.db.models import Base, Beat, Job, JobKind, JobStatus, utcnow
 from beat_server.db.repo import JobRepo
 from beat_server.jobs.events import Event, EventBus
 from beat_server.jobs.queue import SUPERSEDED_ERROR, JobQueue
 from beat_server.jobs.worker import MAX_ATTEMPTS, JobContext, Worker, retry_delay
+from beat_server.settings import ServerSettings
 from beat_upload import auth
 from beat_upload.errors import AuthError, NetworkError, VideoError
 from beat_upload.workspace import Workspace
@@ -266,6 +269,43 @@ async def test_progress_from_thread_does_not_touch_handler_session(
     assert seen["job"] == (0.3, "from thread")
     assert seen["db"] == (0.3, "from thread")
     assert reload(session, job).message == "from thread"
+
+
+async def test_progress_after_log_and_autoflush_does_not_self_lock(
+    workspace: Workspace, settings: ServerSettings, tmp_path: Path
+) -> None:
+    """Regression: every sync/stats job failed with ``OperationalError: database is locked``.
+
+    ``ctx.log`` mirrored the message onto ``job`` with a plain setattr, marking it dirty in
+    the handler's session. The handler's next query autoflushed that UPDATE inside an
+    uncommitted transaction, and ``ctx.progress`` (a second connection) then waited on the
+    handler's own lock. Needs a file database: the in-memory one shares a single connection.
+    """
+    app = create_app(
+        workspace,
+        settings,
+        web_dist=None,
+        db_path=tmp_path / "db.sqlite3",
+        migrate=False,
+        start_worker=False,
+        start_scheduler=False,
+    )
+    Base.metadata.create_all(app.state.engine)
+    queue: JobQueue = app.state.queue
+
+    async def handler(ctx: JobContext) -> None:
+        ctx.log("Synced 68 videos")
+        assert ctx.job not in ctx.session.dirty
+        ctx.session.get(Beat, "no-such-beat")  # autoflush point
+        ctx.progress(1.0, "Synced")
+
+    job = queue.enqueue(JobKind.SYNC)
+    await make_worker(app, {JobKind.SYNC: handler}).run_one(job)
+
+    with app.state.session_factory() as session:
+        saved = JobRepo(session).get(job.id)
+    assert saved is not None
+    assert (saved.status, saved.error, saved.message) == (JobStatus.DONE, None, "Synced")
 
 
 async def test_run_forever_survives_db_errors(

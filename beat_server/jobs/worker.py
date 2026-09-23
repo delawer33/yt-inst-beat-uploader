@@ -13,6 +13,7 @@ from datetime import timedelta
 from google.oauth2.credentials import Credentials
 from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm.attributes import set_committed_value
 
 from beat_server.db.models import Job, JobKind, JobStatus, utcnow
 from beat_server.db.repo import JobRepo
@@ -107,7 +108,11 @@ class JobContext:
                 session.execute(update(Job).where(Job.id == self.job.id).values(**values))
                 session.commit()
             for name, value in values.items():
-                setattr(self.job, name, value)
+                # Already saved above. A plain setattr would mark ``job`` dirty in the
+                # handler's session; its next autoflush would then UPDATE the same row
+                # in an uncommitted transaction and the next ``_update`` (a second
+                # connection) would wait on that lock: "database is locked".
+                set_committed_value(self.job, name, value)
             self.bus.publish_job(self.job)
 
 

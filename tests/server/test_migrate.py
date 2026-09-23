@@ -25,3 +25,12 @@ def test_create_app_migrates_workspace_db(tmp_path: Path) -> None:
     ws = Workspace(config_dir=tmp_path / "c", data_dir=tmp_path / "d")
     create_app(ws, ServerSettings(), web_dist=None)
     assert ws.db_file.is_file()
+
+
+def test_file_engine_uses_wal(tmp_path: Path) -> None:
+    from sqlalchemy import text
+
+    engine = make_engine(tmp_path / "db.sqlite3")
+    with engine.connect() as conn:
+        assert conn.execute(text("PRAGMA journal_mode")).scalar() == "wal"
+        assert conn.execute(text("PRAGMA foreign_keys")).scalar() == 1
