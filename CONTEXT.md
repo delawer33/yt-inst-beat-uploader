@@ -37,6 +37,12 @@ _Avoid_: Post, push
 Making an uploaded video visible — moving its privacy to public, now or at a scheduled time.
 _Avoid_: Release, go live
 
+**Scheduled**:
+The state of a Beat that is uploaded as private with a publish time that YouTube will honour
+on its own. Neither the service nor the laptop needs to be running for it to go public; only
+a private video can be Scheduled. Once YouTube makes it public it is Published.
+_Avoid_: Delayed, pending, postponed, timed
+
 **Job**:
 One unit of background work on a Beat (render, upload, publish, stats refresh) with a status
 and a log. What the UI shows progress for.
