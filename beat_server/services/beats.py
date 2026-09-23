@@ -8,6 +8,7 @@ held to exactly the same limits. Templates for a new beat (title, description, t
 
 import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -146,11 +147,14 @@ def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:
         data["tags"] = patch.tags
     if patch.privacy is not None:
         data["privacy_status"] = patch.privacy.value
+    if "publish_at" in patch.model_fields_set:
+        data["publish_at"] = patch.publish_at
     metadata = YouTubeMetadata.from_mapping(data)
     beat.title = metadata.title
     beat.description = metadata.description
     beat.tags = list(metadata.tags)
     beat.privacy = metadata.privacy_status.value
+    beat.publish_at = to_naive_utc(metadata.publish_at)
     return beat
 
 
@@ -162,6 +166,11 @@ def delete_draft(ws: Workspace, repo: BeatRepo, beat: Beat) -> None:
     repo.delete(beat)
 
 
+def to_naive_utc(when: datetime | None) -> datetime | None:
+    """Aware -> naive UTC, the form every timestamp column has."""
+    return None if when is None else when.astimezone(UTC).replace(tzinfo=None)
+
+
 def _mapping(beat: Beat) -> dict[str, Any]:
     return {
         "title": beat.title,
@@ -169,6 +178,8 @@ def _mapping(beat: Beat) -> dict[str, Any]:
         "tags": list(beat.tags),
         "category_id": beat.category_id,
         "privacy_status": beat.privacy,
+        # The column is naive UTC; the validator reads a naive value as local time.
+        "publish_at": beat.publish_at.replace(tzinfo=UTC) if beat.publish_at else None,
     }
 
 

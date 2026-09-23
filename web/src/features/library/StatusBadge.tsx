@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { BeatStatus } from "./queries";
 
-type Variant = "outline" | "secondary" | "warning" | "success";
+type Variant = "outline" | "secondary" | "warning" | "success" | "default";
 
 const variants: Record<BeatStatus, Variant> = {
   draft: "outline",
@@ -9,6 +9,7 @@ const variants: Record<BeatStatus, Variant> = {
   rendering: "warning",
   uploading: "warning",
   uploaded: "secondary",
+  scheduled: "default",
   published: "success",
 };
 
@@ -18,6 +19,7 @@ const labels: Record<BeatStatus, string> = {
   rendering: "Rendering",
   uploading: "Uploading",
   uploaded: "Uploaded",
+  scheduled: "Scheduled",
   published: "Published",
 };
 

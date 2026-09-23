@@ -1,6 +1,7 @@
 """New Beat: create a draft from files, edit its metadata, render and upload it."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -121,6 +122,23 @@ def test_apply_patch_merges_and_validates(draft: Beat) -> None:
     with pytest.raises(ConfigError, match="tags must be <= 500"):
         apply_patch(draft, BeatPatch(tags=["a" * 501]))
     assert draft.title == "New"  # a failed patch changes nothing
+
+
+def test_apply_patch_publish_at(draft: Beat) -> None:
+    when = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
+    apply_patch(draft, BeatPatch(privacy=PrivacyStatus.PRIVATE, publish_at=when))
+    assert draft.publish_at == when.replace(tzinfo=None)  # naive UTC like every column
+    assert metadata_of(draft).publish_at == when
+
+    apply_patch(draft, BeatPatch(title="Still scheduled"))  # untouched when not sent
+    assert draft.publish_at == when.replace(tzinfo=None)
+    with pytest.raises(ConfigError, match="publish_at .* private"):
+        apply_patch(draft, BeatPatch(privacy=PrivacyStatus.PUBLIC))
+    with pytest.raises(ConfigError, match="at least 5 minutes"):
+        apply_patch(draft, BeatPatch(publish_at=datetime.now(UTC) + timedelta(minutes=1)))
+
+    apply_patch(draft, BeatPatch(publish_at=None))  # explicit null clears
+    assert draft.publish_at is None and metadata_of(draft).publish_at is None
 
 
 def test_metadata_of(draft: Beat) -> None:
@@ -285,9 +303,16 @@ def rendered(workspace: Workspace, repo: BeatRepo, draft: Beat) -> Beat:
     return repo.save(draft)
 
 
+TOMORROW = (datetime.now(UTC) + timedelta(days=1)).replace(microsecond=0, tzinfo=None)
+
+
 @pytest.mark.parametrize(
-    ("privacy", "expected"),
-    [("public", BeatStatus.PUBLISHED), ("private", BeatStatus.UPLOADED)],
+    ("privacy", "publish_at", "expected"),
+    [
+        ("public", None, BeatStatus.PUBLISHED),
+        ("private", None, BeatStatus.UPLOADED),
+        ("private", TOMORROW, BeatStatus.SCHEDULED),
+    ],
 )
 async def test_run_upload_sets_youtube_id_and_status(
     app: FastAPI,
@@ -298,9 +323,11 @@ async def test_run_upload_sets_youtube_id_and_status(
     monkeypatch: pytest.MonkeyPatch,
     beat_events: list[tuple[str, str]],
     privacy: str,
+    publish_at: datetime | None,
     expected: BeatStatus,
 ) -> None:
     rendered.privacy = privacy
+    rendered.publish_at = publish_at
     repo.save(rendered)
     calls: list[tuple[Path, YouTubeMetadata, object]] = []
 
@@ -321,8 +348,31 @@ async def test_run_upload_sets_youtube_id_and_status(
     assert beat.published_at is not None
     assert calls[0][0] == workspace.beat_dir(beat.id) / "video.mp4"
     assert calls[0][1].privacy_status == PrivacyStatus(privacy)
+    expected_publish_at = publish_at.replace(tzinfo=UTC) if publish_at else None
+    assert calls[0][1].publish_at == expected_publish_at
     assert calls[0][2] == "creds"
     assert beat_events == [(beat.id, "uploading"), (beat.id, expected.value)]
+
+
+async def test_run_upload_with_passed_publish_at_fails_and_returns_to_draft(
+    app: FastAPI, session: Session, repo: BeatRepo, rendered: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    passed = datetime(2026, 9, 1, 15, 0)
+    rendered.publish_at = passed
+    repo.save(rendered)
+    monkeypatch.setattr(pipeline, "upload_video", lambda *a: pytest.fail("must not upload"))
+    monkeypatch.setattr(JobContext, "credentials", lambda self: "creds")
+
+    job = app.state.queue.enqueue(JobKind.UPLOAD, rendered.id)
+    await make_worker(app).run_one(job)
+
+    job = reload_job(session, job)
+    shown = passed.replace(tzinfo=UTC).astimezone().strftime("%Y-%m-%d %H:%M")
+    assert job.status == JobStatus.FAILED
+    assert job.error == f"youtube.publish_at ({shown}) has already passed; pick a new time"
+    beat = reload_beat(session, rendered)
+    assert beat.status == BeatStatus.DRAFT and beat.youtube_id is None
+    assert beat.publish_at == passed  # never silently moved
 
 
 async def test_run_upload_without_credentials_pauses(
@@ -464,11 +514,39 @@ def test_patch_beat(client: TestClient, session: Session, draft: Beat) -> None:
     assert ok.json()["title"] == "Edited" and ok.json()["tags"] == ["x", "y"]
     assert ok.json()["privacy"] == "private"
 
+    scheduled = client.patch(
+        f"/api/beats/{draft.id}",
+        json={"privacy": "private", "publish_at": f"{TOMORROW.isoformat()}Z"},
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    assert scheduled.json()["publish_at"] == TOMORROW.isoformat()
+    assert client.get(f"/api/beats/{draft.id}").json()["publish_at"] == TOMORROW.isoformat()
+    cleared = client.patch(f"/api/beats/{draft.id}", json={"publish_at": None})
+    assert cleared.status_code == 200 and cleared.json()["publish_at"] is None
+
     too_long = client.patch(f"/api/beats/{draft.id}", json={"title": "x" * 101})
     assert too_long.status_code == 422
     assert "title must be <= 100" in too_long.json()["detail"]
     assert client.patch("/api/beats/nope", json={"title": "x"}).status_code == 404
     assert client.patch(f"/api/beats/{draft.id}", json={"privacy": "secret"}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ({"privacy": "public", "publish_at": f"{TOMORROW.isoformat()}Z"}, "only allowed with"),
+        ({"publish_at": "2026-09-01T15:00:00Z"}, "already passed"),
+        ({"publish_at": "tomorrow"}, None),  # pydantic rejects it before our validator
+    ],
+)
+def test_patch_beat_rejects_bad_publish_at(
+    client: TestClient, draft: Beat, body: dict, message: str | None
+) -> None:
+    response = client.patch(f"/api/beats/{draft.id}", json=body)
+    assert response.status_code == 422, response.text
+    if message is not None:
+        assert message in response.json()["detail"]
+    assert client.get(f"/api/beats/{draft.id}").json()["publish_at"] is None
 
 
 def test_patch_uploaded_beat_is_409(client: TestClient, repo: BeatRepo, draft: Beat) -> None:

@@ -4,6 +4,11 @@
 whole chain. ffmpeg and the Data API run in ``asyncio.to_thread``; only ``ctx.progress`` is
 called from there, never ``ctx.session``.
 
+A Scheduled draft (private with ``publish_at``) is uploaded with ``status.publishAt``; the
+metadata validator runs again right before the upload, so a publish time that has passed
+while the job waited fails the job with a message naming the time and the beat goes back
+to DRAFT for the user to pick a new one (ADR 0003: never silently moved).
+
 Failure rules: a render or upload error puts the beat back to DRAFT so the user can fix
 things and press Upload again (the rendered ``video.mp4`` is kept and reused). A missing
 Google connection (``AuthError``) leaves the status alone: the worker pauses the job and
@@ -20,9 +25,9 @@ from beat_server.db.repo import BeatRepo
 from beat_server.jobs.worker import JobContext, has_retries_left
 from beat_server.services.beats import metadata_of
 from beat_server.services.errors import BeatNotFound, BeatStateError
-from beat_server.services.sync import status_from_privacy
+from beat_server.services.sync import status_for
 from beat_upload.beat_folder import VIDEO_FILENAME
-from beat_upload.errors import AuthError, BeatUploadError, NetworkError
+from beat_upload.errors import AuthError, BeatUploadError, ConfigError, NetworkError
 from beat_upload.video import render_video
 from beat_upload.youtube import upload_video
 
@@ -67,13 +72,18 @@ async def run_render(ctx: JobContext) -> None:
 
 
 async def run_upload(ctx: JobContext) -> None:
-    """-> UPLOADING -> UPLOADED (private/unlisted) or PUBLISHED (public); sets youtube_id."""
+    """-> UPLOADING -> UPLOADED (private/unlisted), SCHEDULED (private + publish_at) or
+    PUBLISHED (public); sets youtube_id."""
     repo = BeatRepo(ctx.session)
     beat = _load(ctx, repo)
     if beat.youtube_id:
         raise BeatStateError(f"Beat {beat.id} is already on YouTube ({beat.youtube_id}).")
     video = _video_file(ctx, beat)
-    metadata = metadata_of(beat)
+    try:
+        metadata = metadata_of(beat)
+    except ConfigError:  # publish_at passed while the job waited: the user picks a new one
+        _set_status(ctx, repo, beat, BeatStatus.DRAFT)
+        raise
 
     try:
         creds = ctx.credentials()  # AuthError -> the worker pauses this job
@@ -93,7 +103,7 @@ async def run_upload(ctx: JobContext) -> None:
         raise
     beat.youtube_id = youtube_id
     beat.published_at = utcnow()
-    _set_status(ctx, repo, beat, status_from_privacy(beat.privacy))
+    _set_status(ctx, repo, beat, status_for(beat.privacy, beat.publish_at))
     ctx.progress(1.0, f"Uploaded as {youtube_id}")
 
 

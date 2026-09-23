@@ -1,5 +1,6 @@
 """Chunked resumable upload: progress callbacks and the final id."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,27 @@ def test_upload_reports_progress_and_returns_id(
     assert media == [{"path": str(tmp_path / "v.mp4"), "chunksize": CHUNK_SIZE, "resumable": True}]
     body = fake.calls[0]["body"]
     assert body["snippet"]["title"] == "T" and body["status"]["privacyStatus"] == "private"
+
+
+def test_upload_scheduled_sends_private_and_publish_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, media: list[dict]
+) -> None:
+    fake = build(monkeypatch, [(None, {"id": "vid1"})])
+    meta = YouTubeMetadata(title="T", publish_at=datetime(2026, 10, 1, 18, 0, tzinfo=UTC))
+
+    upload_video(tmp_path / "v.mp4", meta, "creds")  # type: ignore[arg-type]
+
+    status = fake.calls[0]["body"]["status"]
+    assert status["privacyStatus"] == "private"
+    assert status["publishAt"] == "2026-10-01T18:00:00Z"
+
+
+def test_upload_without_publish_at_sends_no_publish_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, media: list[dict]
+) -> None:
+    fake = build(monkeypatch, [(None, {"id": "vid1"})])
+    upload_video(tmp_path / "v.mp4", YouTubeMetadata(title="T"), "creds")  # type: ignore[arg-type]
+    assert "publishAt" not in fake.calls[0]["body"]["status"]
 
 
 def test_upload_without_callback(

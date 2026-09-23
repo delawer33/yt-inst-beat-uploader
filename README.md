@@ -119,7 +119,13 @@ This creates a draft with the title, description and tags from your templates
 the audio file name without extension) and opens its page. Edit the metadata there (same
 limits as `config.yaml`: title 100, description 5000, tags 500 characters in total) and press
 **Upload to YouTube**: the server renders the video with ffmpeg and uploads it, showing the
-progress of both steps; when it is done the page links to the video. A draft can be deleted
+progress of both steps; when it is done the page links to the video. Privacy offers Private,
+Unlisted, Public and **Scheduled**: Scheduled reveals a date-and-time field (your local time,
+prefilled with tomorrow at the current hour) and uploads the video as private with that
+publish time, so YouTube makes it public then whether or not this machine is on. Until then
+the Library card and the Beat page show **Scheduled** with the time. The time must be at
+least 5 minutes ahead; if it has already passed when the upload job runs, the job fails, the
+Beat returns to draft and you pick a new time. A draft can be deleted
 with **Delete draft**; anything already on YouTube cannot be deleted from here. If YouTube is
 not connected the upload job pauses and continues after you connect in Settings. If the
 network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
@@ -165,7 +171,12 @@ youtube:
     - instrumental
   category_id: 10                 # optional, default 10 (Music)
   privacy_status: private         # optional: private (default) | public | unlisted
+  publish_at: 2026-10-01 18:00    # optional, local time: upload as Scheduled, YouTube
+                                  # makes it public then; needs privacy_status: private
 ```
+
+`publish_at` must be at least 5 minutes ahead when the upload runs; a time that has already
+passed is an error, never silently moved.
 
 ## Project layout
 

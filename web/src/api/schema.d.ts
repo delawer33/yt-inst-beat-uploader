@@ -395,6 +395,8 @@ export interface components {
             youtube_url: string | null;
             /** Published At */
             published_at: string | null;
+            /** Publish At */
+            publish_at: string | null;
             /** Views */
             views: number;
             /** Likes */
@@ -431,12 +433,14 @@ export interface components {
             /** Tags */
             tags?: string[] | null;
             privacy?: components["schemas"]["PrivacyStatus"] | null;
+            /** Publish At */
+            publish_at?: string | null;
         };
         /**
          * BeatStatus
          * @enum {string}
          */
-        BeatStatus: "draft" | "queued" | "rendering" | "uploading" | "uploaded" | "published";
+        BeatStatus: "draft" | "queued" | "rendering" | "uploading" | "uploaded" | "scheduled" | "published";
         /** Body_create_beat_api_beats_post */
         Body_create_beat_api_beats_post: {
             /**

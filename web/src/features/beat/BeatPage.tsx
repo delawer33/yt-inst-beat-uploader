@@ -9,14 +9,14 @@ import { StatusBadge } from "@/features/library/StatusBadge";
 import { useBeat, useSetPrivacy, type Beat } from "@/features/library/queries";
 import { useBeatStats } from "@/features/stats/queries";
 import { ViewsChart } from "@/features/stats/ViewsChart";
-import { formatDate, formatViews } from "@/lib/format";
+import { formatDate, formatDateTime, formatViews } from "@/lib/format";
 import { MetadataForm } from "./MetadataForm";
 import { PrivacySelect } from "./PrivacySelect";
 import { useDeleteBeat, usePatchBeat, useUploadBeat } from "./queries";
 
 /**
  * One Beat. Layout, top to bottom:
- *   header  — cover, title, status, counters, published date, "Open on YouTube";
+ *   header  — cover, title, status, counters, published (or scheduled) date, "Open on YouTube";
  *             a draft gets "Upload to YouTube" / "Delete draft", a running render or
  *             upload job its progress line
  *   metadata — MetadataForm for DRAFT/QUEUED beats, read-only Metadata afterwards
@@ -59,10 +59,16 @@ function BeatView({ beat }: { beat: Beat }) {
             <h1 className="text-2xl font-semibold">{beat.title || "Untitled"}</h1>
             <div className="flex items-center gap-3">
               <StatusBadge status={beat.status} />
-              {beat.published_at && (
+              {beat.status === "scheduled" && beat.publish_at ? (
                 <span className="text-sm text-muted-foreground">
-                  Published {formatDate(beat.published_at)}
+                  Scheduled · {formatDateTime(beat.publish_at)}
                 </span>
+              ) : (
+                beat.published_at && (
+                  <span className="text-sm text-muted-foreground">
+                    Published {formatDate(beat.published_at)}
+                  </span>
+                )
               )}
             </div>
           </div>
@@ -196,6 +202,12 @@ function Metadata({ beat }: { beat: Beat }) {
         <dd>{beat.tags.length ? beat.tags.join(", ") : "—"}</dd>
         <dt className="text-muted-foreground">Category</dt>
         <dd>{categoryLabel(beat.category_id)}</dd>
+        {beat.publish_at && (
+          <>
+            <dt className="text-muted-foreground">Publish at</dt>
+            <dd>Scheduled · {formatDateTime(beat.publish_at)}</dd>
+          </>
+        )}
         <dt className="text-muted-foreground">
           <label htmlFor="privacy">Privacy</label>
         </dt>
@@ -204,7 +216,9 @@ function Metadata({ beat }: { beat: Beat }) {
             id="privacy"
             value={beat.privacy}
             disabled={!onYouTube || setPrivacy.isPending}
-            onChange={(privacy) => setPrivacy.mutate({ id: beat.id, privacy })}
+            onChange={(choice) => {
+              if (choice !== "scheduled") setPrivacy.mutate({ id: beat.id, privacy: choice });
+            }}
           />
           {!onYouTube && (
             <span className="text-muted-foreground">Set on YouTube after upload.</span>

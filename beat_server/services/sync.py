@@ -32,6 +32,13 @@ def status_from_privacy(privacy: str) -> BeatStatus:
     return BeatStatus.PUBLISHED if privacy == PrivacyStatus.PUBLIC else BeatStatus.UPLOADED
 
 
+def status_for(privacy: str, publish_at: datetime | None) -> BeatStatus:
+    """private + publish_at -> SCHEDULED, otherwise status_from_privacy(privacy)."""
+    if privacy == PrivacyStatus.PRIVATE and publish_at is not None:
+        return BeatStatus.SCHEDULED
+    return status_from_privacy(privacy)
+
+
 def parse_published_at(iso: str) -> datetime | None:
     """``2026-09-01T12:30:00Z`` -> naive UTC datetime, like every other timestamp in the DB."""
     if not iso:
