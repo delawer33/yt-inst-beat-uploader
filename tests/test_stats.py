@@ -48,6 +48,7 @@ def test_parse_video_full() -> None:
     assert (v.title, v.views, v.likes, v.comments) == ("Villain", 100, 5, 1)
     assert v.duration_seconds == 150
     assert v.privacy == "public"
+    assert v.publish_at == ""
     assert v.url == "https://youtu.be/abc"
     assert v.to_dict()["url"] == v.url
 
@@ -55,6 +56,18 @@ def test_parse_video_full() -> None:
 def test_parse_video_missing_counts_default_to_zero() -> None:
     v = parse_video({"id": "x", "snippet": {}, "statistics": {}})
     assert (v.views, v.likes, v.comments, v.duration_seconds, v.tags) == (0, 0, 0, 0, [])
+    assert v.publish_at == ""
+
+
+def test_parse_video_scheduled_carries_publish_at() -> None:
+    item = {
+        "id": "abc",
+        "snippet": {"title": "Villain"},
+        "status": {"privacyStatus": "private", "publishAt": "2026-10-01T18:00:00Z"},
+    }
+    v = parse_video(item)
+    assert (v.privacy, v.publish_at) == ("private", "2026-10-01T18:00:00Z")
+    assert v.to_dict()["publish_at"] == "2026-10-01T18:00:00Z"
 
 
 class _Failing:
