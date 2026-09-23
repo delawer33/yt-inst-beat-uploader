@@ -2,6 +2,7 @@
 
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import googleapiclient.discovery
@@ -47,6 +48,9 @@ def upload_video(
             "selfDeclaredMadeForKids": False,
         },
     }
+    if metadata.publish_at is not None:
+        # Scheduled: YouTube makes the (private) video public at this time by itself.
+        body["status"]["publishAt"] = rfc3339_utc(metadata.publish_at)
     media = googleapiclient.http.MediaFileUpload(str(video), chunksize=CHUNK_SIZE, resumable=True)
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
@@ -80,6 +84,11 @@ def set_privacy(video_id: str, status: PrivacyStatus, credentials: Credentials) 
         raise UploadError(f"YouTube API error for {video_id}: {e}") from e
     except TRANSPORT_ERRORS as e:
         raise NetworkError(f"Could not reach YouTube: {e}") from e
+
+
+def rfc3339_utc(when: datetime) -> str:
+    """``2026-10-01T18:00:00Z``, the form ``status.publishAt`` expects."""
+    return when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _client(credentials: Credentials) -> googleapiclient.discovery.Resource:

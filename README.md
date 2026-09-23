@@ -165,7 +165,12 @@ youtube:
     - instrumental
   category_id: 10                 # optional, default 10 (Music)
   privacy_status: private         # optional: private (default) | public | unlisted
+  publish_at: 2026-10-01 18:00    # optional, local time: upload as Scheduled, YouTube
+                                  # makes it public then; needs privacy_status: private
 ```
+
+`publish_at` must be at least 5 minutes ahead when the upload runs; a time that has already
+passed is an error, never silently moved.
 
 ## Project layout
 

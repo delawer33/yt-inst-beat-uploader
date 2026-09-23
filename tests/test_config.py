@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,63 @@ def test_tags_total_length_limit() -> None:
     assert YouTubeMetadata.from_mapping(ok).tags == ["a" * MAX_TAGS_LENGTH]
     with pytest.raises(ConfigError, match="tags must be <="):
         YouTubeMetadata.from_mapping({"title": "t", "tags": ["a" * 300, "b" * 201]})
+
+
+# --- publish_at ------------------------------------------------------------------------------
+
+
+def in_future(**delta: int) -> datetime:
+    return datetime.now(UTC).replace(microsecond=0) + timedelta(**delta)
+
+
+def test_publish_at_defaults_to_none() -> None:
+    assert YouTubeMetadata.from_mapping({"title": "t"}).publish_at is None
+    assert YouTubeMetadata.from_mapping({"title": "t", "publish_at": None}).publish_at is None
+    assert YouTubeMetadata.from_mapping({"title": "t", "publish_at": ""}).publish_at is None
+
+
+def test_publish_at_aware_input_is_kept_as_utc() -> None:
+    when = in_future(hours=2)
+    meta = YouTubeMetadata.from_mapping({"title": "t", "publish_at": when})
+    assert meta.publish_at == when and meta.publish_at.tzinfo is UTC
+    from_string = YouTubeMetadata.from_mapping({"title": "t", "publish_at": when.isoformat()})
+    assert from_string.publish_at == when
+
+
+def test_publish_at_naive_input_is_local_time() -> None:
+    local = in_future(hours=2).astimezone().replace(tzinfo=None)
+    meta = YouTubeMetadata.from_mapping({"title": "t", "publish_at": local})
+    assert meta.publish_at == local.astimezone().astimezone(UTC)
+    text = local.strftime("%Y-%m-%d %H:%M")
+    from_string = YouTubeMetadata.from_mapping({"title": "t", "publish_at": text})
+    assert from_string.publish_at == local.replace(second=0).astimezone().astimezone(UTC)
+
+
+def test_publish_at_needs_five_minutes_lead() -> None:
+    edge = in_future(minutes=6)
+    assert YouTubeMetadata.from_mapping({"title": "t", "publish_at": edge}).publish_at == edge
+    with pytest.raises(ConfigError, match=r"publish_at .* at least 5 minutes"):
+        YouTubeMetadata.from_mapping({"title": "t", "publish_at": in_future(minutes=4)})
+    with pytest.raises(ConfigError, match=r"publish_at .* already passed"):
+        YouTubeMetadata.from_mapping({"title": "t", "publish_at": in_future(hours=-1)})
+
+
+@pytest.mark.parametrize("privacy", ["public", "unlisted"])
+def test_publish_at_requires_private(privacy: str) -> None:
+    with pytest.raises(ConfigError, match="publish_at .* private"):
+        YouTubeMetadata.from_mapping(
+            {"title": "t", "privacy_status": privacy, "publish_at": in_future(hours=1)}
+        )
+
+
+@pytest.mark.parametrize("value", ["tomorrow", "2026-13-01 10:00", 20261001, True, "2026-10-01"])
+def test_publish_at_rejects_unparseable(value: object) -> None:
+    with pytest.raises(ConfigError, match="publish_at must be a date and time"):
+        YouTubeMetadata.from_mapping({"title": "t", "publish_at": value})
+
+
+def test_load_from_file_with_publish_at(tmp_path: Path) -> None:
+    local = in_future(days=1).astimezone().replace(tzinfo=None, second=0)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(f"youtube:\n  title: Hello\n  publish_at: {local:%Y-%m-%d %H:%M}\n")
+    assert load_youtube_metadata(cfg).publish_at == local.astimezone().astimezone(UTC)
