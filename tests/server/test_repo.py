@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
-from beat_server.db.models import Beat, Job, JobKind, JobStatus, VideoStatsDaily
+from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus, VideoStatsDaily
 from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo, StatsRepo
 
 
@@ -26,6 +26,49 @@ def test_beat_by_youtube_id_and_save(session: Session) -> None:
     found = repo.by_youtube_id("yt1")
     assert found is not None and found.views == 42
     assert repo.by_youtube_id("nope") is None
+
+
+def test_beat_due_scheduled(session: Session) -> None:
+    repo = BeatRepo(session)
+    now = datetime(2026, 10, 1, 18, 5)
+    passed = datetime(2026, 10, 1, 18, 0)
+
+    def scheduled(
+        beat_id: str, publish_at: datetime = passed, synced_at: datetime | None = None
+    ) -> Beat:
+        beat = Beat(id=beat_id, status=BeatStatus.SCHEDULED, publish_at=publish_at)
+        beat.synced_at = synced_at
+        return repo.add(beat)
+
+    scheduled("never-synced")
+    scheduled("synced-before", synced_at=datetime(2026, 10, 1, 12, 0))
+    scheduled("synced-after", synced_at=datetime(2026, 10, 1, 18, 1))
+    scheduled("future", publish_at=datetime(2026, 10, 2, 18, 0))
+    repo.add(Beat(id="published", status=BeatStatus.PUBLISHED, publish_at=passed))
+    repo.add(Beat(id="draft", status=BeatStatus.DRAFT))
+
+    assert [b.id for b in repo.due_scheduled(now)] == ["never-synced", "synced-before"]
+    assert repo.due_scheduled(datetime(2026, 10, 1, 17, 59)) == []
+
+
+def test_job_has_pending(session: Session) -> None:
+    repo = JobRepo(session)
+    assert repo.has_pending(JobKind.SYNC, "b") is False
+    done = repo.add(Job(kind=JobKind.SYNC, beat_id="b", status=JobStatus.DONE))
+    assert repo.has_pending(JobKind.SYNC, "b") is False
+    repo.add(Job(kind=JobKind.SYNC, beat_id="other"))
+    repo.add(Job(kind=JobKind.STATS, beat_id="b"))
+    assert repo.has_pending(JobKind.SYNC, "b") is False
+    queued = repo.add(Job(kind=JobKind.SYNC, beat_id="b"))
+    assert repo.has_pending(JobKind.SYNC, "b") is True
+    for status in (JobStatus.RUNNING, JobStatus.PAUSED):
+        queued.status = status
+        repo.save(queued)
+        assert repo.has_pending(JobKind.SYNC, "b") is True
+    queued.status = JobStatus.FAILED
+    repo.save(queued)
+    assert repo.has_pending(JobKind.SYNC, "b") is False
+    assert done.status == JobStatus.DONE
 
 
 def test_job_next_queued_is_oldest_and_skips_running(session: Session) -> None:

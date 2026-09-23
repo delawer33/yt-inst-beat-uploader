@@ -42,6 +42,7 @@ class VideoStats:
     comments: int
     tags: list[str]
     description: str
+    publish_at: str = ""  # status.publishAt: set only while the video is scheduled
 
     @property
     def url(self) -> str:
@@ -134,17 +135,19 @@ def parse_channel(item: dict[str, Any]) -> ChannelStats:
 def parse_video(item: dict[str, Any]) -> VideoStats:
     snippet = item.get("snippet", {})
     stats = item.get("statistics", {})
+    status = item.get("status", {})
     return VideoStats(
         id=item["id"],
         title=snippet.get("title", ""),
         published_at=snippet.get("publishedAt", ""),
-        privacy=item.get("status", {}).get("privacyStatus", ""),
+        privacy=status.get("privacyStatus", ""),
         duration_seconds=parse_duration(item.get("contentDetails", {}).get("duration", "")),
         views=_int(stats.get("viewCount")),
         likes=_int(stats.get("likeCount")),
         comments=_int(stats.get("commentCount")),
         tags=list(snippet.get("tags") or []),
         description=snippet.get("description", ""),
+        publish_at=status.get("publishAt", ""),
     )
 
 

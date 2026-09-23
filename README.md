@@ -139,7 +139,10 @@ happens at the next start, a run that failed is retried an hour later, up to thr
 times a day). The first run
 backfills the last 90 days. The Library shows
 the channel totals for the last 28 days, each Beat page its own chart. "Collect stats now"
-on the Library page (or `POST /api/stats/collect`) runs the job immediately.
+on the Library page (or `POST /api/stats/collect`) runs the job immediately. The same
+minute scheduler watches Scheduled Beats: once a publish time has passed it runs one sync
+so the badge flips to Published within about a minute while the machine is on, and on the
+first tick after sleep; a sync also picks up a time changed or removed in YouTube Studio.
 
 ### 7. Run as a service
 
