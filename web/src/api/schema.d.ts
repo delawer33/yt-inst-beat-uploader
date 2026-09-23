@@ -119,6 +119,10 @@ export interface paths {
         /**
          * Change Privacy
          * @description Change the privacy of an uploaded beat on YouTube, then mirror it locally.
+         *
+         *     With ``publish_at`` the beat is (re)scheduled: sent as private with that time, status
+         *     SCHEDULED. Without it the status part is replaced without a time, so a Scheduled beat
+         *     loses its schedule: private/unlisted -> UPLOADED, public -> PUBLISHED (publish now).
          */
         post: operations["change_privacy_api_beats__beat_id__privacy_post"];
         delete?: never;
@@ -536,9 +540,16 @@ export interface components {
             /** Per Day */
             per_day: components["schemas"]["DayPoint"][];
         };
-        /** PrivacyIn */
+        /**
+         * PrivacyIn
+         * @description ``POST /api/beats/{id}/privacy``. With ``publish_at`` the beat becomes Scheduled
+         *     (YouTube publishes it then; ``privacy`` is sent as private); without it any existing
+         *     schedule is removed. A naive value counts as local time, like in config.yaml.
+         */
         PrivacyIn: {
             privacy: components["schemas"]["PrivacyStatus"];
+            /** Publish At */
+            publish_at?: string | null;
         };
         /**
          * PrivacyStatus

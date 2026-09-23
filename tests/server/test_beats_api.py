@@ -1,6 +1,6 @@
 """``/api/beats``: list, get, cover, privacy."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,18 +95,29 @@ def test_cover(client: TestClient, workspace: Workspace, beats: dict[str, Beat])
     assert response.headers["content-type"] == "image/png"
 
 
+Call = tuple[str, PrivacyStatus, datetime | None]
+
+
+def youtube_calls(monkeypatch: pytest.MonkeyPatch) -> list[Call]:
+    """Fake credentials and ``set_privacy``; returns the (video, privacy, publish_at) sent."""
+    calls: list[Call] = []
+    monkeypatch.setattr(beats_api, "get_valid_credentials", lambda ws: "creds")
+    monkeypatch.setattr(
+        beats_api,
+        "set_privacy",
+        lambda vid, status, creds, publish_at=None: calls.append((vid, status, publish_at)),
+    )
+    return calls
+
+
 def test_set_privacy(
     client: TestClient, session: Session, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[tuple[str, PrivacyStatus]] = []
-    monkeypatch.setattr(beats_api, "get_valid_credentials", lambda ws: "creds")
-    monkeypatch.setattr(
-        beats_api, "set_privacy", lambda vid, status, creds: calls.append((vid, status))
-    )
+    calls = youtube_calls(monkeypatch)
 
     response = client.post("/api/beats/pub/privacy", json={"privacy": "unlisted"})
     assert response.status_code == 200
-    assert calls == [("yt-pub", PrivacyStatus.UNLISTED)]
+    assert calls == [("yt-pub", PrivacyStatus.UNLISTED, None)]
     body = response.json()
     assert body["privacy"] == "unlisted" and body["status"] == "uploaded"
     session.expire_all()
@@ -121,8 +132,7 @@ def test_set_privacy(
 def test_set_privacy_rejects_bad_input_and_missing(
     client: TestClient, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(beats_api, "get_valid_credentials", lambda ws: "creds")
-    monkeypatch.setattr(beats_api, "set_privacy", lambda *a: None)
+    youtube_calls(monkeypatch)
     assert client.post("/api/beats/pub/privacy", json={"privacy": "secret"}).status_code == 422
     assert client.post("/api/beats/nope/privacy", json={"privacy": "public"}).status_code == 404
 
@@ -143,3 +153,92 @@ def test_set_privacy_without_credentials_is_409(
     response = client.post("/api/beats/pub/privacy", json={"privacy": "public"})
     assert response.status_code == 409
     assert response.json()["detail"] == "Not connected"
+
+
+LATER = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
+LATER_ISO = LATER.isoformat().replace("+00:00", "Z")
+LATER_NAIVE = LATER.replace(tzinfo=None)
+
+
+def schedule(client: TestClient, beat_id: str, privacy: str, when: datetime = LATER) -> dict:
+    body = {"privacy": privacy, "publish_at": when.isoformat().replace("+00:00", "Z")}
+    return client.post(f"/api/beats/{beat_id}/privacy", json=body)
+
+
+def test_schedule_an_uploaded_beat_sends_private_with_the_time(
+    client: TestClient, session: Session, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = youtube_calls(monkeypatch)
+
+    response = schedule(client, "old", "private")
+
+    assert response.status_code == 200, response.text
+    assert calls == [("yt-old", PrivacyStatus.PRIVATE, LATER)]
+    body = response.json()
+    assert body["status"] == "scheduled" and body["privacy"] == "private"
+    assert body["publish_at"] == LATER_NAIVE.isoformat()
+    session.expire_all()
+    beat = BeatRepo(session).get("old")
+    assert beat is not None and beat.status == BeatStatus.SCHEDULED
+    assert beat.publish_at == LATER_NAIVE
+
+
+def test_schedule_unlisted_is_sent_as_private(
+    client: TestClient, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = youtube_calls(monkeypatch)
+    body = schedule(client, "old", "unlisted").json()
+    assert calls[0][1] is PrivacyStatus.PRIVATE
+    assert body["privacy"] == "private" and body["status"] == "scheduled"
+
+
+def test_reschedule_replaces_the_time(
+    client: TestClient, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = youtube_calls(monkeypatch)
+    schedule(client, "old", "private")
+    later = LATER + timedelta(days=2)
+
+    body = schedule(client, "old", "private", later).json()
+
+    assert calls[-1] == ("yt-old", PrivacyStatus.PRIVATE, later)
+    assert body["status"] == "scheduled"
+    assert body["publish_at"] == later.replace(tzinfo=None).isoformat()
+
+
+def test_private_or_unlisted_clears_the_schedule(
+    client: TestClient, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = youtube_calls(monkeypatch)
+    schedule(client, "old", "private")
+
+    body = client.post("/api/beats/old/privacy", json={"privacy": "unlisted"}).json()
+
+    assert calls[-1] == ("yt-old", PrivacyStatus.UNLISTED, None)
+    assert body["status"] == "uploaded" and body["publish_at"] is None
+
+
+def test_public_on_a_scheduled_beat_publishes_now(
+    client: TestClient, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = youtube_calls(monkeypatch)
+    schedule(client, "old", "private")
+
+    body = client.post("/api/beats/old/privacy", json={"privacy": "public"}).json()
+
+    assert calls[-1] == ("yt-old", PrivacyStatus.PUBLIC, None)
+    assert body["status"] == "published" and body["publish_at"] is None
+
+
+def test_schedule_rejects_a_bad_time_without_calling_youtube(
+    client: TestClient, beats: dict[str, Beat], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = youtube_calls(monkeypatch)
+    soon = datetime.now(UTC) + timedelta(minutes=1)
+    passed = datetime.now(UTC) - timedelta(hours=1)
+
+    assert schedule(client, "old", "private", soon).status_code == 422
+    assert "at least" in schedule(client, "old", "private", soon).json()["detail"]
+    assert "already passed" in schedule(client, "old", "private", passed).json()["detail"]
+    assert schedule(client, "old", "public").status_code == 422
+    assert calls == []

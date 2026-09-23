@@ -17,14 +17,23 @@ type Props = {
   allowScheduled?: boolean;
   disabled?: boolean;
   id?: string;
+  "aria-label"?: string;
 };
 
 /** Native select styled with the design tokens, like the one in YouTube Studio. */
-export function PrivacySelect({ value, onChange, allowScheduled = false, disabled = false, id }: Props) {
+export function PrivacySelect({
+  value,
+  onChange,
+  allowScheduled = false,
+  disabled = false,
+  id,
+  "aria-label": ariaLabel,
+}: Props) {
   const shown = allowScheduled ? options : options.filter((o) => o.value !== "scheduled");
   return (
     <select
       id={id}
+      aria-label={ariaLabel}
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value as PrivacyChoice)}
