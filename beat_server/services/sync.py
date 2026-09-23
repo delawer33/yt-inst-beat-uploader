@@ -40,7 +40,10 @@ def status_for(privacy: str, publish_at: datetime | None) -> BeatStatus:
 
 
 def parse_published_at(iso: str) -> datetime | None:
-    """``2026-09-01T12:30:00Z`` -> naive UTC datetime, like every other timestamp in the DB."""
+    """``2026-09-01T12:30:00Z`` -> naive UTC datetime, like every other timestamp in the DB.
+
+    Also used for ``status.publishAt``: empty (the video is not scheduled) -> ``None``.
+    """
     if not iso:
         return None
     parsed = datetime.fromisoformat(iso)
@@ -52,6 +55,9 @@ def parse_published_at(iso: str) -> datetime | None:
 def merge_from_youtube(beat: Beat | None, video: VideoStats) -> Beat:
     """Pure. New Beat if ``beat`` is None, else overwrite metadata, counters and status.
 
+    Status follows YouTube (ADR 0003): private with ``publishAt`` is SCHEDULED with that
+    time, whether it was scheduled here or in YouTube Studio; a time changed in Studio
+    replaces the local one; private without a time is UPLOADED; public is PUBLISHED.
     Never touches ``audio_path``/``image_path``/``video_path``.
     """
     if beat is None:
@@ -60,7 +66,8 @@ def merge_from_youtube(beat: Beat | None, video: VideoStats) -> Beat:
     beat.description = video.description
     beat.tags = list(video.tags)
     beat.privacy = video.privacy
-    beat.status = status_from_privacy(video.privacy)
+    beat.publish_at = parse_published_at(video.publish_at)
+    beat.status = status_for(video.privacy, beat.publish_at)
     beat.published_at = parse_published_at(video.published_at)
     beat.views = video.views
     beat.likes = video.likes

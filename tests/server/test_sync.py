@@ -30,6 +30,7 @@ def video(
     privacy: str = "public",
     views: int = 1234,
     title: str = "Dark Trap Beat",
+    publish_at: str = "",
 ) -> VideoStats:
     return VideoStats(
         id=video_id,
@@ -42,6 +43,7 @@ def video(
         comments=3,
         tags=["trap", "dark"],
         description="free for profit",
+        publish_at=publish_at,
     )
 
 
@@ -169,3 +171,52 @@ def test_status_for() -> None:
     assert status_for("public", None) is BeatStatus.PUBLISHED
     assert status_for("public", when) is BeatStatus.PUBLISHED  # YouTube ignores it once public
     assert status_for("unlisted", when) is BeatStatus.UPLOADED
+
+
+# --- Scheduled Beats: YouTube is the source of truth ---------------------------------------
+
+STUDIO_TIME = "2026-10-01T18:00:00Z"
+
+
+def test_merge_private_with_publish_at_is_scheduled() -> None:
+    beat = merge_from_youtube(None, video(privacy="private", publish_at=STUDIO_TIME))
+    assert beat.status == BeatStatus.SCHEDULED
+    assert beat.publish_at == datetime(2026, 10, 1, 18, 0)
+
+
+def test_merge_private_without_publish_at_is_uploaded_and_drops_the_time() -> None:
+    existing = Beat(
+        youtube_id="abc123",
+        status=BeatStatus.SCHEDULED,
+        privacy="private",
+        publish_at=datetime(2026, 10, 1, 18, 0),
+    )
+    merged = merge_from_youtube(existing, video(privacy="private"))
+    assert merged.status == BeatStatus.UPLOADED
+    assert merged.publish_at is None
+
+
+def test_merge_public_after_schedule_is_published() -> None:
+    existing = Beat(
+        youtube_id="abc123",
+        status=BeatStatus.SCHEDULED,
+        privacy="private",
+        publish_at=datetime(2026, 10, 1, 18, 0),
+    )
+    merged = merge_from_youtube(existing, video(privacy="public"))
+    assert merged.status == BeatStatus.PUBLISHED
+    assert merged.publish_at is None
+
+
+def test_merge_time_changed_in_studio_overwrites_the_local_one() -> None:
+    existing = Beat(
+        youtube_id="abc123",
+        status=BeatStatus.SCHEDULED,
+        privacy="private",
+        publish_at=datetime(2026, 10, 1, 18, 0),
+    )
+    merged = merge_from_youtube(
+        existing, video(privacy="private", publish_at="2026-10-05T09:15:00+02:00")
+    )
+    assert merged.status == BeatStatus.SCHEDULED
+    assert merged.publish_at == datetime(2026, 10, 5, 7, 15)  # stored as naive UTC
