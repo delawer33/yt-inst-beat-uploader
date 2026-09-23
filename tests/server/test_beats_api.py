@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from beat_server.api import beats as beats_api
 from beat_server.db.models import Beat, BeatStatus
-from beat_server.db.repo import BeatRepo
+from beat_server.db.repo import BeatRepo, JobRepo
 from beat_upload.config import PrivacyStatus
 from beat_upload.errors import AuthError
 from beat_upload.workspace import Workspace
@@ -242,3 +242,60 @@ def test_schedule_rejects_a_bad_time_without_calling_youtube(
     assert "already passed" in schedule(client, "old", "private", passed).json()["detail"]
     assert schedule(client, "old", "public").status_code == 422
     assert calls == []
+
+
+PASSED_NAIVE = (datetime.now(UTC) - timedelta(hours=1)).replace(tzinfo=None, microsecond=0)
+
+
+def stale_draft(session: Session) -> Beat:
+    """A draft scheduled for a time that has since passed (the DB keeps naive UTC)."""
+    return BeatRepo(session).add(
+        Beat(
+            id="stale",
+            title="Stale",
+            status=BeatStatus.DRAFT,
+            privacy="private",
+            publish_at=PASSED_NAIVE,
+            audio_path="beat.mp3",
+            image_path="cover.png",
+        )
+    )
+
+
+def test_patch_of_other_fields_keeps_a_stale_publish_at(
+    client: TestClient, session: Session
+) -> None:
+    stale_draft(session)
+
+    response = client.patch("/api/beats/stale", json={"title": "Renamed"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["title"] == "Renamed"
+    assert body["publish_at"] == PASSED_NAIVE.isoformat()
+
+
+def test_patch_touching_the_schedule_still_validates_it(
+    client: TestClient, session: Session
+) -> None:
+    stale_draft(session)
+
+    response = client.patch("/api/beats/stale", json={"privacy": "private"})
+
+    assert response.status_code == 422
+    assert "already passed" in response.json()["detail"]
+    assert client.patch("/api/beats/stale", json={"publish_at": None}).status_code == 200
+
+
+def test_upload_with_a_passed_publish_at_is_422_and_queues_nothing(
+    client: TestClient, session: Session
+) -> None:
+    stale_draft(session)
+
+    response = client.post("/api/beats/stale/upload")
+
+    assert response.status_code == 422
+    assert "already passed" in response.json()["detail"]
+    session.expire_all()
+    assert BeatRepo(session).get("stale").status == BeatStatus.DRAFT
+    assert JobRepo(session).list() == []

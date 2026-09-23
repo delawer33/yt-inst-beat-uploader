@@ -149,12 +149,19 @@ def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:
         data["privacy_status"] = patch.privacy.value
     if "publish_at" in patch.model_fields_set:
         data["publish_at"] = patch.publish_at
+    # The stored time was checked when it was set; re-checking it on a title-only patch
+    # would reject the edit once the time has passed. Only a patch that touches the
+    # schedule (time or privacy) validates it; ``metadata_of`` still does before upload.
+    touches_schedule = patch.privacy is not None or "publish_at" in patch.model_fields_set
+    if not touches_schedule:
+        data["publish_at"] = None
     metadata = YouTubeMetadata.from_mapping(data)
     beat.title = metadata.title
     beat.description = metadata.description
     beat.tags = list(metadata.tags)
     beat.privacy = metadata.privacy_status.value
-    beat.publish_at = to_naive_utc(metadata.publish_at)
+    if touches_schedule:
+        beat.publish_at = to_naive_utc(metadata.publish_at)
     return beat
 
 

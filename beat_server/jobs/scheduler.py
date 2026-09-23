@@ -9,11 +9,12 @@ it is tried again ``FAILED_RETRY_INTERVAL`` after it finished, at most
 
 The second rule (ADR 0003): YouTube publishes a Scheduled Beat on its own, so once its
 ``publish_at`` has passed the local status lags until a sync. Every tick enqueues one SYNC
-job per Scheduled Beat whose time has passed and that has not been synced since
-(``synced_at`` earlier than ``publish_at``), skipping Beats with a SYNC already pending.
-After a successful sync the Beat is Published (or Uploaded, or still Scheduled with a
-later time) and ``synced_at`` is past the old time, so the rule fires once per Beat and a
-video YouTube refuses to publish does not spam jobs.
+job per Scheduled Beat whose time has passed and that has not been synced later than
+``publish_at + SYNC_GRACE`` (YouTube flips the video up to a minute or so after the time,
+so a sync right after ``publish_at`` may still see it Scheduled), skipping Beats with a
+SYNC already pending. After a successful sync the Beat is Published (or Uploaded, or still
+Scheduled with a later time), so the rule stops; a video YouTube refuses to publish gets
+at most ~``SYNC_GRACE / TICK_INTERVAL`` syncs and then stays Scheduled without more jobs.
 
 Every timestamp here is naive local time; ``Job.created_at`` and ``Beat.publish_at`` are
 naive UTC and are converted.
@@ -35,6 +36,8 @@ log = logging.getLogger(__name__)
 TICK_INTERVAL = 60.0
 FAILED_RETRY_INTERVAL = timedelta(hours=1)
 MAX_FAILED_RETRIES_PER_DAY = 3
+# How long after ``publish_at`` a still-Scheduled Beat keeps getting catch-up syncs.
+SYNC_GRACE = timedelta(minutes=10)
 
 
 def utc_to_local(naive_utc: datetime) -> datetime:
@@ -91,12 +94,13 @@ class Scheduler:
         return self.tick_stats(now)
 
     def sync_due_scheduled(self, now: datetime) -> list[Job]:
-        """Enqueue one SYNC per Scheduled Beat whose time has passed without a sync since."""
+        """Enqueue one SYNC per Scheduled Beat whose time has passed and that was not
+        synced later than ``publish_at + SYNC_GRACE``."""
         with self._session_factory() as session:
             jobs = JobRepo(session)
             due = [
                 beat
-                for beat in BeatRepo(session).due_scheduled(local_to_utc(now))
+                for beat in BeatRepo(session).due_scheduled(local_to_utc(now), grace=SYNC_GRACE)
                 if not jobs.has_pending(JobKind.SYNC, beat.id)
             ]
         enqueued: list[Job] = []

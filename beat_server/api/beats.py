@@ -23,6 +23,7 @@ from beat_server.services.beats import (
     create_draft,
     default_metadata,
     delete_draft,
+    metadata_of,
     metadata_with_privacy,
     to_naive_utc,
 )
@@ -103,6 +104,7 @@ def upload_beat(beat_id: str, session: SessionDep, bus: BusDep, queue: QueueDep)
         raise BeatStateError(f"Beat {beat_id} is {beat.status}; only drafts can be uploaded.")
     if not (beat.audio_path and beat.image_path):
         raise BeatStateError(f"Beat {beat_id} has no audio or cover; add both first.")
+    metadata_of(beat)  # a passed publish_at is a 422 now, not a failed upload after rendering
     beat.status = BeatStatus.QUEUED
     BeatRepo(session).save(beat)
     bus.publish_beat(beat.id, beat.status)

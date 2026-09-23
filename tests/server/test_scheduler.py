@@ -76,6 +76,29 @@ def test_beat_synced_after_its_time_is_not_synced_again(app: FastAPI, session: S
     assert sync_jobs(session) == []
 
 
+def test_beat_synced_within_the_grace_after_its_time_is_due_again(
+    app: FastAPI, session: Session
+) -> None:
+    quiet_stats(session)
+    # Synced 2 min after publish_at but still SCHEDULED: YouTube had not flipped it yet.
+    due_at = NOW - timedelta(minutes=5)
+    scheduled(session, timedelta(minutes=-5), synced_at=local_to_utc(due_at + timedelta(minutes=2)))
+
+    make_scheduler(app).tick()
+    assert len(sync_jobs(session)) == 1
+
+
+def test_beat_synced_after_the_grace_is_left_alone(app: FastAPI, session: Session) -> None:
+    quiet_stats(session)
+    due_at = NOW - timedelta(minutes=15)
+    scheduled(
+        session, timedelta(minutes=-15), synced_at=local_to_utc(due_at + timedelta(minutes=11))
+    )
+
+    make_scheduler(app).tick()
+    assert sync_jobs(session) == []
+
+
 def test_beat_synced_before_its_time_is_due(app: FastAPI, session: Session) -> None:
     quiet_stats(session)
     scheduled(session, timedelta(hours=-1), synced_at=local_to_utc(NOW - timedelta(hours=2)))

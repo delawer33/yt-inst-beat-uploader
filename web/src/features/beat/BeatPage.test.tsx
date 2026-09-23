@@ -87,6 +87,21 @@ test("a Scheduled beat shows its time; a new time reschedules, the same time is 
   });
 });
 
+test("clearing the time field does not crash and disables Schedule", () => {
+  const onChange = vi.fn();
+  render(<PrivacyControl beat={scheduled} onChange={onChange} />);
+  const input = screen.getByLabelText("Publish at");
+
+  fireEvent.change(input, { target: { value: "" } });
+  expect(input).toHaveValue("");
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(screen.getByRole("button", { name: "Schedule" })).toBeDisabled();
+  expect(onChange).not.toHaveBeenCalled();
+
+  fireEvent.change(input, { target: { value: "2026-10-05T12:00" } });
+  expect(screen.getByRole("button", { name: "Schedule" })).toBeEnabled();
+});
+
 test("Private on a Scheduled beat cancels the schedule immediately", () => {
   const onChange = vi.fn();
   render(<PrivacyControl beat={scheduled} onChange={onChange} />);

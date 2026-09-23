@@ -1,6 +1,6 @@
 """Thin, typed data access. No business rules live here."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -29,17 +29,23 @@ class BeatRepo:
     def by_youtube_id(self, youtube_id: str) -> Beat | None:
         return self.session.scalar(select(Beat).where(Beat.youtube_id == youtube_id))
 
-    def due_scheduled(self, now: datetime) -> list[Beat]:
+    def due_scheduled(self, now: datetime, *, grace: timedelta = timedelta(0)) -> list[Beat]:
         """Scheduled Beats whose ``publish_at`` (naive UTC) has passed and that have not
-        been synced since: ``synced_at`` is unset or earlier than ``publish_at``."""
+        been synced later than ``publish_at + grace``: ``synced_at`` unset or before that.
+
+        The grace comparison is done in Python: SQLite has no datetime arithmetic.
+        """
         stmt = (
             select(Beat)
             .where(Beat.status == BeatStatus.SCHEDULED)
             .where(Beat.publish_at <= now)
-            .where(or_(Beat.synced_at.is_(None), Beat.synced_at < Beat.publish_at))
             .order_by(Beat.publish_at, Beat.id)
         )
-        return list(self.session.scalars(stmt))
+        return [
+            beat
+            for beat in self.session.scalars(stmt)
+            if beat.synced_at is None or beat.synced_at < beat.publish_at + grace
+        ]
 
     def list(self) -> list[Beat]:
         """Newest first: by publish date, drafts by the day they were added."""

@@ -210,7 +210,7 @@ function Metadata({ beat }: { beat: Beat }) {
         <dd className="flex flex-col gap-3">
           {onYouTube ? (
             <PrivacyControl
-              key={beat.updated_at}
+              key={`${beat.privacy}|${beat.publish_at ?? ""}`}
               beat={beat}
               onChange={(change) => setPrivacy.mutate({ id: beat.id, ...change })}
               pending={setPrivacy.isPending}
@@ -249,10 +249,10 @@ export function PrivacyControl({ beat, onChange, pending = false, error = null }
     toDateTimeLocal(beat.publish_at ? serverDate(beat.publish_at) : defaultPublishAt()),
   );
   const scheduling = picking || current === "scheduled";
-  const publishAtIso = new Date(publishAt).toISOString();
   const publishAtInvalid = Number.isNaN(new Date(publishAt).getTime());
+  const publishAtIso = publishAtInvalid ? null : new Date(publishAt).toISOString();
   const unchanged =
-    beat.publish_at !== null && !publishAtInvalid && publishAtIso === serverDate(beat.publish_at).toISOString();
+    beat.publish_at !== null && publishAtIso !== null && publishAtIso === serverDate(beat.publish_at).toISOString();
 
   function onPick(choice: PrivacyChoice) {
     if (choice === "scheduled") {
@@ -296,8 +296,8 @@ export function PrivacyControl({ beat, onChange, pending = false, error = null }
             />
             <Button
               size="sm"
-              disabled={pending || publishAtInvalid || unchanged}
-              onClick={() => onChange({ privacy: "private", publish_at: publishAtIso })}
+              disabled={pending || publishAtIso === null || unchanged}
+              onClick={() => publishAtIso && onChange({ privacy: "private", publish_at: publishAtIso })}
             >
               Schedule
             </Button>
