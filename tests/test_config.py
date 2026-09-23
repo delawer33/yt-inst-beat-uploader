@@ -50,6 +50,8 @@ def test_category_id_accepts_numeric_string() -> None:
         ({"title": ""}, "title cannot be empty"),
         ({"title": "x" * (MAX_TITLE_LENGTH + 1)}, "title must be <="),
         ({"description": "x" * (MAX_DESCRIPTION_LENGTH + 1)}, "description must be <="),
+        ({"title": "Beat <<NAME>>"}, "title cannot contain < or >"),
+        ({"description": "BPM: <<140>>"}, "description cannot contain < or >"),
         ({"tags": "beats"}, "tags must be a list"),
         ({"tags": ["ok", 1]}, "tags must be a list"),
         ({"category_id": "music"}, "category_id must be"),

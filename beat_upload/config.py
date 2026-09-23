@@ -28,6 +28,7 @@ from beat_upload.errors import ConfigError
 MAX_TITLE_LENGTH = 100
 MAX_DESCRIPTION_LENGTH = 5000
 MAX_TAGS_LENGTH = 500  # YouTube counts the characters of all tags together
+FORBIDDEN_CHARS = "<>"  # YouTube rejects angle brackets in title and description
 MUSIC_CATEGORY_ID = 10
 # YouTube wants a scheduled publish time in the future; a few minutes of slack cover the
 # clock skew and the time the render and upload take before the time is actually sent.
@@ -57,12 +58,19 @@ class YouTubeMetadata:
             raise ConfigError("youtube.title cannot be empty")
         if len(title) > MAX_TITLE_LENGTH:
             raise ConfigError(f"youtube.title must be <= {MAX_TITLE_LENGTH} characters")
+        if any(c in title for c in FORBIDDEN_CHARS):
+            raise ConfigError("youtube.title cannot contain < or >; YouTube rejects them")
 
         description = data.get("description") or ""
         if not isinstance(description, str):
             raise ConfigError("youtube.description must be a string")
         if len(description) > MAX_DESCRIPTION_LENGTH:
             raise ConfigError(f"youtube.description must be <= {MAX_DESCRIPTION_LENGTH} characters")
+        if any(c in description for c in FORBIDDEN_CHARS):
+            raise ConfigError(
+                "youtube.description cannot contain < or >; YouTube rejects them "
+                "(fill in the placeholders)"
+            )
 
         tags = data.get("tags") or []
         if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
