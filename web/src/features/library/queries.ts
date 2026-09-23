@@ -37,12 +37,18 @@ export function useBeatMutation<TVars>(run: (vars: TVars) => Promise<Beat>) {
   });
 }
 
+export type PrivacyChange = {
+  privacy: Privacy;
+  /** UTC ISO time: schedule (or reschedule) the beat; omitted or null: remove any schedule. */
+  publish_at?: string | null;
+};
+
 export function useSetPrivacy() {
-  return useBeatMutation(({ id, privacy }: { id: string; privacy: Privacy }) =>
+  return useBeatMutation(({ id, privacy, publish_at = null }: { id: string } & PrivacyChange) =>
     unwrap(
       api.POST("/api/beats/{beat_id}/privacy", {
         params: { path: { beat_id: id } },
-        body: { privacy },
+        body: { privacy, publish_at },
       }),
     ),
   );

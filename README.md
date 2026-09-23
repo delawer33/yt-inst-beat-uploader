@@ -131,6 +131,18 @@ not connected the upload job pauses and continues after you connect in Settings.
 network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
 over about an hour, before giving up; **Retry now** on the job skips the wait.
 
+#### Change the visibility of an uploaded beat
+
+Once a beat is on YouTube its page keeps the same Privacy selector, working like the one in
+YouTube Studio. Private, Unlisted and Public apply as soon as you pick them. Picking
+**Scheduled** shows the date-and-time field (your local time) and a **Schedule** button;
+nothing changes until you press it. The video is set to private with that publish time, and
+the beat shows **Scheduled** with the time. On a Scheduled beat the field shows the current
+time: enter another one and press **Schedule** to reschedule, pick Private or Unlisted to
+cancel the schedule (the beat is back to uploaded), or pick Public to publish now; that last
+one asks once, since it cannot be undone. The same rule as for drafts applies: the time must
+be at least 5 minutes ahead, otherwise the page shows the error and nothing is sent to YouTube.
+
 #### Statistics
 
 The server collects daily views and watch time per video from the Analytics API once a

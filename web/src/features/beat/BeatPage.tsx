@@ -1,17 +1,19 @@
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ExternalLink, Eye, MessageSquare, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { JobList } from "@/features/jobs/JobList";
 import { useJobs } from "@/features/jobs/queries";
 import { Cover } from "@/features/library/Cover";
 import { StatusBadge } from "@/features/library/StatusBadge";
-import { useBeat, useSetPrivacy, type Beat } from "@/features/library/queries";
+import { useBeat, useSetPrivacy, type Beat, type PrivacyChange } from "@/features/library/queries";
 import { useBeatStats } from "@/features/stats/queries";
 import { ViewsChart } from "@/features/stats/ViewsChart";
-import { formatDate, formatDateTime, formatViews } from "@/lib/format";
-import { MetadataForm } from "./MetadataForm";
-import { PrivacySelect } from "./PrivacySelect";
+import { formatDate, formatDateTime, formatViews, serverDate, toDateTimeLocal } from "@/lib/format";
+import { defaultPublishAt, MetadataForm } from "./MetadataForm";
+import { PrivacySelect, type PrivacyChoice } from "./PrivacySelect";
 import { useDeleteBeat, usePatchBeat, useUploadBeat } from "./queries";
 
 /**
@@ -202,35 +204,110 @@ function Metadata({ beat }: { beat: Beat }) {
         <dd>{beat.tags.length ? beat.tags.join(", ") : "—"}</dd>
         <dt className="text-muted-foreground">Category</dt>
         <dd>{categoryLabel(beat.category_id)}</dd>
-        {beat.publish_at && (
-          <>
-            <dt className="text-muted-foreground">Publish at</dt>
-            <dd>Scheduled · {formatDateTime(beat.publish_at)}</dd>
-          </>
-        )}
         <dt className="text-muted-foreground">
           <label htmlFor="privacy">Privacy</label>
         </dt>
-        <dd className="flex items-center gap-3">
-          <PrivacySelect
-            id="privacy"
-            value={beat.privacy}
-            disabled={!onYouTube || setPrivacy.isPending}
-            onChange={(choice) => {
-              if (choice !== "scheduled") setPrivacy.mutate({ id: beat.id, privacy: choice });
-            }}
-          />
-          {!onYouTube && (
-            <span className="text-muted-foreground">Set on YouTube after upload.</span>
-          )}
-          {setPrivacy.error && (
-            <span role="alert" className="text-destructive">
-              {setPrivacy.error.message}
-            </span>
+        <dd className="flex flex-col gap-3">
+          {onYouTube ? (
+            <PrivacyControl
+              key={beat.updated_at}
+              beat={beat}
+              onChange={(change) => setPrivacy.mutate({ id: beat.id, ...change })}
+              pending={setPrivacy.isPending}
+              error={setPrivacy.error?.message ?? null}
+            />
+          ) : (
+            <div className="flex items-center gap-3">
+              <PrivacySelect id="privacy" value={beat.privacy} disabled onChange={() => {}} />
+              <span className="text-muted-foreground">Set on YouTube after upload.</span>
+            </div>
           )}
         </dd>
       </dl>
     </section>
+  );
+}
+
+type PrivacyControlProps = {
+  beat: Beat;
+  onChange: (change: PrivacyChange) => void;
+  pending?: boolean;
+  error?: string | null;
+};
+
+/**
+ * The visibility of an uploaded beat, like in YouTube Studio: one selector for Private,
+ * Unlisted, Public and Scheduled. The first three apply on selection. Scheduled shows the
+ * publish time (the current one on a Scheduled beat, else tomorrow at this hour) and a
+ * Schedule button; only that button sends. Public on a Scheduled beat is the one
+ * irreversible step, so it asks "Publish now?" first.
+ */
+export function PrivacyControl({ beat, onChange, pending = false, error = null }: PrivacyControlProps) {
+  const current: PrivacyChoice = beat.status === "scheduled" ? "scheduled" : beat.privacy;
+  const [picking, setPicking] = useState(false);
+  const [publishAt, setPublishAt] = useState(() =>
+    toDateTimeLocal(beat.publish_at ? serverDate(beat.publish_at) : defaultPublishAt()),
+  );
+  const scheduling = picking || current === "scheduled";
+  const publishAtIso = new Date(publishAt).toISOString();
+  const publishAtInvalid = Number.isNaN(new Date(publishAt).getTime());
+  const unchanged =
+    beat.publish_at !== null && !publishAtInvalid && publishAtIso === serverDate(beat.publish_at).toISOString();
+
+  function onPick(choice: PrivacyChoice) {
+    if (choice === "scheduled") {
+      setPicking(true);
+      return;
+    }
+    setPicking(false);
+    if (choice === current) return; // changed their mind about scheduling; nothing to send
+    if (current === "scheduled" && choice === "public" && !window.confirm("Publish now?")) return;
+    onChange({ privacy: choice, publish_at: null });
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <PrivacySelect
+          id="privacy"
+          aria-label="Privacy"
+          value={scheduling ? "scheduled" : current}
+          allowScheduled
+          disabled={pending}
+          onChange={onPick}
+        />
+        {error && (
+          <span role="alert" className="text-destructive">
+            {error}
+          </span>
+        )}
+      </div>
+      {scheduling && (
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              id="publish_at"
+              type="datetime-local"
+              aria-label="Publish at"
+              value={publishAt}
+              onChange={(e) => setPublishAt(e.target.value)}
+              aria-invalid={publishAtInvalid || undefined}
+              className="w-fit"
+            />
+            <Button
+              size="sm"
+              disabled={pending || publishAtInvalid || unchanged}
+              onClick={() => onChange({ privacy: "private", publish_at: publishAtIso })}
+            >
+              Schedule
+            </Button>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Your local time. Stays private; YouTube makes it public at this time.
+          </span>
+        </div>
+      )}
+    </>
   );
 }
 
