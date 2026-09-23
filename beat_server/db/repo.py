@@ -5,7 +5,18 @@ from datetime import date, datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from beat_server.db.models import Beat, Job, JobKind, JobStatus, Setting, VideoStatsDaily, utcnow
+from beat_server.db.models import (
+    Beat,
+    BeatStatus,
+    Job,
+    JobKind,
+    JobStatus,
+    Setting,
+    VideoStatsDaily,
+    utcnow,
+)
+
+PENDING = (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.PAUSED)
 
 
 class BeatRepo:
@@ -17,6 +28,18 @@ class BeatRepo:
 
     def by_youtube_id(self, youtube_id: str) -> Beat | None:
         return self.session.scalar(select(Beat).where(Beat.youtube_id == youtube_id))
+
+    def due_scheduled(self, now: datetime) -> list[Beat]:
+        """Scheduled Beats whose ``publish_at`` (naive UTC) has passed and that have not
+        been synced since: ``synced_at`` is unset or earlier than ``publish_at``."""
+        stmt = (
+            select(Beat)
+            .where(Beat.status == BeatStatus.SCHEDULED)
+            .where(Beat.publish_at <= now)
+            .where(or_(Beat.synced_at.is_(None), Beat.synced_at < Beat.publish_at))
+            .order_by(Beat.publish_at, Beat.id)
+        )
+        return list(self.session.scalars(stmt))
 
     def list(self) -> list[Beat]:
         """Newest first: by publish date, drafts by the day they were added."""
@@ -91,6 +114,15 @@ class JobRepo:
             .where(Job.kind == kind, Job.status == status, Job.finished_at >= since)
         )
         return self.session.scalar(stmt) or 0
+
+    def has_pending(self, kind: JobKind, beat_id: str) -> bool:
+        """Is a job of ``kind`` for ``beat_id`` queued, running or paused right now?"""
+        stmt = (
+            select(func.count())
+            .select_from(Job)
+            .where(Job.kind == kind, Job.beat_id == beat_id, Job.status.in_(PENDING))
+        )
+        return bool(self.session.scalar(stmt))
 
     def latest(self, kind: JobKind) -> Job | None:
         """The most recently created job of ``kind``, whatever its status."""

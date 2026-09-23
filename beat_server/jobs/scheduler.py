@@ -1,4 +1,4 @@
-"""Enqueue the nightly STATS job.
+"""Enqueue the nightly STATS job and the catch-up SYNC for Scheduled Beats.
 
 Once a day at ``stats_hour`` (local time, from settings) a STATS job is created. The rule is
 "at most one STATS job per calendar day, created no earlier than the hour": if the laptop
@@ -6,7 +6,17 @@ was asleep at the hour, the next tick (including the first one at startup) catch
 A run that FAILED (network retries exhausted, API error) does not count as today's run:
 it is tried again ``FAILED_RETRY_INTERVAL`` after it finished, at most
 ``MAX_FAILED_RETRIES_PER_DAY`` times a day so a permanently broken API does not spam jobs.
-Every timestamp here is naive local time; ``Job.created_at`` is naive UTC and is converted.
+
+The second rule (ADR 0003): YouTube publishes a Scheduled Beat on its own, so once its
+``publish_at`` has passed the local status lags until a sync. Every tick enqueues one SYNC
+job per Scheduled Beat whose time has passed and that has not been synced since
+(``synced_at`` earlier than ``publish_at``), skipping Beats with a SYNC already pending.
+After a successful sync the Beat is Published (or Uploaded, or still Scheduled with a
+later time) and ``synced_at`` is past the old time, so the rule fires once per Beat and a
+video YouTube refuses to publish does not spam jobs.
+
+Every timestamp here is naive local time; ``Job.created_at`` and ``Beat.publish_at`` are
+naive UTC and are converted.
 """
 
 import asyncio
@@ -17,7 +27,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session, sessionmaker
 
 from beat_server.db.models import Job, JobKind, JobStatus
-from beat_server.db.repo import JobRepo
+from beat_server.db.repo import BeatRepo, JobRepo
 from beat_server.jobs.queue import JobQueue
 
 log = logging.getLogger(__name__)
@@ -75,8 +85,30 @@ class Scheduler:
         return due_today
 
     def tick(self) -> Job | None:
-        """Enqueue a STATS job if one is due. Returns it, or None."""
+        """Run both rules. Returns the STATS job if one was due, or None."""
         now = self._clock()
+        self.sync_due_scheduled(now)
+        return self.tick_stats(now)
+
+    def sync_due_scheduled(self, now: datetime) -> list[Job]:
+        """Enqueue one SYNC per Scheduled Beat whose time has passed without a sync since."""
+        with self._session_factory() as session:
+            jobs = JobRepo(session)
+            due = [
+                beat
+                for beat in BeatRepo(session).due_scheduled(local_to_utc(now))
+                if not jobs.has_pending(JobKind.SYNC, beat.id)
+            ]
+        enqueued: list[Job] = []
+        for beat in due:
+            log.info(
+                "scheduled beat %s was due at %s UTC; enqueueing sync", beat.id, beat.publish_at
+            )
+            enqueued.append(self._queue.enqueue(JobKind.SYNC, beat.id))
+        return enqueued
+
+    def tick_stats(self, now: datetime) -> Job | None:
+        """Enqueue a STATS job if one is due. Returns it, or None."""
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         with self._session_factory() as session:
             hour = self._hour_getter(session)
