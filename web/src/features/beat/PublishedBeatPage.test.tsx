@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Beat } from "@/features/library/queries";
 import { serverDate, toDateTimeLocal } from "@/lib/format";
-import { PrivacyControl } from "./BeatPage";
-import { defaultPublishAt } from "./MetadataForm";
+import { PrivacyControl } from "./PublishedBeatPage";
+import { defaultPublishAt } from "./metadata";
 
 const uploaded: Beat = {
   id: "b1",

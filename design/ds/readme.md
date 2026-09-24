@@ -57,6 +57,7 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 | `.settings-row` + `.what` / `.how`, `.account` | Settings | components/settings.html |
 | `.stats`, `.stats-head`, `.bars` + `i` (`.peak`, `.partial`), `.bars-axis` | Daily bars | components/stats.html |
 | `.card`, `.elev-sm/md/lg`, `.hr`, `.hr-soft` | Generic surface, elevation, rules | foundations/layout.html |
+| `.crumb` (+ `.end`), `.split-form` + `.col-form` / `.col-preview`, `.fact-row`, `.yt-frame`, `.yt-meta`, `.yt-title`, `.tag-input .tag-entry` | The Draft screen: breadcrumb head, form beside the YouTube preview, fact rows, editable tag box | components/forms.html |
 
 ## Do
 
