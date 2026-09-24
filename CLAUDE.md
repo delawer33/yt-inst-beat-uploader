@@ -81,6 +81,10 @@ Both are read and written with the `DesignSync` tool. ADR 0005 has the why.
 - A visual change made here goes into `design/ds/styles.css`, `readme.md` and the component
   page, and is pushed to the Design System in the same task. Never a local stylesheet in
   `web/`; Tailwind is layout glue only (flex, grid, gap), never colour, radius or type.
+  `web/src/styles/globals.css` is the Tailwind entry point and holds nothing else.
+- Cascade: `design/ds/styles.css` is imported unlayered, Tailwind utilities live in
+  `@layer utilities`, so a DS class silently beats a utility on the same property at any
+  specificity. A DS class owns every property it sets; Tailwind may only add others.
 - New page or element: the user chooses per task. **Code first** for small things (a variant,
   a column, a state): build it from existing classes, add what is missing to the Design
   System. **Design first** for a new page or interaction (a calendar, a Jobs page): the user

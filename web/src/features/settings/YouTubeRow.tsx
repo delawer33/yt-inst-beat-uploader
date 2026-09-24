@@ -46,7 +46,7 @@ export function YouTubeRow() {
       <div className="how">
         <div className="account" data-testid="account">
           <div>
-            <div className="font-semibold" data-testid="channel-title">
+            <div className="title" data-testid="channel-title">
               {channel ? channel.title : "No channel yet"}
             </div>
             <div className="text-muted num">

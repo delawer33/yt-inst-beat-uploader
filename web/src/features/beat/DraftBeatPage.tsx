@@ -5,7 +5,7 @@ import { useJobs, useRetryJob } from "@/features/jobs/queries";
 import { useBeats, type Beat, type Privacy } from "@/features/library/queries";
 import { useAuthStatus } from "@/features/settings/authQueries";
 import { serverDate, toDateTimeLocal } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { clsx } from "clsx";
 import {
   MAX_DESCRIPTION,
   MAX_TAGS,
@@ -239,7 +239,7 @@ export function DraftBeatView({
         </Link>
         <span className="text-muted">/</span>
         <span>{beat.title || "New beat"}</span>
-        <span className={cn("tag", beat.status === "queued" ? "tag-accent" : "tag-outline")}>
+        <span className={clsx("tag", beat.status === "queued" ? "tag-accent" : "tag-outline")}>
           {beat.status === "queued" ? "Queued" : "Draft"}
         </span>
         <span className="end text-muted num" role="status">
@@ -314,7 +314,7 @@ export function DraftBeatView({
           <div className="field">
             <label htmlFor="title">
               Title
-              <span className={cn("counter", form.title.length > MAX_TITLE && "text-accent")}>
+              <span className={clsx("counter", form.title.length > MAX_TITLE && "text-accent")}>
                 {form.title.length} / {MAX_TITLE}
               </span>
             </label>
@@ -331,7 +331,7 @@ export function DraftBeatView({
             <label htmlFor="description">
               Description
               <span
-                className={cn("counter", form.description.length > MAX_DESCRIPTION && "text-accent")}
+                className={clsx("counter", form.description.length > MAX_DESCRIPTION && "text-accent")}
               >
                 {form.description.length} / {MAX_DESCRIPTION}
               </span>
@@ -349,7 +349,7 @@ export function DraftBeatView({
           <div className="field">
             <label htmlFor="tags">
               Tags
-              <span className={cn("counter", tagsLen > MAX_TAGS && "text-accent")}>
+              <span className={clsx("counter", tagsLen > MAX_TAGS && "text-accent")}>
                 {tagsLen} / {MAX_TAGS}
               </span>
             </label>

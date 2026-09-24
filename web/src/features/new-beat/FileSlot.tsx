@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { cn } from "@/lib/utils";
+import { clsx } from "clsx";
 import { EXTENSIONS, formatBytes, type Kind } from "./files";
 
 const LABEL: Record<Kind, string> = { audio: "Audio", image: "Cover image" };
@@ -54,7 +54,7 @@ export function FileSlot({ kind, file, onFiles, disabled = false }: Props) {
       }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
-      className={cn("drop hero", over && "active", disabled && "dimmed")}
+      className={clsx("drop hero", over && "active", disabled && "dimmed")}
     >
       <span className="drop-title">{label}</span>
       <span className="drop-hint">

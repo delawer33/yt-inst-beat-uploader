@@ -83,7 +83,8 @@
 
   /* layout */
   --sidebar-w: 240px;
-  --panel-w: 440px;
+  --panel-w: 440px;      /* the side panel */
+  --preview-w: 440px;    /* the Draft screen's YouTube-preview column */
   --page-x: 24px;
 
   /* motion — nothing bounces, blurs or scales */
@@ -91,6 +92,8 @@
   --dur-hover: 120ms;
   --dur-state: 200ms;
   --dur-panel: 320ms;
+
+  color-scheme: dark;   /* dark-only: scrollbars, form controls, canvas */
 }
 
 /* ══ base ═══════════════════════════════════════════════════════════════ */
@@ -429,12 +432,15 @@ textarea.input { min-height: 90px; resize: vertical; }
 .crumb { display: flex; align-items: center; gap: var(--space-2); padding-bottom: 12px; border-bottom: var(--rule-soft); font-size: var(--text-small); }
 .crumb a { text-decoration: none; }
 .crumb .end { margin-left: auto; }
-.split-form { display: grid; grid-template-columns: minmax(0, 1fr) var(--panel-w); }
+.split-form { display: grid; grid-template-columns: minmax(0, 1fr) var(--preview-w); }
 .split-form > * { min-width: 0; }
 .split-form .col-form { display: flex; flex-direction: column; gap: 14px; padding: var(--space-5) var(--space-5) 0 0; border-right: var(--rule); }
 .split-form .col-preview { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); background: var(--color-surface); }
 .fact-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding-bottom: 6px; border-bottom: 1px solid var(--color-divider); }
 .fact-row:last-child { border-bottom: 0; }
+/* Deliberate literal, not a token: the letterbox behind a 16:9 still is black because
+   that is what YouTube's own player shows. It must not follow the ground if the ground
+   ever changes, so it takes no `--color-*`. */
 .yt-frame { aspect-ratio: 16 / 9; display: grid; place-items: center; background: #000; overflow: hidden; }
 .yt-frame img { max-width: 100%; max-height: 100%; width: auto; }
 .yt-meta { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: start; }
@@ -453,3 +459,8 @@ textarea.input { min-height: 90px; resize: vertical; }
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 .toolbar { flex-wrap: wrap; row-gap: var(--space-2); }
+
+/* ── 2b fixes ──────────────────────────────────────────────────────────
+   The bold first line of an `.account` card, which the Settings screen and
+   the component page were both setting by hand. */
+.account .title { font-weight: 600; }

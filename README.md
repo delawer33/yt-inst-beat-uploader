@@ -244,8 +244,15 @@ beat_upload/
   errors.py               exceptions the CLI reports without a traceback
 beat_server/              FastAPI app for `serve`: settings, SQLite models/repos, migrations
 web/                      React frontend, built into web/dist and served by beat_server
+design/ds/                the Design System: the one stylesheet the frontend links (ADR 0005)
+docs/adr/                 the decisions behind all of the above
 tests/                    pytest unit tests (no network, no ffmpeg)
 ```
+
+The frontend carries no styles of its own. Every colour, size, font, radius and component
+class comes from `design/ds/styles.css`, a mirror of the "Beat Upload" project in Claude
+Design; Tailwind is layout glue only. `design/ds/readme.md` is the guide, and
+`design/ds/components/*.html` show every class in use — open them in a browser.
 
 ## Development
 
@@ -255,6 +262,14 @@ ruff check . && ruff format .
 pytest
 cd web && npm install && npm run lint:tokens && npm run api:check && npm test && npm run build
 ```
+
+`npm run api:check` needs an interpreter that can import `beat_server`; with the venv not
+activated, pass it: `PYTHON=../.venv/bin/python npm run api:check`.
+
+`npm run lint:tokens` fails on a hex colour, an `oklch()` / `rgb()` / `hsl()`, a `style=`
+prop or any Tailwind colour / radius / font utility under `web/src/` — a missing colour or
+size is added to `design/ds/` and pushed to Claude Design, never written in `web/`. See
+`web/README.md` for the cascade rule that comes with a single unlayered stylesheet.
 
 Database schema changes: edit `beat_server/db/models.py`, then
 `alembic revision --autogenerate -m "..."` (config in `alembic.ini`, scripts in
