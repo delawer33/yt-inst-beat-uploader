@@ -443,3 +443,13 @@ textarea.input { min-height: 90px; resize: vertical; }
 .tag-input .tag-entry { flex: 1; min-width: 140px; padding: 2px 4px; font: inherit; font-size: var(--text-body); color: inherit; background: transparent; border: 0; }
 .tag-input .tag-entry:focus-visible { outline-offset: -2px; }
 .split-form .col-form .action-bar { padding: 14px 0; }
+
+/* ── 2a fixes ──────────────────────────────────────────────────────────
+   A group label for a `.seg` that names the group instead of labelling one
+   control, and a toolbar that wraps now the Library has one chip per Beat
+   status. */
+.field > .group-label {
+  display: block; font-size: var(--text-small); margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.toolbar { flex-wrap: wrap; row-gap: var(--space-2); }

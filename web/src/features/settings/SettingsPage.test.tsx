@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { SettingsPage } from "./SettingsPage";
@@ -54,6 +54,12 @@ beforeEach(() => {
   api.POST.mockResolvedValue({ data: syncJob });
 });
 
+/** The Save button of one settings row, found by the row rather than by position. */
+function saveIn(rowTitle: string) {
+  const row = screen.getByText(rowTitle).closest(".settings-row");
+  return within(row as HTMLElement).getByRole("button", { name: "Save" });
+}
+
 function renderPage(entry = "/settings") {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -84,7 +90,40 @@ test("the three rows render, with the account card and the connection state", as
 test("the hour and the last run come from the server", async () => {
   renderPage();
   await waitFor(() => expect(screen.getByLabelText(/^Hour/)).toHaveValue(4));
-  expect(screen.getByText(/last run/)).not.toHaveTextContent("never");
+  // The jobs query feeds the last run and settles on its own clock, so wait for it too.
+  await waitFor(() => expect(screen.getByTestId("last-run")).toHaveTextContent(/last run \S+ 24, 2026/));
+  expect(screen.getByTestId("last-run")).not.toHaveTextContent("never");
+  expect(screen.getByTestId("last-run")).not.toHaveTextContent("unknown");
+});
+
+test("a full page of jobs with no stats job in it says unknown, never 'never'", async () => {
+  const filler = Array.from({ length: 50 }, (_, i) => ({
+    ...syncJob,
+    id: `r${i}`,
+    kind: "render",
+    status: "done",
+    finished_at: "2026-09-24T09:00:00",
+  }));
+  api.GET.mockImplementation(async (path: string) => {
+    if (path === "/api/settings") return { data: settings };
+    if (path === "/api/auth/status") return { data: authStatus };
+    if (path === "/api/jobs") return { data: filler };
+    return { data: null, error: { detail: `unexpected GET ${path}` } };
+  });
+  renderPage();
+  await waitFor(() => expect(screen.getByTestId("last-run")).toHaveTextContent(/unknown/));
+  expect(screen.getByTestId("last-run")).not.toHaveTextContent("never");
+});
+
+test("a short page of jobs with no stats job in it really does mean never", async () => {
+  api.GET.mockImplementation(async (path: string) => {
+    if (path === "/api/settings") return { data: settings };
+    if (path === "/api/auth/status") return { data: authStatus };
+    if (path === "/api/jobs") return { data: [] };
+    return { data: null, error: { detail: `unexpected GET ${path}` } };
+  });
+  renderPage();
+  await waitFor(() => expect(screen.getByTestId("last-run")).toHaveTextContent(/last run never/));
 });
 
 test("Run now triggers the sync and shows the job", async () => {
@@ -113,7 +152,7 @@ test("templates load, edit and save through the settings API", async () => {
 
   fireEvent.change(title, { target: { value: "{name} (free)" } });
   fireEvent.change(screen.getByLabelText(/^Tags/), { target: { value: "trap , hard," } });
-  fireEvent.click(screen.getAllByRole("button", { name: "Save" })[2]);
+  fireEvent.click(saveIn("Templates"));
 
   await waitFor(() =>
     expect(api.PUT).toHaveBeenCalledWith("/api/settings", {
@@ -131,7 +170,7 @@ test("the hour saves on its own", async () => {
   renderPage();
   await waitFor(() => expect(screen.getByLabelText(/^Hour/)).toHaveValue(4));
   fireEvent.change(screen.getByLabelText(/^Hour/), { target: { value: "3" } });
-  fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]);
+  fireEvent.click(saveIn("Nightly stats"));
   await waitFor(() =>
     expect(api.PUT).toHaveBeenCalledWith("/api/settings", { body: { stats_hour: 3 } }),
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Job } from "@/api/events";
+import { JOBS_PAGE_LIMIT } from "@/components/Sidebar";
 import { useJobs, useTriggerSync } from "@/features/jobs/queries";
 import { formatDateTime } from "@/lib/format";
 import { Field } from "./Field";
@@ -10,9 +11,31 @@ function isStatsJob(job: Job): boolean {
   return job.kind === "sync" || job.kind === "stats";
 }
 
-/** The last finished sync or stats job; the jobs list is newest first. */
-export function lastRun(jobs: Job[] | undefined): Job | null {
-  return jobs?.find((job) => isStatsJob(job) && job.finished_at !== null) ?? null;
+/**
+ * When the nightly pull last ran, as far as the Jobs we were given can say. `GET /api/jobs`
+ * answers with the newest 50 Jobs workspace-wide, so a full page with no stats Job in it
+ * means the run is behind the window, not that it never happened — "unknown", never "never".
+ */
+export type LastRun =
+  /** A finished stats Job we can see. */
+  | { kind: "at"; at: string }
+  /** The whole history was in front of us and held none. */
+  | { kind: "never" }
+  /** Still loading, or the page of Jobs was full and the run may sit behind it. */
+  | { kind: "unknown"; full: boolean };
+
+export function lastRun(jobs: Job[] | undefined): LastRun {
+  const job = jobs?.find((j) => isStatsJob(j) && j.finished_at !== null) ?? null;
+  if (job?.finished_at != null) return { kind: "at", at: job.finished_at };
+  if (jobs === undefined) return { kind: "unknown", full: false };
+  return jobs.length < JOBS_PAGE_LIMIT ? { kind: "never" } : { kind: "unknown", full: true };
+}
+
+/** "1 Sep 2026, 04:00", "never", or the honest "unknown" when we cannot see far enough. */
+export function lastRunLabel(last: LastRun): string {
+  if (last.kind === "at") return formatDateTime(last.at);
+  if (last.kind === "never") return "never";
+  return last.full ? "unknown (not among the newest 50 jobs)" : "…";
 }
 
 /**
@@ -85,9 +108,8 @@ export function NightlyStatsRow() {
         </form>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted">
-            local · last run {last ? formatDateTime(last.finished_at) : "never"} · pull from
-            YouTube now:
+          <span className="text-muted" data-testid="last-run">
+            local · last run {lastRunLabel(last)} · pull from YouTube now:
           </span>
           <button
             type="button"

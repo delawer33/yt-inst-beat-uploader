@@ -28,10 +28,13 @@ export function useBeatDrop(): BeatDrop {
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const depth = useRef(0);
+  // `create.isPending` only turns true on the next render, so two drops in one tick would
+  // both slip through it and make two Drafts of which only the second is ever opened.
+  const creating = useRef(false);
 
   const onFiles = useCallback(
     (files: File[]) => {
-      if (files.length === 0) return;
+      if (files.length === 0 || creating.current) return;
       const result = receive(EMPTY, files);
       if ("error" in result) {
         setError(result.error);
@@ -43,11 +46,18 @@ export function useBeatDrop(): BeatDrop {
         return;
       }
       setError(null);
+      creating.current = true;
       create.mutate(
         { audio, image },
         {
-          onSuccess: (beat) => navigate(`/beats/${beat.id}`),
-          onError: (failure) => setError(failure.message),
+          onSuccess: (beat) => {
+            creating.current = false;
+            void navigate(`/beats/${beat.id}`);
+          },
+          onError: (failure) => {
+            creating.current = false;
+            setError(failure.message);
+          },
         },
       );
     },
@@ -56,8 +66,12 @@ export function useBeatDrop(): BeatDrop {
 
   useEffect(() => {
     const over = (event: DragEvent) => event.preventDefault();
+    // A cover image dragged out of a BeatCard carries no files; only a drag from outside
+    // the window can become a Draft, so only that one lights the drop target up.
+    const hasFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes("Files");
     const enter = (event: DragEvent) => {
       event.preventDefault();
+      if (!hasFiles(event)) return;
       depth.current += 1;
       setActive(true);
     };

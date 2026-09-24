@@ -32,8 +32,8 @@ Prod. by NOVA · 142 BPM · F# minor</textarea></div>
     <div class="tag-input"><span class="tag tag-neutral">central cee type beat</span><span class="tag tag-neutral">uk drill</span><span class="tag tag-neutral">free type beat</span><span class="tag tag-neutral">type beat</span><span class="tag tag-neutral ghost">+ from last beat</span></div>
   </div>
   <div class="form-grid-2">
-    <div class="field"><label>Privacy</label><div class="seg"><label class="seg-opt"><input type="radio" name="p" checked>Public</label><label class="seg-opt"><input type="radio" name="p">Unlisted</label><label class="seg-opt"><input type="radio" name="p">Private</label></div></div>
-    <div class="field"><label>Publish</label><div class="seg"><label class="seg-opt"><input type="radio" name="s" checked>Now</label><label class="seg-opt"><input type="radio" name="s">Schedule…</label></div></div>
+    <div class="field"><span class="group-label" id="privacy-label">Privacy</span><div class="seg" role="radiogroup" aria-labelledby="privacy-label"><label class="seg-opt"><input type="radio" name="p" checked>Public</label><label class="seg-opt"><input type="radio" name="p">Unlisted</label><label class="seg-opt"><input type="radio" name="p">Private</label></div></div>
+    <div class="field"><span class="group-label" id="publish-label">Publish</span><div class="seg" role="radiogroup" aria-labelledby="publish-label"><label class="seg-opt"><input type="radio" name="s" checked>Now</label><label class="seg-opt"><input type="radio" name="s">Schedule…</label></div></div>
   </div>
   <div class="form-grid-2">
     <div class="field"><label>Client ID</label><input class="input num" value="8123…-apps.googleusercontent.com"></div>
@@ -54,7 +54,7 @@ Prod. by NOVA · 142 BPM · F# minor</textarea></div>
     <div class="field"><label>Tags <span class="counter">312 / 500</span></label>
       <div class="tag-input"><button class="tag tag-neutral">uk drill ×</button><button class="tag tag-neutral">free type beat ×</button><input class="tag-entry" placeholder="Add a tag"></div>
     </div>
-    <div class="action-bar"><button class="btn btn-primary btn-flush btn-grow">Save &amp; upload when rendered <span class="trail">→</span></button><button class="btn btn-secondary">Save draft</button></div>
+    <div class="action-bar"><button class="btn btn-primary btn-flush btn-grow">Save &amp; upload when rendered <span class="trail">→</span></button><button class="btn btn-secondary">Save draft</button><button class="btn btn-secondary">Delete draft</button></div>
   </div>
   <div class="col-preview">
     <div class="label">As it will appear on YouTube</div>
@@ -64,6 +64,8 @@ Prod. by NOVA · 142 BPM · F# minor</textarea></div>
   </div>
 </div>
 <p class="note-text">The Draft screen from Mockup 3b: <code>.crumb</code> head, <code>.split-form</code> with a <code>.col-form</code> beside a <code>.col-preview</code>, <code>.fact-row</code> lines and a <code>.tag-input</code> whose chips are buttons and whose <code>.tag-entry</code> takes the next tag.</p>
+
+<p class="note-text">A <code>.seg</code> that stands for a whole choice takes a <code>.group-label</code> and names itself with <code>aria-labelledby</code>: no single control carries that label, so a <code>&lt;label&gt;</code> would name nothing.</p>
 
 <p class="note-text">Native elements, themed states, no script. Inputs sit on <code>--color-input</code>, a step darker than the surface. Changes save on blur; there is no form-level Save.</p>
 

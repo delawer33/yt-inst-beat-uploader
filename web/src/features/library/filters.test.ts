@@ -5,6 +5,7 @@ import {
   filterBeats,
   jobState,
   sortBeats,
+  STATUS_FILTERS,
   totalViews,
 } from "./filters";
 import { DEFAULT_PREFS, parsePrefs } from "./prefs";
@@ -61,25 +62,60 @@ const beats: Beat[] = [
   beat({ id: "q1", status: "queued", created_at: "2026-09-02T10:00:00" }),
   beat({ id: "p1", status: "published", created_at: "2026-09-01T10:00:00", views: 4200 }),
   beat({ id: "p2", status: "published", created_at: "2026-09-05T10:00:00", views: 90 }),
+  beat({ id: "u1", status: "uploading", created_at: "2026-09-06T10:00:00" }),
+  beat({ id: "u2", status: "uploaded", created_at: "2026-09-07T10:00:00" }),
+  beat({ id: "s1", status: "scheduled", created_at: "2026-09-08T10:00:00" }),
 ];
 
 test("the counts cover every filter; a working Draft counts under both Draft and Working", () => {
-  expect(countBeats(beats)).toEqual({ all: 5, draft: 2, queued: 1, working: 1, published: 2 });
+  expect(countBeats(beats)).toEqual({
+    all: 8,
+    draft: 2,
+    queued: 1,
+    uploading: 1,
+    uploaded: 1,
+    scheduled: 1,
+    published: 2,
+    working: 1,
+  });
   expect(filterBeats(beats, "working").map((b) => b.id)).toEqual(["d2"]);
   expect(filterBeats(beats, "draft").map((b) => b.id)).toEqual(["d1", "d2"]);
-  expect(filterBeats(beats, "all")).toHaveLength(5);
+  expect(filterBeats(beats, "scheduled").map((b) => b.id)).toEqual(["s1"]);
+  expect(filterBeats(beats, "all")).toHaveLength(8);
+});
+
+test("every Beat has a chip: the status counts add up to the Library", () => {
+  const counts = countBeats(beats);
+  const summed = STATUS_FILTERS.reduce((sum, status) => sum + counts[status], 0);
+  expect(summed).toBe(beats.length);
+  expect(counts.all).toBe(beats.length);
+  // No Beat can be in two status chips, and none can be in none of them.
+  for (const b of beats) {
+    expect(STATUS_FILTERS.filter((status) => filterBeats([b], status).length === 1)).toHaveLength(1);
+  }
 });
 
 test("total views is the sum over the list", () => {
   expect(totalViews(beats)).toBe(4290);
 });
 
+test("two Jobs made in the same second: the newer-first list wins the tie", () => {
+  const same = "2026-09-20T10:00:00";
+  // A send makes the render and the upload within one second; `GET /api/jobs` is newest
+  // first, so the upload comes back ahead of the render and is the one that counts.
+  const jobs = [
+    job({ id: "upload", beat_id: "b1", kind: "upload", status: "failed", created_at: same }),
+    job({ id: "render", beat_id: "b1", kind: "render", status: "done", created_at: same }),
+  ];
+  expect([...failedBeats(jobs)]).toEqual(["b1"]);
+});
+
 test("sorting is pure and orders by newest, views or status", () => {
   const order = (sort: "newest" | "views" | "status") => sortBeats(beats, sort).map((b) => b.id);
-  expect(order("newest")).toEqual(["p2", "d2", "d1", "q1", "p1"]);
-  expect(order("views")).toEqual(["p1", "p2", "d2", "d1", "q1"]);
-  expect(order("status")).toEqual(["d2", "d1", "q1", "p2", "p1"]);
-  expect(beats.map((b) => b.id)).toEqual(["d1", "d2", "q1", "p1", "p2"]);
+  expect(order("newest")).toEqual(["s1", "u2", "u1", "p2", "d2", "d1", "q1", "p1"]);
+  expect(order("views")).toEqual(["p1", "p2", "s1", "u2", "u1", "d2", "d1", "q1"]);
+  expect(order("status")).toEqual(["d2", "d1", "q1", "u1", "u2", "s1", "p2", "p1"]);
+  expect(beats.map((b) => b.id)).toEqual(["d1", "d2", "q1", "p1", "p2", "u1", "u2", "s1"]);
 });
 
 test("a beat is failed when its most recent job failed, not an older one", () => {

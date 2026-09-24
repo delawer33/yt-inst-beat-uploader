@@ -1,8 +1,10 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import type { Job } from "@/api/events";
+import { STATUS_FILTERS } from "./filters";
 import { LibraryPage } from "./LibraryPage";
 import type { Beat } from "./queries";
+import { STATUS_LABEL } from "./status";
 
 const mocks = vi.hoisted(() => ({
   beats: [] as unknown[],
@@ -195,4 +197,62 @@ test("an empty library offers the hero drop, Connect YouTube and Import channel"
   expect(screen.queryByRole("link", { name: "Connect YouTube" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Import channel" }));
   expect(mocks.sync).toHaveBeenCalledTimes(1);
+});
+
+test("a Beat whose newest Job failed wears the Failed badge", () => {
+  // Same second for both: the send made them together, and the upload is what failed.
+  mocks.jobs = [
+    { ...job, id: "j-up", beat_id: "d1", kind: "upload", status: "failed", created_at: "2026-09-05T10:00:00" },
+    { ...job, id: "j-ren", beat_id: "d1", kind: "render", status: "done", created_at: "2026-09-05T10:00:00" },
+  ];
+  renderPage();
+  const card = screen.getByRole("link", { name: "Beat d1" }).closest(".beat-card");
+  expect(within(card as HTMLElement).getByText("Failed")).toBeInTheDocument();
+  const other = screen.getByRole("link", { name: "Beat p1" }).closest(".beat-card");
+  expect(within(other as HTMLElement).queryByText("Failed")).not.toBeInTheDocument();
+});
+
+test("every status has a chip and the chip counts add up to the Library", () => {
+  mocks.beats = [
+    ...LIBRARY,
+    beat({ id: "u1", status: "uploading", created_at: "2026-09-06T10:00:00" }),
+    beat({ id: "u2", status: "uploaded", created_at: "2026-09-07T10:00:00" }),
+    beat({ id: "s1", status: "scheduled", created_at: "2026-09-08T10:00:00" }),
+  ];
+  renderPage();
+  const counted = STATUS_FILTERS.map((status) => {
+    const label = screen.getByRole("radio", { name: new RegExp(`^${STATUS_LABEL[status]}`) });
+    return Number(label.closest("label")?.textContent?.replace(/\D/g, "") ?? "0");
+  });
+  expect(counted.reduce((a, b) => a + b, 0)).toBe(mocks.beats.length);
+
+  fireEvent.click(screen.getByRole("radio", { name: /^Scheduled/ }));
+  const shown = screen.getAllByRole("link", { name: /^Beat / });
+  expect(shown).toHaveLength(1);
+  expect(shown[0]).toHaveAttribute("href", "/beats/s1");
+});
+
+test("a second drop while the first Draft is still being created is ignored", () => {
+  renderPage();
+  fireEvent.drop(window, { dataTransfer: { files: [mp3(), png()] } });
+  fireEvent.drop(window, { dataTransfer: { files: [mp3(), png()] } });
+  expect(mocks.createBeat).toHaveBeenCalledTimes(1);
+
+  // Once the first Draft has opened, the window takes files again.
+  const [, handlers] = mocks.createBeat.mock.calls[0] as [
+    unknown,
+    { onSuccess: (beat: Beat) => void },
+  ];
+  handlers.onSuccess(beat({ id: "new" }));
+  fireEvent.drop(window, { dataTransfer: { files: [mp3(), png()] } });
+  expect(mocks.createBeat).toHaveBeenCalledTimes(2);
+});
+
+test("a drag that carries no files leaves the drop target dark", () => {
+  renderPage();
+  fireEvent.dragEnter(window, { dataTransfer: { types: ["text/uri-list"], files: [] } });
+  expect(document.querySelector(".drop.active")).toBeNull();
+
+  fireEvent.dragEnter(window, { dataTransfer: { types: ["Files"], files: [] } });
+  expect(document.querySelector(".drop.active")).not.toBeNull();
 });

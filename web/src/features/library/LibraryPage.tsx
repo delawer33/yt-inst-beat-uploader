@@ -36,9 +36,11 @@ function LibraryView({ beats, drop }: { beats: Beat[]; drop: BeatDrop }) {
   const shown = sortBeats(filterBeats(beats, prefs.filter), prefs.sort);
 
   // The shell wraps the route in `.page-body`; the Library owns its own gutters, because
-  // the head and the toolbar run the full width of the page.
+  // the head and the toolbar run the full width of the page. `min-h-full` would resolve
+  // against the padded content box, so the page would stop 2rem short of the scrollport —
+  // the same 2rem the negative margins give back.
   return (
-    <div className="-mx-6 -my-4 flex min-h-full flex-col">
+    <div className="-mx-6 -my-4 flex min-h-[calc(100%+2rem)] flex-col">
       {beats.length === 0 ? (
         <EmptyLibrary drop={drop} />
       ) : (

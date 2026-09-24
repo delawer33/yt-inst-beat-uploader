@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import type { Job } from "@/api/events";
 import { useJobs, useRetryJob } from "@/features/jobs/queries";
 import { useBeats, type Beat, type Privacy } from "@/features/library/queries";
@@ -14,17 +14,17 @@ import {
   tagsLength,
 } from "./metadata";
 import type { BeatPatch } from "./queries";
-import { usePatchBeat, useUploadBeat } from "./queries";
+import { useDeleteBeat, usePatchBeat, useUploadBeat } from "./queries";
 import { TagInput } from "./TagInput";
 import { YouTubePreview } from "./YouTubePreview";
 
 /** How long the form waits after the last keystroke before it saves. */
 export const AUTOSAVE_MS = 800;
 
-const JOB_LABEL: Record<string, string> = {
+const JOB_LABEL: Record<Job["kind"], string> = {
   render: "Render",
   upload: "Upload",
-  publish: "Publish",
+  sync: "Sync",
   stats: "Stats",
 };
 
@@ -48,10 +48,22 @@ export function formOf(beat: Beat): DraftForm {
   };
 }
 
+/**
+ * `<input type="datetime-local">` carries no seconds, so a stored `publish_at` only ever
+ * round-trips through the picker to the minute. Both sides of the comparison are cut to the
+ * minute, or a schedule set anywhere else (the CLI, the server, SQLite's microseconds) would
+ * read as an edit the moment the page opened.
+ */
+function minuteIso(date: Date): string {
+  const cut = new Date(date);
+  cut.setSeconds(0, 0);
+  return cut.toISOString();
+}
+
 function isoOf(local: string | null): string | null {
   if (local === null) return null;
   const date = new Date(local);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  return Number.isNaN(date.getTime()) ? null : minuteIso(date);
 }
 
 /** Only what the owner actually changed goes into the patch. Pure. */
@@ -62,7 +74,7 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   if (JSON.stringify(form.tags) !== JSON.stringify(beat.tags)) patch.tags = form.tags;
 
   const publishAt = isoOf(form.publishAt);
-  const current = beat.publish_at ? serverDate(beat.publish_at).toISOString() : null;
+  const current = beat.publish_at ? minuteIso(serverDate(beat.publish_at)) : null;
   if (publishAt !== current) patch.publish_at = publishAt;
   // YouTube only schedules private videos, so a schedule decides the privacy.
   const privacy: Privacy = form.publishAt === null ? form.privacy : "private";
@@ -84,33 +96,54 @@ function savedLabel(at: Date | null): string {
 
 /** The Beat page of a Draft or a Queued Beat: hooks in, view below (Mockup 3b). */
 export function DraftBeatPage({ beat }: { beat: Beat }) {
-  const patch = usePatchBeat();
+  // Two observers, never one: react-query keeps the per-call options of the LAST `mutate()`
+  // on an observer, so an autosave landing on the send's observer would throw away the
+  // send's `onSuccess` and the upload would never be asked for.
+  const autosave = usePatchBeat();
+  const send = usePatchBeat();
   const upload = useUploadBeat();
+  const remove = useDeleteBeat();
   const beats = useBeats();
   const auth = useAuthStatus();
   const jobs = useJobs(beat.id);
   const retry = useRetryJob();
+  const navigate = useNavigate();
 
   const failed = beat.active_job === null && !beat.rendered
     ? (jobs.data ?? []).find((job) => job.kind === "render" && job.status === "failed") ?? null
     : null;
 
+  const saved = [autosave, send]
+    .map((m) => (m.isSuccess ? m.submittedAt : 0))
+    .reduce((a, b) => Math.max(a, b), 0);
+
   return (
     <DraftBeatView
+      // A beat→beat navigation that never goes pending would otherwise keep the previous
+      // Beat's form values and autosave them onto this one.
+      key={beat.id}
       beat={beat}
       channel={auth.data?.channel?.title ?? null}
       library={beats.data ?? []}
       failedRender={failed}
-      onSave={(body) => patch.mutate({ id: beat.id, patch: body })}
+      onSave={(body) => autosave.mutate({ id: beat.id, patch: body })}
       onSend={(body) => {
-        const send = () => upload.mutate(beat.id);
-        if (Object.keys(body).length === 0) send();
-        else patch.mutate({ id: beat.id, patch: body }, { onSuccess: send });
+        const go = () => upload.mutate(beat.id);
+        if (Object.keys(body).length === 0) go();
+        else send.mutate({ id: beat.id, patch: body }, { onSuccess: go });
       }}
+      onDelete={() => remove.mutate(beat.id, { onSuccess: () => void navigate("/") })}
       onRetry={(id) => retry.mutate(id)}
-      saving={patch.isPending || upload.isPending}
-      error={patch.error?.message ?? upload.error?.message ?? null}
-      savedAt={patch.isSuccess ? (patch.submittedAt ? new Date(patch.submittedAt) : null) : null}
+      saving={autosave.isPending || send.isPending || upload.isPending}
+      deleting={remove.isPending}
+      error={
+        autosave.error?.message ??
+        send.error?.message ??
+        upload.error?.message ??
+        remove.error?.message ??
+        null
+      }
+      savedAt={saved > 0 ? new Date(saved) : null}
     />
   );
 }
@@ -122,8 +155,10 @@ type ViewProps = {
   failedRender: Job | null;
   onSave: (patch: BeatPatch) => void;
   onSend: (patch: BeatPatch) => void;
+  onDelete: () => void;
   onRetry: (jobId: string) => void;
   saving?: boolean;
+  deleting?: boolean;
   error?: string | null;
   savedAt?: Date | null;
 };
@@ -141,8 +176,10 @@ export function DraftBeatView({
   failedRender,
   onSave,
   onSend,
+  onDelete,
   onRetry,
   saving = false,
+  deleting = false,
   error = null,
   savedAt = null,
 }: ViewProps) {
@@ -150,17 +187,33 @@ export function DraftBeatView({
   const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const pending = useRef<BeatPatch | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dirty = patchOf(form, beat);
   const dirtyKey = JSON.stringify(dirty);
   pending.current = dirty;
 
+  /**
+   * An armed autosave is dropped the moment the owner presses a button: the explicit action
+   * carries the very same patch, and letting the timer fire afterwards would save the Beat a
+   * second time behind the action's back.
+   */
+  const cancelAutosave = useCallback(() => {
+    if (timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }, []);
+
   // Autosave: one PATCH of everything that changed, once the typing stops.
   useEffect(() => {
     const body = pending.current;
     if (body === null || Object.keys(body).length === 0 || !savable(form)) return;
-    const timer = setTimeout(() => onSave(body), AUTOSAVE_MS);
-    return () => clearTimeout(timer);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      onSave(body);
+    }, AUTOSAVE_MS);
+    return cancelAutosave;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirtyKey]);
 
@@ -305,8 +358,10 @@ export function DraftBeatView({
 
           <div className="form-grid-2">
             <div className="field">
-              <label>Privacy</label>
-              <div className="seg">
+              <span className="group-label" id="privacy-label">
+                Privacy
+              </span>
+              <div className="seg" role="radiogroup" aria-labelledby="privacy-label">
                 {(["public", "unlisted", "private"] as const).map((value) => (
                   <label key={value} className="seg-opt">
                     <input
@@ -323,8 +378,10 @@ export function DraftBeatView({
               </div>
             </div>
             <div className="field">
-              <label>Publish</label>
-              <div className="seg">
+              <span className="group-label" id="publish-label">
+                Publish
+              </span>
+              <div className="seg" role="radiogroup" aria-labelledby="publish-label">
                 <label className="seg-opt">
                   <input
                     type="radio"
@@ -371,13 +428,23 @@ export function DraftBeatView({
             </div>
           )}
 
+          {beat.status === "draft" && !beat.has_files && (
+            <span className="drop-hint">
+              Audio and cover are missing, so this Draft cannot be rendered or sent. Delete it
+              and drop the two files again.
+            </span>
+          )}
+
           <div className="action-bar">
             {beat.status === "draft" && (
               <button
                 type="button"
                 className="btn btn-primary btn-flush btn-grow"
                 disabled={blocked || !beat.has_files}
-                onClick={() => onSend(patchOf(form, beat))}
+                onClick={() => {
+                  cancelAutosave();
+                  onSend(patchOf(form, beat));
+                }}
               >
                 Save &amp; upload when rendered <span className="trail">→</span>
               </button>
@@ -386,11 +453,30 @@ export function DraftBeatView({
               type="button"
               className="btn btn-secondary"
               disabled={blocked || Object.keys(dirty).length === 0}
-              onClick={() => onSave(patchOf(form, beat))}
+              onClick={() => {
+                cancelAutosave();
+                onSave(patchOf(form, beat));
+              }}
             >
               Save draft
             </button>
+            {beat.status === "draft" && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={deleting}
+                onClick={() => {
+                  if (!window.confirm(`Delete the draft “${beat.title || "Untitled"}” and its files?`))
+                    return;
+                  cancelAutosave();
+                  onDelete();
+                }}
+              >
+                Delete draft
+              </button>
+            )}
           </div>
+
         </div>
 
         <div className="col-preview">

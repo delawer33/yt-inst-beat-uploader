@@ -1,17 +1,30 @@
 import type { Job } from "@/api/events";
 import { serverDate } from "@/lib/format";
 import type { Beat, BeatStatus } from "./queries";
+import { STATUS_LABEL } from "./status";
 
-export type Filter = "all" | "draft" | "queued" | "working" | "published";
+export type Filter = "all" | BeatStatus | "working";
 export type Sort = "newest" | "views" | "status";
 export type View = "grid" | "list";
 
+/**
+ * One chip per Beat status, so every Beat sits under exactly one of them and the counts add
+ * up to the Library. "Working" is not a status — it is the Job view laid over the same
+ * Beats — so it is counted beside them, never instead of them.
+ */
+export const STATUS_FILTERS: BeatStatus[] = [
+  "draft",
+  "queued",
+  "uploading",
+  "uploaded",
+  "scheduled",
+  "published",
+];
+
 export const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "draft", label: "Draft" },
-  { id: "queued", label: "Queued" },
+  ...STATUS_FILTERS.map((status) => ({ id: status as Filter, label: STATUS_LABEL[status] })),
   { id: "working", label: "Working" },
-  { id: "published", label: "Published" },
 ];
 
 export const SORTS: { id: Sort; label: string }[] = [
@@ -30,8 +43,9 @@ export function isWorking(beat: Beat): boolean {
 }
 
 /**
- * The filters are not a partition: a Draft that is rendering counts under both Draft and
- * Working, because one says what the owner did and the other what is happening now.
+ * The status chips partition the Library; "Working" overlaps them, because a Draft that is
+ * rendering counts under both Draft and Working — one says what the owner did, the other
+ * what is happening now.
  */
 export function matches(beat: Beat, filter: Filter): boolean {
   switch (filter) {
@@ -49,7 +63,7 @@ export function filterBeats(beats: Beat[], filter: Filter): Beat[] {
 }
 
 export function countBeats(beats: Beat[]): Record<Filter, number> {
-  const counts = { all: 0, draft: 0, queued: 0, working: 0, published: 0 };
+  const counts = {} as Record<Filter, number>;
   for (const filter of FILTER_IDS) {
     counts[filter] = beats.filter((beat) => matches(beat, filter)).length;
   }
@@ -59,15 +73,6 @@ export function countBeats(beats: Beat[]): Record<Filter, number> {
 export function totalViews(beats: Beat[]): number {
   return beats.reduce((sum, beat) => sum + beat.views, 0);
 }
-
-const STATUS_ORDER: BeatStatus[] = [
-  "draft",
-  "queued",
-  "uploading",
-  "uploaded",
-  "scheduled",
-  "published",
-];
 
 const newestFirst = (a: Beat, b: Beat) =>
   serverDate(b.created_at).getTime() - serverDate(a.created_at).getTime();
@@ -81,7 +86,7 @@ export function sortBeats(beats: Beat[], sort: Sort): Beat[] {
     case "status":
       return list.sort(
         (a, b) =>
-          STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || newestFirst(a, b),
+          STATUS_FILTERS.indexOf(a.status) - STATUS_FILTERS.indexOf(b.status) || newestFirst(a, b),
       );
     default:
       return list.sort(newestFirst);
@@ -115,9 +120,12 @@ export function failedBeats(jobs: Job[] | undefined): Set<string> {
   for (const job of jobs ?? []) {
     if (job.beat_id === null) continue;
     const current = newest.get(job.beat_id);
+    // The list is newest first, so the first Job seen for a Beat wins a tie on `created_at`:
+    // a send makes the render and the upload within the same second, and the upload is the
+    // one that says how the Beat is doing.
     if (
       current === undefined ||
-      serverDate(job.created_at).getTime() >= serverDate(current.created_at).getTime()
+      serverDate(job.created_at).getTime() > serverDate(current.created_at).getTime()
     ) {
       newest.set(job.beat_id, job);
     }
