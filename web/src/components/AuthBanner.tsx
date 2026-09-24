@@ -1,23 +1,37 @@
 import { Link } from "react-router";
 import { useAuthStatus, type AuthStatus } from "@/features/settings/authQueries";
 
-const MESSAGE: Partial<Record<AuthStatus, string>> = {
-  not_configured: "Google client is not configured. Uploads and stats are off until it is.",
-  not_connected: "YouTube is not connected.",
-  expired: "The YouTube connection expired. Reconnect to resume paused jobs.",
+type Message = { head: string; detail: string; action: string };
+
+const MESSAGE: Partial<Record<AuthStatus, Message>> = {
+  not_configured: {
+    head: "Google client is not configured.",
+    detail: "Uploads and the nightly stats pull are off until it is. Rendering continues.",
+    action: "Open Settings →",
+  },
+  not_connected: {
+    head: "YouTube is not connected.",
+    detail: "Uploads and the nightly stats pull are off until it is. Rendering continues.",
+    action: "Connect →",
+  },
+  expired: {
+    head: "YouTube access expired.",
+    detail: "Uploads and the nightly stats pull are paused. Rendering continues.",
+    action: "Reconnect →",
+  },
 };
 
 /** Presentational: shown for every status except `connected`. */
 export function AuthBannerView({ status }: { status: AuthStatus | undefined }) {
-  if (!status || status === "connected") return null;
+  const message = status && MESSAGE[status];
+  if (!message) return null;
   return (
-    <div role="alert" className="border-b border-border bg-warning text-warning-foreground">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-2 text-sm">
-        <span>{MESSAGE[status]}</span>
-        <Link to="/settings" className="font-medium underline underline-offset-4">
-          Open Settings
-        </Link>
-      </div>
+    <div role="alert" className="banner">
+      <b>{message.head}</b>
+      <span>{message.detail}</span>
+      <Link to="/settings" className="btn btn-inverse">
+        {message.action}
+      </Link>
     </div>
   );
 }
