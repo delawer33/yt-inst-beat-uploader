@@ -49,7 +49,7 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 | `.beat-grid`, `.beat-card` (+ `.working`, `.failed`, `.selected-multi`), `.cover` + `.rail`, `.beat-title`, `.beat-meta` (`.views`, `.delta`, `.state`), `.thumb` (`.md/.lg/.xl`) | The Library cell and its list twin | components/beat-card.html |
 | `.drop` (+ `.active`, `.tile`, `.hero`), `.drop-title`, `.drop-hint` | Drop zone | components/dropzone.html |
 | `.progress` (+ `.thin`, `.striped`), `.job` (+ `.failed`), `.job-line`, `.job-actions`, `.log` (+ `.clip`), `.queue-row` (+ `.running`, `.last`), `.section-head`, `.note` | Jobs, progress, logs, queue, inline error | components/jobs.html |
-| `.sidebar`, `.brand`, `.nav-item` + `.count` (+ `.live`), `.sidebar-foot`; `.page`, `.page-head`, `.toolbar` + `.toolbar-end`, `.page-body`, `.page-foot`, `.dimmed` | App chrome | components/navigation.html |
+| `.sidebar`, `.brand`, `.nav-item` + `.count` (+ `.live`), `.sidebar-foot` + `.foot-group` / `.foot-line` / `.foot-note`; `.page`, `.page-head`, `.toolbar` + `.toolbar-end`, `.page-body`, `.page-foot`, `.dimmed` | App chrome | components/navigation.html |
 | `.banner` + `.btn-inverse`; `.toast` (+ `.fixed`) | Needs-your-hand banner; ink toast | components/banner-toast.html |
 | `.panel` (+ `.overlay`), `.panel-head` + `.meta`, `.panel-body`, `.panel-hero`, `.file-meta`, `.action-bar` | Beat side panel | components/panel.html |
 | `.dialog-backdrop`, `.dialog`, `.dialog-head/-title/-sub/-body/-actions`, `.steps` + `.step` (`.done/.active/.todo`) + `.mark` | Modal with stepped progress | components/dialog.html |

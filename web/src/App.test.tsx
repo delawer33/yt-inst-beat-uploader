@@ -5,7 +5,7 @@ import { AppShell } from "./components/AppShell";
 
 vi.mock("@/api/client", () => ({ api: { GET: vi.fn().mockResolvedValue({ data: undefined }) } }));
 
-test("AppShell shows the navigation links", () => {
+test("AppShell shows the sidebar navigation and the route below it", () => {
   const router = createMemoryRouter(
     [{ path: "/", element: <AppShell />, children: [{ index: true, element: <p>home</p> }] }],
     { initialEntries: ["/"] },
@@ -16,7 +16,8 @@ test("AppShell shows the navigation links", () => {
     </QueryClientProvider>,
   );
 
-  expect(screen.getByRole("link", { name: "Library" })).toHaveAttribute("href", "/");
+  expect(screen.getByRole("link", { name: /Library/ })).toHaveAttribute("href", "/");
   expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+  expect(screen.queryByRole("link", { name: /New beat/ })).not.toBeInTheDocument();
   expect(screen.getByText("home")).toBeInTheDocument();
 });

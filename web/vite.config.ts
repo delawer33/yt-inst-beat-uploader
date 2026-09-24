@@ -11,6 +11,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // main.tsx imports design/ds/styles.css, one level above the web/ root (ADR 0005).
+    fs: { allow: [".."] },
     // In dev the API comes from `beat-upload serve` on 8765; in prod FastAPI serves dist/.
     proxy: { "/api": "http://127.0.0.1:8765" },
   },
