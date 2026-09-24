@@ -1,0 +1,41 @@
+<!-- @dsCard group="Components" name="Banner & toast" subtitle="The red needs-your-hand banner and the ink toast" viewport="640x360" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Banner & toast</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">Banner</div>
+<div class="banner"><b>YouTube access expired.</b><span>Uploads and the nightly stats pull are paused. Rendering continues.</span><button class="btn btn-inverse">Reconnect →</button></div>
+<div class="banner" style="margin-top:8px"><b>YouTube access expired.</b><span>2 uploads waiting.</span><button class="btn btn-inverse">Reconnect →</button></div>
+<div class="demo-head">Toast</div>
+<div class="row">
+  <div class="toast"><b>Published.</b><span>Central Cee Type Beat — "Ninety" is live as Public.</span><a href="#">Open ↗</a></div>
+</div>
+<div class="row" style="margin-top:8px">
+  <div class="toast"><b>2 drafts added.</b><span>orbit, ninety</span><a href="#">Open first</a></div>
+</div>
+<p class="note-text">The banner sits above the page head, full width, and slides down in 320 ms (<code>.enter-banner</code>). It is the one place red runs as a field. The toast is inverted ink, bottom-left, rises in 200 ms, and always carries one link.</p>
+
+</main>
+</body>
+</html>

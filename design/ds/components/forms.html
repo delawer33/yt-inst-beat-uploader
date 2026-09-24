@@ -1,0 +1,50 @@
+<!-- @dsCard group="Components" name="Forms" subtitle="Title with counter, textarea, tag input, segmented privacy/publish, checkbox" viewport="640x560" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Forms</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="stack" style="gap:16px">
+  <div class="field"><label>Title <span class="counter">64 / 100</span></label><input class="input title" value="[FREE] Central Cee Type Beat — &quot;Ninety&quot; | UK Drill Type Beat 2026"></div>
+  <div class="field"><label>Description</label><textarea class="input" style="min-height:90px;font-size:12px">Free for non-profit. Purchase a lease for commercial use → link in bio.
+Prod. by NOVA · 142 BPM · F# minor</textarea></div>
+  <div class="field"><label>Tags <span class="counter text-muted">312 / 500 chars</span></label>
+    <div class="tag-input"><span class="tag tag-neutral">central cee type beat</span><span class="tag tag-neutral">uk drill</span><span class="tag tag-neutral">free type beat</span><span class="tag tag-neutral">type beat</span><span class="tag tag-neutral ghost">+ from last beat</span></div>
+  </div>
+  <div class="form-grid-2">
+    <div class="field"><label>Privacy</label><div class="seg"><label class="seg-opt"><input type="radio" name="p" checked>Public</label><label class="seg-opt"><input type="radio" name="p">Unlisted</label><label class="seg-opt"><input type="radio" name="p">Private</label></div></div>
+    <div class="field"><label>Publish</label><div class="seg"><label class="seg-opt"><input type="radio" name="s" checked>Now</label><label class="seg-opt"><input type="radio" name="s">Schedule…</label></div></div>
+  </div>
+  <div class="form-grid-2">
+    <div class="field"><label>Client ID</label><input class="input num" value="8123…-apps.googleusercontent.com"></div>
+    <div class="field"><label>Client secret</label><input class="input num" type="password" value="••••••••••••••••••"></div>
+  </div>
+  <div class="field"><label>Folder</label><div class="input-row"><input class="input num" value="~/Music/Beat Upload"><button class="btn btn-secondary">Change…</button></div></div>
+  <label class="radio"><input type="checkbox" checked><span class="dot"></span>Delete the rendered video after a successful upload</label>
+  <div class="row"><div class="seg"><label class="seg-opt"><input type="radio" name="q">1080p30</label><label class="seg-opt"><input type="radio" name="q" checked>1080p60</label><label class="seg-opt"><input type="radio" name="q">4K</label></div><div class="seg"><label class="seg-opt"><input type="radio" name="t" checked>Dark</label><label class="seg-opt"><input type="radio" name="t" disabled>Light · soon</label></div></div>
+</div>
+<p class="note-text">Native elements, themed states, no script. Inputs sit on <code>--color-input</code>, a step darker than the surface. Changes save on blur; there is no form-level Save.</p>
+
+</main>
+</body>
+</html>

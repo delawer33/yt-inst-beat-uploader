@@ -1,0 +1,48 @@
+<!-- @dsCard group="Components" name="BeatCard" subtitle="Idle, working, failed, published and selected — the Library grid cell" viewport="640x520" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — BeatCard</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">States</div>
+<div class="beat-grid" style="grid-template-columns:repeat(3,1fr)">
+  <div class="beat-card"><div class="cover" style="background:linear-gradient(135deg,#e6b422 50%,#c8961a 50%)"></div><div class="beat-title">Gunna Type Beat — "Velvet"</div><div class="beat-meta"><span class="views">42,118</span><span class="delta">▲ 18% · 7d</span></div></div>
+  <div class="beat-card working"><div class="cover" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"><div class="rail"><i style="width:62%"></i></div></div><div class="beat-title">Central Cee Type Beat — "Ninety"</div><div class="beat-meta"><span class="state"><span class="dot-live pulse">●</span> Rendering</span><span class="num text-muted">62% · 1:40 left</span></div></div>
+  <div class="beat-card failed"><div class="cover" style="background:linear-gradient(135deg,#e0632b 50%,#b54e20 50%)"><span class="badge badge-failed">failed</span></div><div class="beat-title">Yeat Type Beat — "Static"</div><div class="beat-meta"><span class="state">Render failed</span></div></div>
+  <div class="beat-card"><div class="cover" style="background:linear-gradient(135deg,#7a4fd6 50%,#5d3bab 50%)"><span class="badge">queued</span></div><div class="beat-title">Don Toliver Type Beat — "Halo"</div><div class="beat-meta"><span class="num text-muted">upload only · Sep 25 18:00</span></div></div>
+  <div class="beat-card selected-multi"><div class="cover" style="background:linear-gradient(135deg,#2fa36b 50%,#1f7a4f 50%)"></div><div class="beat-title">Lil Baby Type Beat — "Sable"</div><div class="beat-meta"><span class="views">9,402</span><span class="delta down">▼ 3% · 7d</span></div></div>
+  <div class="drop tile"><div class="drop-title">Drop<br>mp3 + png</div><div class="drop-hint">or click</div></div>
+</div>
+<div class="demo-head">List row (same data as a table)</div>
+<table class="table">
+  <thead><tr><th style="width:44px"></th><th>Beat</th><th>Status</th><th class="r">Views</th><th class="r">7d</th><th class="r">Published</th></tr></thead>
+  <tbody>
+    <tr><td><div class="thumb" style="background:linear-gradient(135deg,#e6b422 50%,#c8961a 50%)"></div></td><td style="font-weight:600">Gunna Type Beat — "Velvet"</td><td><span class="tag tag-ink">Published</span></td><td class="num r" style="font-weight:800">42,118</td><td class="num r text-accent-soft">▲ 18%</td><td class="num r text-muted">Sep 12</td></tr>
+    <tr><td><div class="thumb" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"></div></td><td style="font-weight:600">Central Cee Type Beat — "Ninety"</td><td><span class="tag tag-accent">● Rendering</span></td><td class="num r text-muted">—</td><td class="num r text-muted">—</td><td class="num r text-muted">—</td></tr>
+  </tbody>
+</table>
+<p class="note-text">Idle: cover, title, views, 7-day delta. Working: red outline + a rail on the cover. Failed: red outline + corner badge. Nothing else changes. Cover art stays in color; it is the user's content.</p>
+
+</main>
+</body>
+</html>

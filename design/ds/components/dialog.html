@@ -1,0 +1,42 @@
+<!-- @dsCard group="Components" name="Dialog & steps" subtitle="Reconnect dialog: title, sub, stepped progress, actions" viewport="640x460" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Dialog & steps</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="frame" style="height:400px"><div class="dialog-backdrop abs">
+  <div class="dialog">
+    <div class="dialog-head"><div class="dialog-title">Reconnect YouTube</div><div class="dialog-sub">Google signs you out every 7 days while the app is in testing mode. Nothing else changed.</div></div>
+    <div class="dialog-body steps">
+      <div class="step done"><span class="mark">✓</span><span>Browser opened for Google sign-in</span><span class="time">14:03:10</span></div>
+      <div class="step active"><span class="mark"></span><span>Waiting for you to approve <b>NOVA Beats</b>…</span><span class="time">0:42</span></div>
+      <div class="step todo"><span class="mark"></span><span>Resume 2 uploads and today's stats pull</span><span></span></div>
+    </div>
+    <div class="dialog-actions"><button class="btn btn-primary btn-grow btn-flush">Open the sign-in page again <span class="trail">↗</span></button><button class="btn btn-secondary">Cancel</button></div>
+  </div>
+</div></div>
+<p class="note-text">Dialogs are rare: only for flows that wait on something outside the app. Steps are 16px squares: done = ink, active = red blinking outline, todo = divider outline at 45% text.</p>
+
+</main>
+</body>
+</html>

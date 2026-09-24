@@ -1,0 +1,53 @@
+<!-- @dsCard group="Components" name="Beat panel" subtitle="Side panel over the Library: head, hero with progress, form, action bar" viewport="640x640" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Beat panel</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="frame" style="height:600px;display:grid;grid-template-columns:1fr 440px">
+  <div class="page dimmed"><div class="page-head"><h2>Library</h2><span class="num text-muted">65 beats</span></div><div class="page-body beat-grid" style="grid-template-columns:1fr 1fr"><div class="beat-card working"><div class="cover" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"></div><div class="beat-title">Central Cee — "Ninety"</div></div><div class="beat-card"><div class="cover" style="background:linear-gradient(135deg,#e6b422 50%,#c8961a 50%)"></div><div class="beat-title">Gunna — "Velvet"</div></div></div></div>
+  <section class="panel">
+    <div class="panel-head"><span class="tag tag-accent"><span class="dot-live pulse">●</span> Rendering</span><span class="meta">added just now</span><button class="btn btn-ghost on-ink">Expand ↗</button><button class="btn btn-icon sm" aria-label="Close">✕</button></div>
+    <div class="panel-body">
+      <div class="panel-hero">
+        <div class="cover" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"><div class="rail"><i style="width:62%"></i></div></div>
+        <div class="stack" style="gap:6px;font-size:12px">
+          <div class="job-line"><span>Rendering video</span><span class="time">62% · 1:40 left</span></div>
+          <div class="progress"><i style="width:62%"></i></div>
+          <div class="file-meta">ninety.mp3 · 3:12 · 320 kbps<br>ninety.png · 3000×3000</div>
+          <div class="text-muted" style="font-size:11px">Then: upload as <b style="color:var(--color-text)">Public</b>, scheduled off.</div>
+        </div>
+      </div>
+      <div class="hr" style="margin:0"></div>
+      <div class="field"><label>Title <span class="counter">64 / 100</span></label><input class="input title" value="[FREE] Central Cee Type Beat — &quot;Ninety&quot;"></div>
+      <div class="field"><label>Tags</label><div class="tag-input"><span class="tag tag-neutral">central cee type beat</span><span class="tag tag-neutral">uk drill</span><span class="tag tag-neutral ghost">+ from last beat</span></div></div>
+      <div class="form-grid-2"><div class="field"><label>Privacy</label><div class="seg"><label class="seg-opt"><input type="radio" name="p" checked>Public</label><label class="seg-opt"><input type="radio" name="p">Unlisted</label></div></div><div class="field"><label>Publish</label><div class="seg"><label class="seg-opt"><input type="radio" name="s" checked>Now</label><label class="seg-opt"><input type="radio" name="s">Schedule…</label></div></div></div>
+    </div>
+    <div class="action-bar"><button class="btn btn-primary btn-grow btn-flush">Save &amp; upload when rendered <span class="trail">→</span></button><button class="btn btn-secondary">Save draft</button></div>
+  </section>
+</div>
+<p class="note-text">The panel is 440px, slides in from the right (<code>.enter-panel</code>), and dims everything behind it. Failed state swaps the tag for <code>.tag-failed</code> and inserts a <code>.note</code> block with the error and actions above the form.</p>
+
+</main>
+</body>
+</html>

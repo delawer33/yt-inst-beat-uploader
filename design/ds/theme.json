@@ -1,0 +1,75 @@
+{
+  "name": "Beat Upload",
+  "product": "Beat Upload (yt-inst-beat-uploader) \u2014 product-specific, not for reuse",
+  "parent": {
+    "name": "Modernist",
+    "projectId": "3b3bbc34-e56a-492d-8d30-a90790f3dab5",
+    "change": "ground inverted to dark"
+  },
+  "palette": {
+    "hue": 8,
+    "band": "dark",
+    "scheme": "mono",
+    "sat": 0.85,
+    "bg": "#121110",
+    "surface": "#1c1a19",
+    "surface2": "#2a2726",
+    "input": "#161414",
+    "text": "#f3f2f2",
+    "accent": "#ec3013"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Archivo",
+      "class": "grotesque",
+      "weights": [
+        400,
+        600,
+        800
+      ]
+    },
+    "body": {
+      "family": "Archivo",
+      "class": "grotesque",
+      "weights": [
+        400,
+        600,
+        800
+      ]
+    },
+    "mono": "ui-monospace"
+  },
+  "bodySize": 13,
+  "density": 1,
+  "radius": 0,
+  "layoutStyle": "grid",
+  "dividers": "strong",
+  "buttonAlign": "left",
+  "imageTreatment": "none",
+  "icons": "lucide",
+  "layout": {
+    "sidebar": 240,
+    "panel": 440,
+    "pageGutter": 24
+  },
+  "motion": {
+    "hover": 120,
+    "state": 200,
+    "panel": 320,
+    "ease": "cubic-bezier(.2,0,0,1)"
+  },
+  "redMeans": [
+    "primary action",
+    "in progress",
+    "needs your hand"
+  ],
+  "lifecycle": [
+    "draft",
+    "queued",
+    "rendering",
+    "uploading",
+    "uploaded",
+    "published",
+    "failed"
+  ]
+}

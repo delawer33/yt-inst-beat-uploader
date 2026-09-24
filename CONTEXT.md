@@ -43,12 +43,37 @@ on its own. Neither the service nor the laptop needs to be running for it to go 
 a private video can be Scheduled. Once YouTube makes it public it is Published.
 _Avoid_: Delayed, pending, postponed, timed
 
+**Draft**:
+A Beat the owner has not yet sent to YouTube. Its Metadata is still editable. A Draft may
+already be rendering or Rendered; that is the state of its Job, not of the Beat.
+_Avoid_: New, pending, unsent
+
+**Rendered**:
+A Draft whose video file is ready, so sending it will not wait for a Render.
+_Avoid_: Encoded, prepared
+
+**Queued**:
+A Beat the owner has sent, waiting for its Upload. Still Queued while its Render finishes.
+Metadata stays editable until the Upload starts.
+_Avoid_: Sent, submitted
+
 **Job**:
 One unit of background work on a Beat (render, upload, publish, stats refresh) with a status
-and a log. What the UI shows progress for.
+and a log. What the UI shows progress for. A Job says what is happening to a Beat right now;
+the Beat's status says what the owner has done with it.
 _Avoid_: Task, operation
 
 **Workspace**:
 Everything belonging to one channel owner: their credentials, their Library, their files.
 Today there is exactly one, local to the machine; the concept exists so there can be more.
 _Avoid_: Account, user, profile
+
+**Design System**:
+The tokens, classes and component pages that define how Beat Upload looks. Lives in the
+Claude Design project of the same name; the repository carries a mirror of it.
+_Avoid_: Theme, styles, DS (in prose)
+
+**Mockup**:
+A screen drawn in the "Beat Upload UI mockups" Claude Design project. The source a screen is
+built from; never a screen of the application itself.
+_Avoid_: Design, prototype, wireframe

@@ -1,0 +1,44 @@
+<!-- @dsCard group="Components" name="StatsChart" subtitle="Daily bars, peak in red, today hatched; range segment" viewport="640x360" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — StatsChart</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="grid-2">
+  <div class="stats">
+    <div class="stats-head"><span class="stat stat-md">8,214</span><div class="seg sm"><label class="seg-opt"><input type="radio" name="r" checked>7d</label><label class="seg-opt"><input type="radio" name="r">28d</label><label class="seg-opt"><input type="radio" name="r">90d</label></div></div>
+    <div class="bars"><i style="height:30%"></i><i style="height:38%"></i><i style="height:35%"></i><i style="height:62%"></i><i style="height:88%"></i><i style="height:100%" class="peak"></i><i style="height:74%" class="partial"></i></div>
+    <div class="bars-axis"><span>Sep 17</span><span>today (partial)</span></div>
+  </div>
+  <div class="stack" style="gap:6px;font-size:12px">
+    <div class="row" style="justify-content:space-between"><span class="text-muted">Views</span><span class="stat stat-sm">42,118</span></div>
+    <div class="row" style="justify-content:space-between"><span class="text-muted">7d</span><span class="num text-accent-soft">▲ 18%</span></div>
+    <div class="row" style="justify-content:space-between"><span class="text-muted">Avg view</span><span class="num">1:42 · 53%</span></div>
+    <div class="row" style="justify-content:space-between"><span class="text-muted">Watch time</span><span class="num">1,190 h</span></div>
+  </div>
+</div>
+<p class="note-text">Bars, one per day, no smoothing, no gridlines. Peak day is red; today is hatched because the nightly pull hasn't run. Bars are neutral-400, not the accent, so the one red bar carries meaning.</p>
+
+</main>
+</body>
+</html>

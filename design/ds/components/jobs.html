@@ -1,0 +1,60 @@
+<!-- @dsCard group="Components" name="JobStatus & queue" subtitle="Running job with log, failed job with actions, queue rows, history table" viewport="640x640" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — JobStatus & queue</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">Job blocks</div>
+<div class="grid-2">
+  <div class="job">
+    <div class="job-line"><span><span class="dot-live pulse">● </span>Rendering video</span><span class="time">00:48 / ~02:30</span></div>
+    <div class="progress"><i style="width:34%"></i></div>
+    <pre class="log">ffmpeg -loop 1 -i cover.png -i beat.mp3 …
+frame= 1440 fps=241 q=-1.0 size=  12800kB</pre>
+  </div>
+  <div class="job failed">
+    <div class="job-line"><span class="job-title">Upload failed</span><span class="time">14:02</span></div>
+    <div style="font-size:12px;color:var(--color-text-75)">YouTube 403 <span class="num">quotaExceeded</span> — daily API quota reached. Resets at 09:00.</div>
+    <div class="job-actions"><button class="btn btn-primary btn-sm">Retry at 09:00</button><button class="btn btn-secondary btn-sm">Retry now</button><button class="btn btn-ghost btn-sm">Copy log</button></div>
+  </div>
+</div>
+<div class="demo-head">Queue</div>
+<div class="queue-row running">
+  <div class="thumb lg" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"></div>
+  <div class="stack" style="gap:6px;min-width:0"><div class="job-title" style="font-size:14px">Central Cee Type Beat — "Ninety"</div><div class="job-line"><span><span class="dot-live pulse">● </span>Rendering · step 1 of 2</span><span class="time">62% · 1:40 left</span></div><div class="progress"><i style="width:62%"></i></div></div>
+  <pre class="log clip">frame= 7020 fps=241 q=-1.0 size= 61440kB time=00:01:57.00
+frame= 7261 fps=241 q=-1.0 size= 63488kB time=00:02:01.01</pre>
+</div>
+<div class="queue-row"><div class="thumb lg queued" style="background:linear-gradient(135deg,#e0632b 50%,#b54e20 50%)"></div><div><div class="job-title">Yeat Type Beat — "Static"</div><div class="text-muted">Queued · render then upload as Public</div></div><div class="side"><span>starts after Ninety</span><a href="#">Move up</a></div></div>
+<div class="queue-row last"><div class="thumb lg queued" style="background:linear-gradient(135deg,#7a4fd6 50%,#5d3bab 50%)"></div><div><div class="job-title">Don Toliver Type Beat — "Halo"</div><div class="text-muted">Queued · upload only · scheduled Sep 25 18:00</div></div><div class="side"><span>3rd</span><a href="#">Remove</a></div></div>
+<div class="demo-head">History with an inline log</div>
+<table class="table" style="font-size:12px"><tbody>
+  <tr><td class="num text-muted" style="width:110px">today 03:00</td><td>Stats refresh · 64 videos</td><td><span class="tag tag-failed">Failed</span></td><td class="num r text-muted">0.4 s</td><td class="r"><a href="#">Show log ▾</a></td></tr>
+  <tr class="expand"><td colspan="5"><div class="note"><div style="font-size:12px">YouTube 401 <span class="num">invalid_grant</span> — refresh token expired (7-day limit for unverified apps).</div><pre class="log">GET youtube/v3/videos?part=statistics&amp;id=k9F2… → 401</pre><div class="job-actions"><button class="btn btn-primary btn-sm">Reconnect &amp; retry</button><button class="btn btn-ghost btn-sm">Copy log</button></div></div></td></tr>
+  <tr><td class="num text-muted">Sep 22 03:00</td><td>Stats refresh · 64 videos</td><td><span class="tag tag-neutral">Done</span></td><td class="num r text-muted">0.8 s</td><td class="r"><a href="#" class="text-muted">Show log</a></td></tr>
+</tbody></table>
+<p class="note-text">A failed job is a surface with a 2px red left rule, the error in plain words, the raw log in mono, and the actions right there. The user never has to go somewhere else to act.</p>
+
+</main>
+</body>
+</html>

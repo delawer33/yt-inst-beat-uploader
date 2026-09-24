@@ -1,0 +1,57 @@
+<!-- @dsCard group="Foundations" name="Typography" subtitle="Archivo throughout; 13px working size; tabular numerals everywhere numbers stack" viewport="640x640" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Typography</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">Scale</div>
+<div class="stack" style="gap:10px">
+  <div class="hero">Drop<br>a beat<span class="text-accent">.</span></div>
+  <div class="text-muted" style="font-size:11px">.hero — 72 / .95 / -0.03em. First-run empty state only.</div>
+  <h1>Beat Upload <span class="text-accent">/</span> tokens</h1>
+  <div class="text-muted" style="font-size:11px">h1 — 44 / 1.1 / -0.02em. System sheet.</div>
+  <div class="display">Display 40</div>
+  <h2>Library</h2>
+  <div class="text-muted" style="font-size:11px">h2 — 28. Every page title.</div>
+  <h3>Heading 24</h3>
+  <h4>Drop mp3 + png</h4>
+  <div class="text-muted" style="font-size:11px">h4 — 20. Drop-zone titles.</div>
+  <h5>Title 15 / 600</h5>
+  <div>Body 13 — the app's working size, Linear density.</div>
+  <div style="font-size:12px">Small 12 — form labels, secondary rows, banners' second sentence.</div>
+  <div class="label">Label 11 caps</div>
+  <div class="file-meta">ninety.mp3 · 3:12 · 320 kbps — mono 11 for file facts and logs</div>
+</div>
+<div class="demo-head">Numbers</div>
+<div class="row" style="align-items:baseline;gap:16px">
+  <span class="stat stat-lg">128,406</span>
+  <span class="stat stat-md">8,214</span>
+  <span class="stat stat-sm">42,118</span>
+  <span class="num text-accent-soft" style="font-size:11px">▲ 18% · 7d</span>
+  <span class="num text-muted" style="font-size:11px">62% · 1:40 left</span>
+</div>
+<p class="note-text">Every number gets <code>.num</code> (tabular) so columns of views line up. Big counts use <code>.stat</code> at 800 weight, line-height 1.</p>
+
+</main>
+</body>
+</html>

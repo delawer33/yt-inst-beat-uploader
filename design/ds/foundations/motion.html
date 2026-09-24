@@ -1,0 +1,47 @@
+<!-- @dsCard group="Foundations" name="Motion" subtitle="Slide and fade along the grid; 120 / 200 / 320 ms; only a working job pulses" viewport="640x420" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Motion</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">Durations</div>
+<table class="table" style="font-size:12px">
+  <tr><td class="num">120 ms</td><td>hover — button fill, nav tint, card surface</td><td><code>--dur-hover</code></td></tr>
+  <tr><td class="num">200 ms</td><td>state flip — segment switch, progress step, toast, card enter</td><td><code>--dur-state</code></td></tr>
+  <tr><td class="num">320 ms</td><td>panels — side panel slide, banner drop</td><td><code>--dur-panel</code></td></tr>
+  <tr><td></td><td>easing</td><td><code>cubic-bezier(.2,0,0,1)</code> · <code>--ease</code></td></tr>
+</table>
+<div class="demo-head">Entrances</div>
+<div class="row">
+  <span class="tag tag-accent"><span class="dot-live pulse">●</span> Rendering</span>
+  <span class="text-muted" style="font-size:11px">the only pulse — <code>.dot-live.pulse</code>, 1.2 s</span>
+</div>
+<div class="stack" style="margin-top:12px">
+  <div class="progress striped"><i style="width:62%"></i></div>
+  <div class="text-muted" style="font-size:11px"><code>.progress.striped</code> — the working stripe, linear, because progress is data</div>
+</div>
+<p class="note-text">Nothing bounces, blurs or scales. Use <code>.enter-panel</code>, <code>.enter-banner</code>, <code>.enter-toast</code>, <code>.enter-card</code> for entrances; they respect <code>prefers-reduced-motion</code>. Progress width changes are linear, not eased.</p>
+
+</main>
+</body>
+</html>

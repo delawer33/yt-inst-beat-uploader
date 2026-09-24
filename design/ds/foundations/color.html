@@ -1,0 +1,51 @@
+<!-- @dsCard group="Foundations" name="Color" subtitle="Dark ground, one red accent, tonal ramps for tints only" viewport="640x560" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Color</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">Roles</div>
+<div class="grid-2" style="font-size:11px">
+  <div style="height:64px;background:var(--color-bg);border:1px solid var(--color-divider);padding:6px">bg<br><span class="num">#121110 · --color-bg</span></div>
+  <div style="height:64px;background:var(--color-surface);border:1px solid var(--color-divider);padding:6px">surface<br><span class="num">#1c1a19 · --color-surface</span></div>
+  <div style="height:64px;background:var(--color-surface-2);padding:6px">surface-2<br><span class="num">#2a2726 · hover, tracks</span></div>
+  <div style="height:64px;background:var(--color-input);border:1px solid var(--color-divider);padding:6px">input<br><span class="num">#161414 · --color-input</span></div>
+  <div style="height:64px;background:var(--color-text);color:var(--color-bg);padding:6px">text<br><span class="num">#f3f2f2 · --color-text</span></div>
+  <div style="height:64px;background:var(--color-accent);color:#fff;padding:6px">accent<br><span class="num">#ec3013 · --color-accent</span></div>
+</div>
+<div class="demo-head">Accent ramp 100 → 900</div>
+<div style="display:grid;grid-template-columns:repeat(9,1fr);height:22px"><div style="background:var(--color-accent-100)"></div><div style="background:var(--color-accent-200)"></div><div style="background:var(--color-accent-300)"></div><div style="background:var(--color-accent-400)"></div><div style="background:var(--color-accent-500)"></div><div style="background:var(--color-accent-600)"></div><div style="background:var(--color-accent-700)"></div><div style="background:var(--color-accent-800)"></div><div style="background:var(--color-accent-900)"></div></div>
+<div class="demo-head">Neutral ramp 100 → 900</div>
+<div style="display:grid;grid-template-columns:repeat(9,1fr);height:22px"><div style="background:var(--color-neutral-100)"></div><div style="background:var(--color-neutral-200)"></div><div style="background:var(--color-neutral-300)"></div><div style="background:var(--color-neutral-400)"></div><div style="background:var(--color-neutral-500)"></div><div style="background:var(--color-neutral-600)"></div><div style="background:var(--color-neutral-700)"></div><div style="background:var(--color-neutral-800)"></div><div style="background:var(--color-neutral-900)"></div></div>
+<div class="demo-head">Muted text steps</div>
+<div class="stack" style="gap:4px">
+  <div class="text-soft">75% — body copy on empty states, secondary tag text</div>
+  <div class="text-muted">55% — meta, labels, timestamps, logs</div>
+  <div style="color:var(--color-text-45)">45% — not-yet steps, placeholders</div>
+  <div class="text-accent-soft">accent-300 — positive deltas, "5 days left"</div>
+</div>
+<p class="note-text">Red is reserved for three things: the primary action, work in progress, and anything that needs the user's hand (expired access, failed job). Everything else is ink on ground. Cover art is the only other color on a page. Tinted fills on the dark ground use the <em>deep</em> ramp steps (accent-900 fill, accent-300 text), the inverse of Modernist on light.</p>
+
+</main>
+</body>
+</html>

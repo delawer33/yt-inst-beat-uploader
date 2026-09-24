@@ -1,0 +1,45 @@
+<!-- @dsCard group="Components" name="Settings rows" subtitle="Two-column rows with a 2px rule, account card, page footer" viewport="640x520" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Settings rows</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="settings-row">
+  <div class="what"><b>YouTube</b><p>Google OAuth client for a Desktop app. Access expires every 7 days while the app is in testing.</p></div>
+  <div class="how">
+    <div class="account"><div class="thumb md"></div><div><div style="font-weight:600">NOVA Beats</div><div class="text-muted num">UC7…Xq · 58 videos · connected Sep 18</div></div><div class="end"><div>Access valid</div><div class="num text-accent-soft">5 days left</div></div></div>
+    <div class="row"><button class="btn btn-secondary">Reconnect now</button><button class="btn btn-ghost">Disconnect</button></div>
+  </div>
+</div>
+<div class="settings-row">
+  <div class="what"><b>Nightly stats</b><p>One pull per day builds the day-by-day history. Costs ~1 quota unit per video.</p></div>
+  <div class="how">
+    <div class="row" style="align-items:flex-end"><div class="field" style="width:120px"><label>Time</label><input class="input num" value="03:00"></div><div class="text-muted" style="font-size:12px;padding-bottom:9px">local · last run today 03:00 · 0.8 s · <a href="#">Run now</a></div></div>
+  </div>
+</div>
+<div class="page-foot text-muted num"><span>Beat Upload 0.4 · localhost:5173 · ffmpeg 7.1</span><span>Changes save on blur</span></div>
+<p class="note-text" style="margin-top:16px">Left column: what it is, in 28ch. Right column: the controls, max 560px. Every row starts with a 2px rule. No Save button anywhere.</p>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!-- @dsCard group="Theme" name="Parameters" subtitle="The parameters this system was derived from" viewport="640x520" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beat Upload — Parameters</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+/* Demo scaffolding only — everything visual comes from styles.css. */
+.demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.demo.wide { max-width: 1000px; }
+.demo-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; margin: var(--space-6) 0 var(--space-3); }
+.demo-head:first-child { margin-top: 0; }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.stack { display: grid; gap: var(--space-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.note-text { font-size: 12px; opacity: .6; max-width: 60ch; }
+code { font-size: .92em; }
+.frame { position: relative; overflow: hidden; border: 1px solid var(--color-divider); }
+.def{display:flex;gap:12px;padding:4px 0}dt{flex:none;width:120px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.5}dd{margin:0;font-size:14px}</style>
+</head>
+<body>
+<main class="demo">
+
+<div class="demo-head">Theme parameters</div>
+<section style="border:1px solid var(--color-divider);padding:12px 16px" data-theme-ground="dark" data-theme-scheme="mono" data-theme-hue="8">
+<dl style="margin:0">
+  <div class="def"><dt>Product</dt><dd>Beat Upload — this system is for it and nothing else</dd></div>
+  <div class="def"><dt>Parent</dt><dd>Modernist (3b3bbc34), ground inverted</dd></div>
+  <div class="def"><dt>Ground</dt><dd>dark only (scheme: mono, hue 8°)</dd></div>
+  <div class="def"><dt>Fonts</dt><dd>Archivo / Archivo · mono for logs and file facts</dd></div>
+  <div class="def"><dt>Working size</dt><dd>13px body, Linear density</dd></div>
+  <div class="def"><dt>Radius</dt><dd>0px</dd></div>
+  <div class="def"><dt>Dividers</dt><dd>2px between sections, 1px inside</dd></div>
+  <div class="def"><dt>Buttons</dt><dd>solid red primary, flush-left labels</dd></div>
+  <div class="def"><dt>Red means</dt><dd>primary action · in progress · needs your hand</dd></div>
+  <div class="def"><dt>Motion</dt><dd>120 / 200 / 320 ms, cubic-bezier(.2,0,0,1); only a working dot pulses</dd></div>
+  <div class="def"><dt>Imagery</dt><dd>cover art in full color, never tinted</dd></div>
+  <div class="def"><dt>Icons</dt><dd>Lucide, inline SVG on currentColor</dd></div>
+</dl>
+</section>
+<p class="note-text">Retune in styles.css only, and keep theme.json and readme.md in step.</p>
+
+</main>
+</body>
+</html>
