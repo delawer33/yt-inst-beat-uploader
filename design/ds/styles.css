@@ -422,3 +422,24 @@ textarea.input { min-height: 90px; resize: vertical; }
 .drop.hero { font: inherit; letter-spacing: normal; }
 /* The whole card is a link, so it must not take the accent `a:hover` colour. */
 .beat-card:hover { color: inherit; }
+
+/* ══ #16 New beat / Draft ═══════════════════════════════════════════════
+   The preview-first Draft screen: a breadcrumb head, a form column beside a
+   YouTube-preview column, fact rows and an editable tag box. */
+.crumb { display: flex; align-items: center; gap: var(--space-2); padding-bottom: 12px; border-bottom: var(--rule-soft); font-size: var(--text-small); }
+.crumb a { text-decoration: none; }
+.crumb .end { margin-left: auto; }
+.split-form { display: grid; grid-template-columns: minmax(0, 1fr) var(--panel-w); }
+.split-form > * { min-width: 0; }
+.split-form .col-form { display: flex; flex-direction: column; gap: 14px; padding: var(--space-5) var(--space-5) 0 0; border-right: var(--rule); }
+.split-form .col-preview { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); background: var(--color-surface); }
+.fact-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding-bottom: 6px; border-bottom: 1px solid var(--color-divider); }
+.fact-row:last-child { border-bottom: 0; }
+.yt-frame { aspect-ratio: 16 / 9; display: grid; place-items: center; background: #000; overflow: hidden; }
+.yt-frame img { max-width: 100%; max-height: 100%; width: auto; }
+.yt-meta { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: start; }
+.yt-title { font-weight: 600; font-size: var(--text-body); line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.tag-input button.tag { border: 0; font-family: inherit; cursor: pointer; }
+.tag-input .tag-entry { flex: 1; min-width: 140px; padding: 2px 4px; font: inherit; font-size: var(--text-body); color: inherit; background: transparent; border: 0; }
+.tag-input .tag-entry:focus-visible { outline-offset: -2px; }
+.split-form .col-form .action-bar { padding: 14px 0; }
