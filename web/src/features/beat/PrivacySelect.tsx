@@ -20,7 +20,7 @@ type Props = {
   "aria-label"?: string;
 };
 
-/** Native select styled with the design tokens, like the one in YouTube Studio. */
+/** Native select in the Design System's `.input` skin, like the one in YouTube Studio. */
 export function PrivacySelect({
   value,
   onChange,
@@ -37,7 +37,7 @@ export function PrivacySelect({
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value as PrivacyChoice)}
-      className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+      className="input"
     >
       {shown.map((option) => (
         <option key={option.value} value={option.value}>

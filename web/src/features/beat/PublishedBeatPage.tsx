@@ -1,155 +1,228 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { ExternalLink, Eye, MessageSquare, ThumbsUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
-import { JobList } from "@/features/jobs/JobList";
-import { useJobs } from "@/features/jobs/queries";
-import { Cover } from "@/features/library/Cover";
-import { StatusBadge } from "@/features/library/StatusBadge";
+import type { Job } from "@/api/events";
+import { JobHistory } from "@/features/jobs/JobHistory";
+import { JOB_LABEL } from "@/features/jobs/job";
+import { useJobs, useRetryJob } from "@/features/jobs/queries";
+import { STATUS_LABEL, STATUS_TAG } from "@/features/library/status";
 import { useSetPrivacy, type Beat, type PrivacyChange } from "@/features/library/queries";
-import { useBeatStats } from "@/features/stats/queries";
-import { ViewsChart } from "@/features/stats/ViewsChart";
+import { DailyBars } from "@/features/stats/DailyBars";
+import { useBeatStats, type DayPoint } from "@/features/stats/queries";
 import { formatDate, formatDateTime, formatViews, serverDate, toDateTimeLocal } from "@/lib/format";
 import { defaultPublishAt } from "./metadata";
 import { PrivacySelect, type PrivacyChoice } from "./PrivacySelect";
 
-/**
- * A Beat that has left the owner's hands — Uploading, Uploaded, Scheduled or Published.
- * Layout, top to bottom:
- *   header  — cover, title, status, counters, published (or scheduled) date,
- *             "Open on YouTube", and the progress line of a running upload
- *   metadata — read-only Metadata plus the privacy selector
- *   stats   — ViewsChart of the last 28 days, only for beats on YouTube
- *   jobs    — JobList beatId=id
- *
- * Moved here verbatim from the old one-size-fits-all BeatPage when #16 split the page;
- * ticket #17 rebuilds it from Mockup 3c.
- */
+/** A Beat that has left the owner's hands: Uploading, Uploaded, Scheduled or Published. */
 export function PublishedBeatPage({ beat }: { beat: Beat }) {
+  const jobs = useJobs(beat.id);
+  const stats = useBeatStats(beat.id);
+  const retry = useRetryJob();
+  const setPrivacy = useSetPrivacy();
+
   return (
-    <div className="flex flex-col gap-8">
-      <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-        ← Library
-      </Link>
-      <header className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <Cover src={beat.cover_url} title={beat.title} className="rounded-xl border" />
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-2xl font-semibold">{beat.title || "Untitled"}</h1>
-            <div className="flex items-center gap-3">
-              <StatusBadge status={beat.status} />
-              {beat.status === "scheduled" && beat.publish_at ? (
-                <span className="text-sm text-muted-foreground">
-                  Scheduled · {formatDateTime(beat.publish_at)}
-                </span>
-              ) : (
-                beat.published_at && (
-                  <span className="text-sm text-muted-foreground">
-                    Published {formatDate(beat.published_at)}
-                  </span>
-                )
-              )}
-            </div>
-          </div>
-          <Counters beat={beat} />
-          {beat.youtube_url && (
-            <Button asChild variant="outline" size="sm" className="w-fit">
-              <a href={beat.youtube_url} target="_blank" rel="noreferrer">
-                Open on YouTube
-                <ExternalLink aria-hidden="true" />
-              </a>
-            </Button>
-          )}
-          <CurrentJob beatId={beat.id} />
+    <PublishedBeatView
+      beat={beat}
+      jobs={jobs.data ?? []}
+      points={stats.data ?? []}
+      jobsError={jobs.error?.message ?? retry.error?.message ?? null}
+      statsError={stats.error?.message ?? null}
+      statsPending={beat.youtube_id !== null && stats.isPending}
+      onRetry={(id) => retry.mutate(id)}
+      retryingId={retry.isPending ? (retry.variables ?? null) : null}
+      onPrivacy={(change) => setPrivacy.mutate({ id: beat.id, ...change })}
+      privacyPending={setPrivacy.isPending}
+      privacyError={setPrivacy.error?.message ?? null}
+    />
+  );
+}
+
+type ViewProps = {
+  beat: Beat;
+  jobs: Job[];
+  points: DayPoint[];
+  jobsError?: string | null;
+  statsError?: string | null;
+  statsPending?: boolean;
+  onRetry: (jobId: string) => void;
+  retryingId?: string | null;
+  onPrivacy: (change: PrivacyChange) => void;
+  privacyPending?: boolean;
+  privacyError?: string | null;
+};
+
+/**
+ * Mockup 1f: the crumb with the status tag and the YouTube link, the cover beside the
+ * locked Metadata and the counters, the daily views, then the Jobs of this Beat next to
+ * the Metadata and — while it is Scheduled — the schedule controls.
+ *
+ * Left out for lack of API data: the BPM and the length of the audio, the "vs prior 7d"
+ * deltas, lifetime watch time and average view (the per-day series only covers the
+ * window), and attempt counters beyond what a Job records.
+ */
+export function PublishedBeatView({
+  beat,
+  jobs,
+  points,
+  jobsError = null,
+  statsError = null,
+  statsPending = false,
+  onRetry,
+  retryingId = null,
+  onPrivacy,
+  privacyPending = false,
+  privacyError = null,
+}: ViewProps) {
+  const title = beat.title || "Untitled";
+  const job = beat.active_job;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="crumb">
+        <Link to="/" className="text-muted">
+          ← Library
+        </Link>
+        <span className="text-muted">/</span>
+        <span>{title}</span>
+        <span className={`tag ${STATUS_TAG[beat.status]}`} data-status={beat.status}>
+          {STATUS_LABEL[beat.status]}
+        </span>
+        {beat.youtube_url !== null && (
+          <a className="end num" href={beat.youtube_url} target="_blank" rel="noreferrer">
+            {shortUrl(beat.youtube_url)} ↗
+          </a>
+        )}
+      </div>
+
+      <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-7">
+        <div className="cover">
+          {beat.cover_url !== null && <img src={beat.cover_url} alt={`Cover of ${title}`} />}
         </div>
-      </header>
-      <Metadata beat={beat} />
-      {beat.youtube_id && <Stats beatId={beat.id} />}
-      <JobList beatId={beat.id} />
+        <div className="flex min-w-0 flex-col gap-3">
+          <h1 className="display">{title}</h1>
+          <div className="file-meta">{facts(beat)}</div>
+          <hr className="hr" />
+          <dl className="grid grid-cols-3 gap-4">
+            {[
+              { label: "Views", value: beat.views },
+              { label: "Likes", value: beat.likes },
+              { label: "Comments", value: beat.comments },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex flex-col gap-1">
+                <dt className="label">{label}</dt>
+                <dd className="stat stat-lg" aria-label={label}>
+                  {formatViews(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+
+      {job !== null && <CurrentJob job={job} />}
+
+      {beat.youtube_id !== null &&
+        (statsError !== null ? (
+          <div className="note" role="alert">
+            <div className="note-title">The daily views did not load</div>
+            <span className="text-soft">{statsError}</span>
+          </div>
+        ) : statsPending ? (
+          <p className="text-muted">Loading…</p>
+        ) : (
+          <DailyBars points={points} />
+        ))}
+
+      <div className="grid grid-cols-2 gap-7">
+        <JobHistory jobs={jobs} onRetry={onRetry} retryingId={retryingId} error={jobsError} />
+        <Metadata
+          beat={beat}
+          onPrivacy={onPrivacy}
+          pending={privacyPending}
+          error={privacyError}
+        />
+      </div>
     </div>
   );
 }
 
-const JOB_LABEL: Record<string, string> = { render: "Rendering", upload: "Uploading" };
-
-/** A compact progress line while a RENDER or UPLOAD job of this beat is queued or running. */
-function CurrentJob({ beatId }: { beatId: string }) {
-  const jobs = useJobs(beatId);
-  const job = jobs.data?.find(
-    (j) => (j.kind === "render" || j.kind === "upload") && (j.status === "running" || j.status === "queued"),
-  );
-  if (!job) return null;
+/** The one Job that is queued, running or paused on this Beat right now. */
+function CurrentJob({ job }: { job: Job }) {
   const percent = Math.round(job.progress * 100);
   return (
-    <div className="flex flex-col gap-1.5" aria-live="polite">
-      <span className="text-sm text-muted-foreground">
-        {job.status === "queued" ? `${JOB_LABEL[job.kind]} queued` : `${JOB_LABEL[job.kind]}… ${percent}%`}
-      </span>
-      <Progress value={percent} aria-label={`${job.kind} progress`} />
+    <div className="job" aria-live="polite">
+      <div className="job-line">
+        <span className="job-title">
+          <span className="dot-live pulse">● </span>
+          {JOB_LABEL[job.kind]}
+        </span>
+        <span className="time num">{job.status === "queued" ? "queued" : `${percent}%`}</span>
+      </div>
+      <div className="progress thin striped">
+        <i style={{ width: `${percent}%` }} />
+      </div>
+      {job.message && <pre className="log clip">{job.message}</pre>}
     </div>
   );
 }
 
-function Counters({ beat }: { beat: Beat }) {
-  const items = [
-    { label: "views", icon: Eye, value: formatViews(beat.views) },
-    { label: "likes", icon: ThumbsUp, value: formatViews(beat.likes) },
-    { label: "comments", icon: MessageSquare, value: formatViews(beat.comments) },
-  ];
-  return (
-    <dl className="flex gap-6">
-      {items.map(({ label, icon: Icon, value }) => (
-        <div key={label} className="flex flex-col gap-1">
-          <dt className="inline-flex items-center gap-1 text-xs text-muted-foreground capitalize">
-            <Icon aria-hidden="true" className="size-3.5" />
-            {label}
-          </dt>
-          <dd className="text-lg font-semibold" aria-label={label}>
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** Read-only metadata plus the privacy selector, for beats past the draft stage. */
-function Metadata({ beat }: { beat: Beat }) {
-  const setPrivacy = useSetPrivacy();
+/** The Metadata as YouTube now holds it: read-only, with the visibility beside it. */
+function Metadata({
+  beat,
+  onPrivacy,
+  pending,
+  error,
+}: {
+  beat: Beat;
+  onPrivacy: (change: PrivacyChange) => void;
+  pending: boolean;
+  error: string | null;
+}) {
   const onYouTube = beat.youtube_id !== null;
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Metadata</h2>
-      <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
-        <dt className="text-muted-foreground">Description</dt>
-        <dd className="whitespace-pre-wrap">{beat.description || "—"}</dd>
-        <dt className="text-muted-foreground">Tags</dt>
-        <dd>{beat.tags.length ? beat.tags.join(", ") : "—"}</dd>
-        <dt className="text-muted-foreground">Category</dt>
-        <dd>{categoryLabel(beat.category_id)}</dd>
-        <dt className="text-muted-foreground">
-          <label htmlFor="privacy">Privacy</label>
-        </dt>
-        <dd className="flex flex-col gap-3">
-          {onYouTube ? (
-            <PrivacyControl
-              key={`${beat.privacy}|${beat.publish_at ?? ""}`}
-              beat={beat}
-              onChange={(change) => setPrivacy.mutate({ id: beat.id, ...change })}
-              pending={setPrivacy.isPending}
-              error={setPrivacy.error?.message ?? null}
+    <div className="flex flex-col gap-3">
+      <div className="section-head">
+        <b>Metadata</b>
+        <span className="text-muted">read-only · edit on YouTube</span>
+      </div>
+      <div className="text-soft whitespace-pre-wrap">{beat.description || "—"}</div>
+      {beat.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {beat.tags.map((tag) => (
+            <span key={tag} className="tag tag-neutral">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="fact-row">
+        <span className="text-soft">Category</span>
+        <span>{categoryLabel(beat.category_id)}</span>
+      </div>
+
+      <div className="field">
+        <label htmlFor="privacy">Visibility</label>
+        {onYouTube ? (
+          <PrivacyControl
+            key={`${beat.privacy}|${beat.publish_at ?? ""}`}
+            beat={beat}
+            onChange={onPrivacy}
+            pending={pending}
+            error={error}
+          />
+        ) : (
+          <div className="flex flex-col gap-1">
+            <PrivacySelect
+              id="privacy"
+              aria-label="Privacy"
+              value={beat.privacy}
+              disabled
+              onChange={() => {}}
             />
-          ) : (
-            <div className="flex items-center gap-3">
-              <PrivacySelect id="privacy" value={beat.privacy} disabled onChange={() => {}} />
-              <span className="text-muted-foreground">Set on YouTube after upload.</span>
-            </div>
-          )}
-        </dd>
-      </dl>
-    </section>
+            <span className="drop-hint">Set on YouTube after upload.</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -191,7 +264,7 @@ export function PrivacyControl({ beat, onChange, pending = false, error = null }
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
         <PrivacySelect
           id="privacy"
@@ -202,54 +275,59 @@ export function PrivacyControl({ beat, onChange, pending = false, error = null }
           onChange={onPick}
         />
         {error && (
-          <span role="alert" className="text-destructive">
+          <span role="alert" className="text-accent">
             {error}
           </span>
         )}
       </div>
       {scheduling && (
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <Input
-              id="publish_at"
-              type="datetime-local"
-              aria-label="Publish at"
-              value={publishAt}
-              onChange={(e) => setPublishAt(e.target.value)}
-              aria-invalid={publishAtInvalid || undefined}
-              className="w-fit"
-            />
-            <Button
-              size="sm"
+        <div className="flex flex-col gap-2">
+          <input
+            id="publish_at"
+            type="datetime-local"
+            aria-label="Publish at"
+            className="input"
+            value={publishAt}
+            onChange={(e) => setPublishAt(e.target.value)}
+            aria-invalid={publishAtInvalid || undefined}
+          />
+          <div className="job-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
               disabled={pending || publishAtIso === null || unchanged}
               onClick={() => publishAtIso && onChange({ privacy: "private", publish_at: publishAtIso })}
             >
               Schedule
-            </Button>
+            </button>
           </div>
-          <span className="text-xs text-muted-foreground">
+          <span className="drop-hint">
             Your local time. Stays private; YouTube makes it public at this time.
           </span>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
-function Stats({ beatId }: { beatId: string }) {
-  const stats = useBeatStats(beatId);
-  return (
-    <section className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Views, last 28 days</h2>
-      {stats.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {stats.error && (
-        <p role="alert" className="text-sm text-destructive">
-          {stats.error.message}
-        </p>
-      )}
-      {stats.data && <ViewsChart points={stats.data} />}
-    </section>
-  );
+/** "Published 9 Sep 2026 · Public · metadata locked after upload". */
+function facts(beat: Beat): string {
+  const parts: string[] = [];
+  if (beat.status === "scheduled" && beat.publish_at) {
+    parts.push(`Publishes ${formatDateTime(beat.publish_at)}`);
+  } else if (beat.published_at) {
+    parts.push(`Published ${formatDate(beat.published_at)}`);
+  }
+  parts.push(beat.privacy[0].toUpperCase() + beat.privacy.slice(1));
+  if (beat.synced_at) parts.push(`synced ${formatDateTime(beat.synced_at)}`);
+  parts.push("metadata locked after upload");
+  return parts.join(" · ");
+}
+
+/** "https://youtu.be/k9F2…" -> "youtu.be/k9F2…", short enough for the crumb. */
+function shortUrl(url: string): string {
+  const bare = url.replace(/^https?:\/\/(www\.)?/, "");
+  return bare.length > 42 ? `${bare.slice(0, 41)}…` : bare;
 }
 
 function categoryLabel(id: number): string {
