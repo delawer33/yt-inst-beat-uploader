@@ -105,6 +105,33 @@ class JobRepo:
         stmt = select(Job).where(Job.beat_id == beat_id).order_by(Job.created_at.desc(), Job.id)
         return list(self.session.scalars(stmt))
 
+    def pending_for_beat(self, beat_id: str) -> list[Job]:
+        """Every job on ``beat_id`` that is queued, running or paused; oldest first."""
+        stmt = (
+            select(Job)
+            .where(Job.beat_id == beat_id, Job.status.in_(PENDING))
+            .order_by(Job.created_at, Job.id)
+        )
+        return list(self.session.scalars(stmt))
+
+    def active_for_beat(self, beat_id: str) -> Job | None:
+        """The Job that is happening on ``beat_id`` now: the oldest pending one, or none.
+
+        Oldest first because a Render is enqueued before the Upload it leads to, so the
+        Render is what the owner is waiting on while both are pending.
+        """
+        return next(iter(self.pending_for_beat(beat_id)), None)
+
+    def active_by_beat(self) -> dict[str, Job]:
+        """``active_for_beat`` for every beat at once, for the Library listing."""
+        stmt = (
+            select(Job)
+            .where(Job.beat_id.is_not(None), Job.status.in_(PENDING))
+            .order_by(Job.created_at.desc(), Job.id)
+        )
+        # Descending so that the oldest pending job per beat is written last and wins.
+        return {job.beat_id: job for job in self.session.scalars(stmt) if job.beat_id}
+
     def list(self, limit: int | None = None) -> list[Job]:
         """Newest first."""
         stmt = select(Job).order_by(Job.created_at.desc(), Job.id)

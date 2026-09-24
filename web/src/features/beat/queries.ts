@@ -40,14 +40,17 @@ export function usePatchBeat() {
   );
 }
 
-/** Queues RENDER (which chains UPLOAD); the beat turns QUEUED and its jobs list gets the job. */
+/**
+ * Sends the beat ("Save & upload when rendered"): it turns QUEUED at once and comes back with
+ * the Job that is now working on it, if any (the render still running, or the fresh upload).
+ */
 export function useUploadBeat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
       unwrap(api.POST("/api/beats/{beat_id}/upload", { params: { path: { beat_id: id } } })),
-    onSuccess: (job) => {
-      applyJobEvent(queryClient, job);
+    onSuccess: (beat) => {
+      if (beat.active_job) applyJobEvent(queryClient, beat.active_job);
       void queryClient.invalidateQueries({ queryKey: beatsKey });
     },
   });

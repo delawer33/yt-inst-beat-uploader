@@ -15,6 +15,7 @@ from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus
 from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
 from beat_server.jobs.events import Event
 from beat_server.jobs.handlers import HANDLERS
+from beat_server.jobs.queue import CANCELLED_ERROR
 from beat_server.jobs.worker import MAX_ATTEMPTS, JobContext, Worker
 from beat_server.services import beats as beats_service
 from beat_server.services import pipeline
@@ -202,7 +203,7 @@ def beat_events(app: FastAPI) -> list[tuple[str, str]]:
     return seen
 
 
-async def test_run_render_sets_video_and_enqueues_upload(
+async def test_run_render_on_a_draft_renders_and_enqueues_nothing(
     app: FastAPI,
     session: Session,
     workspace: Workspace,
@@ -210,6 +211,7 @@ async def test_run_render_sets_video_and_enqueues_upload(
     monkeypatch: pytest.MonkeyPatch,
     beat_events: list[tuple[str, str]],
 ) -> None:
+    """The Render started by the drop leaves a Rendered Draft: no status change, no UPLOAD."""
     calls: list[tuple[Path, Path, Path]] = []
 
     def fake_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
@@ -228,12 +230,38 @@ async def test_run_render_sets_video_and_enqueues_upload(
     assert job.status == JobStatus.DONE, job.error
     beat = reload_beat(session, draft)
     assert beat.video_path == "video.mp4"
-    assert beat.status == BeatStatus.QUEUED  # waiting for the UPLOAD job, not "rendering"
-    assert beat_events == [(draft.id, "rendering"), (draft.id, "queued")]
+    assert beat.status == BeatStatus.DRAFT  # the owner has not sent it yet
+    assert beat_events == [(draft.id, "draft")]  # the Library hears the beat is now Rendered
+    assert JobRepo(session).next_queued() is None
+    assert (beat_dir / "video.mp4").is_file()
+
+
+async def test_run_render_on_a_sent_beat_enqueues_upload(
+    app: FastAPI,
+    session: Session,
+    repo: BeatRepo,
+    draft: Beat,
+    monkeypatch: pytest.MonkeyPatch,
+    beat_events: list[tuple[str, str]],
+) -> None:
+    """The owner sent the beat while ffmpeg ran: the Render enqueues the UPLOAD behind it."""
+
+    def fake_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+        output.write_bytes(b"mp4")
+        return output
+
+    monkeypatch.setattr(pipeline, "render_video", fake_render)
+    draft.status = BeatStatus.QUEUED
+    repo.save(draft)
+    job = app.state.queue.enqueue(JobKind.RENDER, draft.id)
+    await make_worker(app).run_one(job)
+
+    assert reload_job(session, job).status == JobStatus.DONE
+    assert reload_beat(session, draft).status == BeatStatus.QUEUED
+    assert beat_events == [(draft.id, "queued")]
     follow_up = JobRepo(session).next_queued()
     assert follow_up is not None
     assert (follow_up.kind, follow_up.beat_id) == (JobKind.UPLOAD, draft.id)
-    assert (beat_dir / "video.mp4").is_file()
 
 
 async def test_run_render_progress_reaches_job(
@@ -262,9 +290,11 @@ async def test_run_render_progress_reaches_job(
     assert [p for p in seen if p in (0.25, 0.75)] == [0.25, 0.75]
 
 
-async def test_run_render_failure_returns_beat_to_draft(
+async def test_run_render_failure_leaves_the_draft_a_draft(
     app: FastAPI, session: Session, draft: Beat, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The failure lives on the Job (ADR 0004); the Beat's status is the owner's, untouched."""
+
     def fake_render(*args, **kwargs) -> Path:  # noqa: ANN002, ANN003
         raise VideoError("ffmpeg failed")
 
@@ -556,15 +586,17 @@ def test_patch_uploaded_beat_is_409(client: TestClient, repo: BeatRepo, draft: B
     assert response.status_code == 409
 
 
-def test_upload_endpoint_queues_render(
+def test_send_queues_the_beat_and_a_render_when_there_is_no_video(
     client: TestClient, session: Session, draft: Beat, beat_events: list[tuple[str, str]]
 ) -> None:
     response = client.post(f"/api/beats/{draft.id}/upload")
     assert response.status_code == 200, response.text
-    job = response.json()
-    assert job["kind"] == "render" and job["beat_id"] == draft.id and job["status"] == "queued"
+    body = response.json()
+    assert body["status"] == "queued" and body["rendered"] is False
+    assert body["active_job"]["kind"] == "render"
     assert client.get(f"/api/beats/{draft.id}").json()["status"] == "queued"
     assert beat_events == [(draft.id, "queued")]
+    assert [j.kind for j in JobRepo(session).for_beat(draft.id)] == [JobKind.RENDER]
     assert client.post(f"/api/beats/{draft.id}/upload").status_code == 409  # not a draft anymore
 
 
@@ -617,3 +649,123 @@ async def test_full_chain_render_then_upload(
         "done",
         "done",
     ]
+
+
+# --- ADR 0004: the Render starts on the Draft, the status is the owner's action -------------
+
+
+async def test_run_render_failure_leaves_a_sent_beat_queued_and_retry_works(
+    app: FastAPI,
+    client: TestClient,
+    session: Session,
+    repo: BeatRepo,
+    draft: Beat,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Queued beat stays Queued when its Render fails; retrying the Job finishes the flow."""
+    draft.status = BeatStatus.QUEUED
+    repo.save(draft)
+
+    def broken_render(*args, **kwargs) -> Path:  # noqa: ANN002, ANN003
+        raise VideoError("ffmpeg failed")
+
+    monkeypatch.setattr(pipeline, "render_video", broken_render)
+    job = app.state.queue.enqueue(JobKind.RENDER, draft.id)
+    await make_worker(app).run_one(job)
+    assert reload_job(session, job).status == JobStatus.FAILED
+    assert reload_beat(session, draft).status == BeatStatus.QUEUED
+
+    body = client.get(f"/api/beats/{draft.id}").json()
+    assert body["rendered"] is False and body["active_job"] is None
+
+    def good_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+        output.write_bytes(b"mp4")
+        return output
+
+    monkeypatch.setattr(pipeline, "render_video", good_render)
+    retried = client.post(f"/api/jobs/{job.id}/retry").json()
+    assert retried["kind"] == "render" and retried["status"] == "queued"
+    with app.state.session_factory() as s:
+        next_job = JobRepo(s).next_queued()
+    assert next_job is not None
+    await make_worker(app).run_one(next_job)
+
+    beat = reload_beat(session, draft)
+    assert beat.status == BeatStatus.QUEUED and beat.video_path == "video.mp4"
+    assert JobRepo(session).has_pending(JobKind.UPLOAD, beat.id)
+
+
+def test_post_beats_queues_a_render_and_no_upload(client: TestClient, session: Session) -> None:
+    body = post_beat(client, ("My Beat.mp3", MP3), ("cover.png", PNG)).json()
+    assert body["status"] == "draft" and body["rendered"] is False
+    assert body["active_job"]["kind"] == "render"
+    assert body["active_job"]["status"] == "queued"
+    assert [j.kind for j in JobRepo(session).for_beat(body["id"])] == [JobKind.RENDER]
+    assert client.get("/api/beats").json()[0]["active_job"]["id"] == body["active_job"]["id"]
+
+
+def test_send_a_rendered_draft_enqueues_the_upload_at_once(
+    client: TestClient, session: Session, workspace: Workspace, repo: BeatRepo, draft: Beat
+) -> None:
+    (workspace.beat_dir(draft.id) / "video.mp4").write_bytes(b"mp4")
+    draft.video_path = "video.mp4"
+    repo.save(draft)
+    assert client.get(f"/api/beats/{draft.id}").json()["rendered"] is True
+
+    body = client.post(f"/api/beats/{draft.id}/upload").json()
+    assert body["status"] == "queued"
+    assert body["active_job"]["kind"] == "upload"
+    assert [j.kind for j in JobRepo(session).for_beat(draft.id)] == [JobKind.UPLOAD]
+
+
+def test_beat_status_enum_has_no_rendering(client: TestClient) -> None:
+    assert "rendering" not in {s.value for s in BeatStatus}
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["BeatStatus"]
+    assert "rendering" not in schema["enum"]
+
+
+def test_patch_is_rejected_from_uploading_on(
+    client: TestClient, repo: BeatRepo, draft: Beat
+) -> None:
+    """Metadata is editable while Draft or Queued and locks when the Upload starts."""
+    for status in (BeatStatus.DRAFT, BeatStatus.QUEUED):
+        draft.status = status
+        repo.save(draft)
+        assert client.patch(f"/api/beats/{draft.id}", json={"title": "Edited"}).status_code == 200
+
+    for status in (
+        BeatStatus.UPLOADING,
+        BeatStatus.UPLOADED,
+        BeatStatus.SCHEDULED,
+        BeatStatus.PUBLISHED,
+    ):
+        draft.status = status
+        repo.save(draft)
+        response = client.patch(f"/api/beats/{draft.id}", json={"title": "Too late"})
+        assert response.status_code == 409, status
+        assert "before upload" in response.json()["detail"]
+
+
+async def test_delete_draft_cancels_its_pending_render(
+    app: FastAPI, client: TestClient, session: Session, draft: Beat
+) -> None:
+    job = app.state.queue.enqueue(JobKind.RENDER, draft.id)
+    assert client.delete(f"/api/beats/{draft.id}").status_code == 204
+
+    cancelled = reload_job(session, job)
+    assert cancelled.status == JobStatus.FAILED and cancelled.error == CANCELLED_ERROR
+    assert JobRepo(session).next_queued() is None
+    await make_worker(app).run_one(job)  # the worker skips it, nothing blows up
+    assert reload_job(session, job).status == JobStatus.FAILED
+
+
+async def test_render_of_a_deleted_draft_fails_cleanly(
+    app: FastAPI, session: Session, workspace: Workspace, repo: BeatRepo, draft: Beat
+) -> None:
+    """A Render already running cannot be cancelled; it finds the beat gone and fails itself."""
+    job = app.state.queue.enqueue(JobKind.RENDER, draft.id)
+    delete_draft(workspace, repo, draft)
+
+    await make_worker(app).run_one(job)
+    done = reload_job(session, job)
+    assert done.status == JobStatus.FAILED and "does not exist" in (done.error or "")

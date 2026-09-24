@@ -11,7 +11,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 class BeatStatus(StrEnum):
     DRAFT = "draft"
     QUEUED = "queued"
-    RENDERING = "rendering"
     UPLOADING = "uploading"
     UPLOADED = "uploaded"
     SCHEDULED = "scheduled"  # private on YouTube with a publish_at YouTube will honour

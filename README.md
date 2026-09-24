@@ -117,17 +117,25 @@ the audio file (`.mp3`/`.wav`) and one for the cover image (`.png`/`.jpg`/`.jpeg
 Drop or pick each file on its own, from any folder; dropping both at once onto either slot
 also works. Press **Create beat**. This creates a draft with the title, description and tags from your templates
 (`title_template`, `description_template`, `tags_template` in `PUT /api/settings`; `{name}` is
-the audio file name without extension) and opens its page. Edit the metadata there (same
-limits as `config.yaml`: title 100, description 5000, tags 500 characters in total) and press
-**Upload to YouTube**: the server renders the video with ffmpeg and uploads it, showing the
-progress of both steps; when it is done the page links to the video. Privacy offers Private,
+the audio file name without extension) and opens its page.
+
+The render starts right there, on the draft, so ffmpeg is working while you write. A draft's
+status stays **Draft** the whole time — the status says what you did with the beat, the job
+next to it says what is happening to it — and the draft is marked **Rendered** once the video
+file is ready. Edit the metadata (same limits as `config.yaml`: title 100, description 5000,
+tags 500 characters in total) and press **Save & upload when rendered**: the beat becomes
+**Queued** at once. If the render has finished the upload starts immediately; if it has not,
+the upload starts by itself when the render is done. When it is done the page links to the
+video. A render that fails leaves the beat where it was, Draft or Queued, with the error on
+the job — **Retry now** runs it again and the upload still follows. Privacy offers Private,
 Unlisted, Public and **Scheduled**: Scheduled reveals a date-and-time field (your local time,
 prefilled with tomorrow at the current hour) and uploads the video as private with that
 publish time, so YouTube makes it public then whether or not this machine is on. Until then
 the Library card and the Beat page show **Scheduled** with the time. The time must be at
 least 5 minutes ahead; if it has already passed when the upload job runs, the job fails, the
 Beat returns to draft and you pick a new time. A draft can be deleted
-with **Delete draft**; anything already on YouTube cannot be deleted from here. If YouTube is
+with **Delete draft**, which also throws away its render, running or finished;
+anything already on YouTube cannot be deleted from here. If YouTube is
 not connected the upload job pauses and continues after you connect in Settings. If the
 network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
 over about an hour, before giving up; **Retry now** on the job skips the wait.

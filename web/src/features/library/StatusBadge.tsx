@@ -6,7 +6,6 @@ type Variant = "outline" | "secondary" | "warning" | "success" | "default";
 const variants: Record<BeatStatus, Variant> = {
   draft: "outline",
   queued: "warning",
-  rendering: "warning",
   uploading: "warning",
   uploaded: "secondary",
   scheduled: "default",
@@ -16,7 +15,6 @@ const variants: Record<BeatStatus, Variant> = {
 const labels: Record<BeatStatus, string> = {
   draft: "Draft",
   queued: "Queued",
-  rendering: "Rendering",
   uploading: "Uploading",
   uploaded: "Uploaded",
   scheduled: "Scheduled",

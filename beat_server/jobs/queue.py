@@ -2,13 +2,14 @@
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from beat_server.db.models import Job, JobKind, JobStatus
+from beat_server.db.models import Job, JobKind, JobStatus, utcnow
 from beat_server.db.repo import JobRepo
 from beat_server.jobs.events import EventBus
 from beat_upload.errors import BeatUploadError
 
 RETRYABLE = frozenset({JobStatus.FAILED, JobStatus.PAUSED})
 SUPERSEDED_ERROR = "superseded by retry"
+CANCELLED_ERROR = "cancelled: the beat was deleted"
 
 
 class JobError(BeatUploadError):
@@ -33,6 +34,25 @@ class JobQueue:
             job = JobRepo(session).add(Job(kind=kind, beat_id=beat_id))
         self._bus.publish_job(job)
         return job
+
+    def cancel_for_beat(self, beat_id: str) -> list[Job]:
+        """Stop the pending jobs of ``beat_id`` (the owner deleted the Draft under them).
+
+        QUEUED and PAUSED jobs are marked FAILED so the worker skips them. A RUNNING one
+        cannot be stopped; it finds the beat gone and fails itself with ``BeatNotFound``,
+        which is why it is left alone here.
+        """
+        with self._session_factory() as session:
+            repo = JobRepo(session)
+            jobs = [j for j in repo.pending_for_beat(beat_id) if j.status != JobStatus.RUNNING]
+            for job in jobs:
+                job.status = JobStatus.FAILED
+                job.error = CANCELLED_ERROR
+                job.finished_at = utcnow()
+                repo.save(job)
+        for job in jobs:
+            self._bus.publish_job(job)
+        return jobs
 
     def recover(self) -> int:
         """At startup: jobs left RUNNING by a previous process go back to QUEUED."""

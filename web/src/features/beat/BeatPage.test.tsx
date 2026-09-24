@@ -20,6 +20,8 @@ const uploaded: Beat = {
   likes: 0,
   comments: 0,
   has_files: true,
+  rendered: false,
+  active_job: null,
   cover_url: null,
   synced_at: null,
   created_at: "2026-09-22T10:00:00",

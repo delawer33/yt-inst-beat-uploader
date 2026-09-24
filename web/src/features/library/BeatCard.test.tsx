@@ -19,6 +19,8 @@ const beat: Beat = {
   likes: 12,
   comments: 3,
   has_files: false,
+  rendered: false,
+  active_job: null,
   cover_url: "https://i.ytimg.com/vi/abc123/hqdefault.jpg",
   synced_at: "2026-09-22T10:00:00",
   created_at: "2026-09-22T10:00:00",

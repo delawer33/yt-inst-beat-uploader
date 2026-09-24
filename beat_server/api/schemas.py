@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from beat_server.db.models import Beat, BeatStatus, JobKind, JobStatus
+from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus
 from beat_upload.config import PrivacyStatus
 from beat_upload.youtube import video_url
 
@@ -47,13 +47,21 @@ class BeatOut(BaseModel):
     likes: int
     comments: int
     has_files: bool
+    # A Draft whose video file is ready: sending it will not wait for a Render (CONTEXT.md,
+    # "Rendered"). Stays true once set, so a beat that failed its upload is still Rendered.
+    rendered: bool
+    # What is happening to this Beat right now, if anything: the Job the Library's "Working"
+    # filter looks at. ``None`` when no job of its is queued, running or paused.
+    active_job: JobOut | None
     cover_url: str | None
     synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_beat(cls, beat: Beat) -> "BeatOut":
+    def from_beat(cls, beat: Beat, active_job: Job | None = None) -> "BeatOut":
+        """``active_job`` comes from ``JobRepo.active_for_beat``; pass it or the field is
+        ``None``, which reads as "nothing is happening to this beat"."""
         return cls(
             id=beat.id,
             status=beat.status,
@@ -70,6 +78,8 @@ class BeatOut(BaseModel):
             likes=beat.likes,
             comments=beat.comments,
             has_files=bool(beat.audio_path and beat.image_path),
+            rendered=bool(beat.video_path),
+            active_job=JobOut.model_validate(active_job) if active_job else None,
             cover_url=cover_url_for(beat),
             synced_at=beat.synced_at,
             created_at=beat.created_at,

@@ -1,18 +1,26 @@
 """The two job handlers that turn a draft into a video on YouTube: RENDER, then UPLOAD.
 
-``run_render`` finishes by enqueueing UPLOAD, so one click on "Upload to YouTube" runs the
-whole chain. ffmpeg and the Data API run in ``asyncio.to_thread``; only ``ctx.progress`` is
-called from there, never ``ctx.session``.
+The RENDER starts when the Beat is created, before the owner has decided anything (ADR 0004),
+so it never touches the Beat's status: that says what the owner did. It only records the
+rendered file and, if the owner has already sent the Beat (QUEUED), enqueues the UPLOAD
+behind itself. A Render that finishes on a Draft leaves it a Rendered Draft and stops there;
+the send action enqueues the UPLOAD itself once it sees the video.
+
+ffmpeg and the Data API run in ``asyncio.to_thread``; only ``ctx.progress`` is called from
+there, never ``ctx.session``.
 
 A Scheduled draft (private with ``publish_at``) is uploaded with ``status.publishAt``; the
 metadata validator runs again right before the upload, so a publish time that has passed
 while the job waited fails the job with a message naming the time and the beat goes back
 to DRAFT for the user to pick a new one (ADR 0003: never silently moved).
 
-Failure rules: a render or upload error puts the beat back to DRAFT so the user can fix
-things and press Upload again (the rendered ``video.mp4`` is kept and reused). A missing
-Google connection (``AuthError``) leaves the status alone: the worker pauses the job and
-reruns it after reconnect. A ``NetworkError`` during the upload (laptop went to sleep,
+Failure rules: a failed render leaves the Beat's status alone (a Draft stays a Draft, a
+Queued beat stays Queued) and the failure is on the Job, where retrying it re-runs the
+render and, for a Queued beat, the upload behind it. An upload error puts the beat back to
+DRAFT so the user can fix things and send it again (the rendered ``video.mp4`` is kept and
+reused). A missing Google connection (``AuthError``) leaves the status alone: the worker
+pauses the job and reruns it after reconnect. A ``NetworkError`` during the upload (laptop
+went to sleep,
 Wi-Fi down) puts the beat back to QUEUED while the worker retries the job; only when the
 retries are exhausted does it become a DRAFT again.
 """
@@ -21,7 +29,7 @@ import asyncio
 from pathlib import Path
 
 from beat_server.db.models import Beat, BeatStatus, JobKind, utcnow
-from beat_server.db.repo import BeatRepo
+from beat_server.db.repo import BeatRepo, JobRepo
 from beat_server.jobs.worker import JobContext, has_retries_left
 from beat_server.services.beats import metadata_of
 from beat_server.services.errors import BeatNotFound, BeatStateError
@@ -35,11 +43,10 @@ RENDERABLE = frozenset({BeatStatus.DRAFT, BeatStatus.QUEUED})
 
 
 async def run_render(ctx: JobContext) -> None:
-    """DRAFT/QUEUED -> RENDERING -> video.mp4 on disk -> QUEUED, UPLOAD job enqueued.
+    """video.mp4 on disk; the Beat's status is left as the owner set it.
 
-    The beat goes back to QUEUED once the file exists so that a beat waiting for its
-    UPLOAD job (queued, or paused on a missing Google connection) is not shown as
-    ``rendering``; ``run_upload`` moves it to UPLOADING when it actually starts.
+    Enqueues the UPLOAD behind itself only for a Beat the owner has already sent (QUEUED).
+    A Draft just becomes a Rendered Draft and waits for the owner.
     """
     repo = BeatRepo(ctx.session)
     beat = _load(ctx, repo)
@@ -53,22 +60,23 @@ async def run_render(ctx: JobContext) -> None:
     image = beat_dir / beat.image_path
     video = beat_dir / VIDEO_FILENAME
 
-    _set_status(ctx, repo, beat, BeatStatus.RENDERING)
-    try:
-        if video.is_file():
-            ctx.log(f"{VIDEO_FILENAME} already rendered, skipping ffmpeg")
-        else:
-            ctx.progress(0.0, "Rendering")
-            await asyncio.to_thread(
-                render_video, audio, image, video, lambda f: ctx.progress(f, "Rendering")
-            )
-    except BeatUploadError:
-        _set_status(ctx, repo, beat, BeatStatus.DRAFT)
-        raise
+    if video.is_file():
+        ctx.log(f"{VIDEO_FILENAME} already rendered, skipping ffmpeg")
+    else:
+        ctx.progress(0.0, "Rendering")
+        await asyncio.to_thread(
+            render_video, audio, image, video, lambda f: ctx.progress(f, "Rendering")
+        )
     beat.video_path = VIDEO_FILENAME
-    _set_status(ctx, repo, beat, BeatStatus.QUEUED)
+    repo.save(beat)
     ctx.progress(1.0, "Rendered")
-    ctx.enqueue(JobKind.UPLOAD, beat.id)
+    # The owner may have sent the beat while ffmpeg ran, so read the status back first.
+    ctx.session.refresh(beat)
+    ctx.bus.publish_beat(beat.id, beat.status)
+    if beat.status == BeatStatus.QUEUED and not JobRepo(ctx.session).has_pending(
+        JobKind.UPLOAD, beat.id
+    ):
+        ctx.enqueue(JobKind.UPLOAD, beat.id)
 
 
 async def run_upload(ctx: JobContext) -> None:
