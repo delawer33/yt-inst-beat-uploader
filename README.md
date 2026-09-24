@@ -110,6 +110,20 @@ channel title. The secret is stored in the config directory and never shown agai
 **Disconnect** deletes the token and keeps the client. A banner at the top of every page
 says when the connection is missing or expired.
 
+#### Settings
+
+The page is three rows, what on the left and how on the right:
+
+- **YouTube** — the client ID and secret, an account card with the channel title and the
+  connection state (Connected, Access expired, Not connected, No client yet), and
+  **Reconnect now** / **Disconnect**. Coming back from Google, the page says whether it
+  worked and dismisses the message.
+- **Nightly stats** — the hour the nightly pull runs at (local time) and when it last ran.
+  **Run now** starts the same pull from YouTube by hand and shows the job it made, with its
+  progress, right there.
+- **Templates** — the title, description and tag templates every new Beat starts from;
+  `{name}` becomes the audio file name without extension.
+
 #### Add a beat from the web UI
 
 Press **New beat** (Library page or the top navigation). The page has two slots: one for
