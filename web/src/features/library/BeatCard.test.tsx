@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
+import type { Job } from "@/api/events";
 import { BeatCard } from "./BeatCard";
 import type { Beat } from "./queries";
 
@@ -27,42 +28,62 @@ const beat: Beat = {
   updated_at: "2026-09-22T10:00:00",
 };
 
-function renderCard(b: Beat) {
-  const router = createMemoryRouter([{ path: "/", element: <BeatCard beat={b} /> }]);
+const render_job: Job = {
+  id: "j1",
+  beat_id: "b1",
+  kind: "render",
+  status: "running",
+  progress: 0.62,
+  message: "",
+  error: null,
+  created_at: "2026-09-22T10:00:00",
+  started_at: null,
+  finished_at: null,
+  attempts: 0,
+  not_before: null,
+};
+
+function renderCard(b: Beat, failed = false) {
+  const router = createMemoryRouter([{ path: "/", element: <BeatCard beat={b} failed={failed} /> }]);
   return render(<RouterProvider router={router} />);
 }
 
-test("renders title, formatted views and the status badge, linking to the beat", () => {
-  renderCard(beat);
-  expect(screen.getByRole("heading", { name: "Dark Trap Beat" })).toBeInTheDocument();
+test("a card shows the cover, the title and the views, and links to the beat", () => {
+  const { container } = renderCard(beat);
+  expect(screen.getByText("Dark Trap Beat")).toBeInTheDocument();
   expect(screen.getByLabelText("views")).toHaveTextContent("1.2K");
-  expect(screen.getByLabelText("status")).toHaveTextContent("Published");
   expect(screen.getByRole("link")).toHaveAttribute("href", "/beats/b1");
   expect(screen.getByRole("img", { name: "Cover of Dark Trap Beat" })).toHaveAttribute(
     "src",
     beat.cover_url,
   );
+  expect(container.querySelector(".badge")).toBeNull();
 });
 
-test("a beat without a cover shows a placeholder instead of an image", () => {
-  renderCard({ ...beat, cover_url: null, status: "draft", views: 0 });
-  expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("status")).toHaveTextContent("Draft");
-  expect(screen.getByLabelText("views")).toHaveTextContent("0");
-});
-
-test("a scheduled beat shows the Scheduled badge with its local publish time instead of views", () => {
-  const publishAt = new Date(2026, 8, 25, 18, 0);
-  renderCard({
-    ...beat,
-    status: "scheduled",
-    privacy: "private",
-    views: 0,
-    publish_at: publishAt.toISOString().replace(/\.\d{3}Z$/, ""),
-  });
-  expect(screen.getByLabelText("status")).toHaveTextContent("Scheduled");
-  expect(screen.getByLabelText("status")).toHaveAttribute("data-status", "scheduled");
-  expect(screen.getByLabelText("publish time")).toHaveTextContent(/2026/);
-  expect(screen.getByLabelText("publish time")).toHaveTextContent(/18:00|6:00/);
+test("a beat with a running job shows the rail and the job state instead of views", () => {
+  const { container } = renderCard({ ...beat, status: "draft", active_job: render_job });
+  expect(screen.getByLabelText("job")).toHaveTextContent("Rendering 62%");
   expect(screen.queryByLabelText("views")).not.toBeInTheDocument();
+  expect(container.querySelector(".rail > i")).toHaveStyle({ width: "62%" });
+  expect(container.querySelector(".beat-card")).toHaveClass("working");
+});
+
+test("a queued job, a rendered draft and a failed job each get their corner badge", () => {
+  const queued = { ...render_job, status: "queued" as const };
+  renderCard({ ...beat, status: "queued", active_job: queued });
+  expect(screen.getByText("Queued")).toBeInTheDocument();
+
+  renderCard({ ...beat, id: "b2", status: "draft", rendered: true, cover_url: null });
+  expect(screen.getByText("Rendered")).toBeInTheDocument();
+
+  const { container } = renderCard({ ...beat, id: "b3", status: "draft" }, true);
+  expect(screen.getByText("Failed")).toBeInTheDocument();
+  expect(container.querySelector(".beat-card")).toHaveClass("failed");
+});
+
+test("a beat without a cover or a title still renders", () => {
+  renderCard({ ...beat, cover_url: null, title: "", views: 0 });
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByText("Untitled")).toBeInTheDocument();
+  expect(screen.getByLabelText("views")).toHaveTextContent("0");
 });

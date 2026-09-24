@@ -46,8 +46,8 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 | `.tag` + `.tag-outline` draft · `.tag-neutral` queued/uploaded/done · `.tag-accent` rendering/uploading · `.tag-ink` published · `.tag-failed` | Lifecycle status | components/buttons.html |
 | `.dot-live` (+ `.pulse`), `.badge` (+ `-failed`, `-ink`) | The red dot; corner badge on a cover | components/buttons.html, beat-card.html |
 | `.field` + `label` (+ `.counter`), `.input` (+ `.title`), `.tag-input`, `.input-row`, `.seg` (+ `.sm`, `.icon`) + `.seg-opt`, `.radio` + `.dot`, `.form-grid-2` | Forms on native elements | components/forms.html |
-| `.beat-grid`, `.beat-card` (+ `.working`, `.failed`, `.selected-multi`), `.cover` + `.rail`, `.beat-title`, `.beat-meta` (`.views`, `.delta`, `.state`), `.thumb` (`.md/.lg/.xl`) | The Library cell and its list twin | components/beat-card.html |
-| `.drop` (+ `.active`, `.tile`, `.hero`), `.drop-title`, `.drop-hint` | Drop zone | components/dropzone.html |
+| `.beat-grid`, `.beat-card` (+ `.working`, `.failed`, `.selected-multi`), `.cover` + `.rail`, `.beat-title`, `.beat-meta` (`.views`, `.delta`, `.state`), `.thumb` (`.md/.lg/.xl`, `img` inside is cropped to fill) | The Library cell and its list twin | components/beat-card.html |
+| `.drop` (+ `.active`, `.tile`, `.hero` — a block modifier, not the `.hero` type ramp), `.drop-title`, `.drop-hint` | Drop zone | components/dropzone.html |
 | `.progress` (+ `.thin`, `.striped`), `.job` (+ `.failed`), `.job-line`, `.job-actions`, `.log` (+ `.clip`), `.queue-row` (+ `.running`, `.last`), `.section-head`, `.note` | Jobs, progress, logs, queue, inline error | components/jobs.html |
 | `.sidebar`, `.brand`, `.nav-item` + `.count` (+ `.live`), `.sidebar-foot` + `.foot-group` / `.foot-line` / `.foot-note`; `.page`, `.page-head`, `.toolbar` + `.toolbar-end`, `.page-body`, `.page-foot`, `.dimmed` | App chrome | components/navigation.html |
 | `.banner` + `.btn-inverse`; `.toast` (+ `.fixed`) | Needs-your-hand banner; ink toast | components/banner-toast.html |

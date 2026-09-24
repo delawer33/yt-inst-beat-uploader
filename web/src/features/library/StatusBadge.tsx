@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { BeatStatus } from "./queries";
+import { STATUS_LABEL } from "./status";
 
 type Variant = "outline" | "secondary" | "warning" | "success" | "default";
 
@@ -12,19 +13,10 @@ const variants: Record<BeatStatus, Variant> = {
   published: "success",
 };
 
-const labels: Record<BeatStatus, string> = {
-  draft: "Draft",
-  queued: "Queued",
-  uploading: "Uploading",
-  uploaded: "Uploaded",
-  scheduled: "Scheduled",
-  published: "Published",
-};
-
 export function StatusBadge({ status }: { status: BeatStatus }) {
   return (
     <Badge variant={variants[status]} aria-label="status" data-status={status}>
-      {labels[status]}
+      {STATUS_LABEL[status]}
     </Badge>
   );
 }

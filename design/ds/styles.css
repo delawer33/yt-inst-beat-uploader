@@ -414,3 +414,11 @@ textarea.input { min-height: 90px; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* ── #14 Library ────────────────────────────────────────────────────── */
+.thumb img { width: 100%; height: 100%; object-fit: cover; }  /* cover art inside a .thumb square */
+/* `.drop.hero` is a block modifier and must not pick up the `.hero` type ramp it shares a
+   name with: body type inside, and the 72px line is a `.hero` element within. */
+.drop.hero { font: inherit; letter-spacing: normal; }
+/* The whole card is a link, so it must not take the accent `a:hover` colour. */
+.beat-card:hover { color: inherit; }
