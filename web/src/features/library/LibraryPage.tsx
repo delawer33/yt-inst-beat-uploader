@@ -1,46 +1,75 @@
 import { Link } from "react-router";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { JobList } from "@/features/jobs/JobList";
-import { OverviewCard } from "@/features/stats/OverviewCard";
+import { useJobs } from "@/features/jobs/queries";
 import { BeatGrid } from "./BeatGrid";
-import { useBeats } from "./queries";
+import { BeatTable } from "./BeatTable";
+import { EmptyLibrary } from "./EmptyLibrary";
+import { countBeats, failedBeats, filterBeats, sortBeats, totalViews } from "./filters";
+import { LibraryToolbar } from "./LibraryToolbar";
+import { usePrefs } from "./prefs";
+import { useBeats, type Beat } from "./queries";
+import { useBeatDrop, type BeatDrop } from "./useBeatDrop";
 
 /**
- * Library: the "New beat" button (opens /beats/new), the Sync button and recent jobs
- * (JobList), the stats overview, then every Beat as a card.
+ * The Library (Mockups 1b, 1c, 1d): head with the counts, toolbar, then the grid or the
+ * list. Dropping anywhere in the window creates a Draft and opens its page. What is
+ * running lives in the sidebar, the sync in Settings.
  */
 export function LibraryPage() {
   const beats = useBeats();
+  const drop = useBeatDrop();
+
+  if (beats.isPending) return <p className="text-muted">Loading…</p>;
+  if (beats.error !== null) {
+    return (
+      <p role="alert" className="text-accent">
+        {beats.error.message}
+      </p>
+    );
+  }
+  return <LibraryView beats={beats.data} drop={drop} />;
+}
+
+function LibraryView({ beats, drop }: { beats: Beat[]; drop: BeatDrop }) {
+  const jobs = useJobs();
+  const [prefs, setPrefs] = usePrefs();
+  const failed = failedBeats(jobs.data);
+  const shown = sortBeats(filterBeats(beats, prefs.filter), prefs.sort);
+
+  // The shell wraps the route in `.page-body`; the Library owns its own gutters, because
+  // the head and the toolbar run the full width of the page. `min-h-full` would resolve
+  // against the padded content box, so the page would stop 2rem short of the scrollport —
+  // the same 2rem the negative margins give back.
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Library</h1>
-        <Button asChild>
-          <Link to="/beats/new">
-            <Plus aria-hidden="true" />
-            New beat
-          </Link>
-        </Button>
-      </div>
-      <JobList />
-      <OverviewCard />
-      <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Beats</h2>
-        {beats.isPending && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {beats.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {beats.error.message}
-          </p>
-        )}
-        {beats.data?.length === 0 && (
-          <p className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            No beats yet. Press New beat to upload one, or connect Google in Settings and press
-            Sync to pull in your channel.
-          </p>
-        )}
-        {beats.data && beats.data.length > 0 && <BeatGrid beats={beats.data} />}
-      </section>
+    <div className="-mx-6 -my-4 flex min-h-[calc(100%+2rem)] flex-col">
+      {beats.length === 0 ? (
+        <EmptyLibrary drop={drop} />
+      ) : (
+        <>
+          <div className="page-head">
+            <h2>Library</h2>
+            <span className="num text-muted" data-testid="library-counts">
+              {beats.length} {beats.length === 1 ? "beat" : "beats"} ·{" "}
+              {totalViews(beats).toLocaleString()} views
+            </span>
+            <Link className="btn btn-primary" to="/beats/new">
+              New beat
+            </Link>
+          </div>
+          <LibraryToolbar prefs={prefs} counts={countBeats(beats)} onChange={setPrefs} />
+          {drop.error !== null && (
+            <div className="page-body">
+              <p role="alert" className="note">
+                {drop.error}
+              </p>
+            </div>
+          )}
+          {prefs.view === "grid" ? (
+            <BeatGrid beats={shown} failed={failed} drop={drop} />
+          ) : (
+            <BeatTable beats={shown} />
+          )}
+        </>
+      )}
     </div>
   );
 }

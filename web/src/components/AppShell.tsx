@@ -1,41 +1,19 @@
-import { NavLink, Outlet } from "react-router";
-import { cn } from "@/lib/utils";
+import { Outlet } from "react-router";
 import { useEvents } from "@/api/events";
 import { AuthBanner } from "./AuthBanner";
+import { Sidebar } from "./Sidebar";
 
-const links = [
-  { to: "/", label: "Library", end: true },
-  { to: "/beats/new", label: "New beat", end: true },
-  { to: "/settings", label: "Settings", end: false },
-];
-
+/** The Design System shell: 240px sidebar, the page with its banner, the route below. */
 export function AppShell() {
   useEvents();
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border">
-        <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
-          <span className="font-semibold tracking-tight">beat-upload</span>
-          {links.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.end}
-              className={({ isActive }) =>
-                cn(
-                  "text-sm text-muted-foreground transition-colors hover:text-foreground",
-                  isActive && "text-foreground",
-                )
-              }
-            >
-              {link.label}
-            </NavLink>
-          ))}
-        </nav>
-      </header>
-      <AuthBanner />
-      <main className="mx-auto max-w-6xl px-6 py-8">
-        <Outlet />
+    <div className="app h-screen">
+      <Sidebar />
+      <main className="page">
+        <AuthBanner />
+        <div className="page-body flex-1 overflow-auto">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

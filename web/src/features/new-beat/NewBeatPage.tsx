@@ -1,20 +1,39 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Button } from "@/components/ui/button";
 import { useCreateBeat } from "@/features/beat/queries";
 import { FileSlot } from "./FileSlot";
-import { EMPTY, receive, type Kind, type Selection } from "./files";
+import { EMPTY, receive, type Selection } from "./files";
 
 /**
- * New beat: two independent slots, one for the audio and one for the cover, so the files
- * can come from different folders. "Create beat" uploads both, creates a draft Beat and
- * opens its page.
+ * New beat: two drop zones and nothing else. One takes the audio, the other the cover, so
+ * the files can come from different folders (dropping both onto either zone works too).
+ * As soon as both are there the Draft is created — no Create button — and its page opens,
+ * where the Render is already running (ADR 0004).
  */
 export function NewBeatPage() {
   const navigate = useNavigate();
   const create = useCreateBeat();
   const [selection, setSelection] = useState<Selection>(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const started = useRef(false);
+  const { mutate } = create;
+
+  useEffect(() => {
+    const { audio, image } = selection;
+    if (audio === null || image === null || started.current) return;
+    started.current = true;
+    setError(null);
+    mutate(
+      { audio, image },
+      {
+        onSuccess: (beat) => navigate(`/beats/${beat.id}`),
+        onError: (e) => {
+          started.current = false;
+          setError(e.message);
+        },
+      },
+    );
+  }, [selection, mutate, navigate]);
 
   function onFiles(files: File[]) {
     if (files.length === 0) return;
@@ -27,67 +46,44 @@ export function NewBeatPage() {
     setSelection(result.selection);
   }
 
-  function clear(kind: Kind) {
-    setError(null);
-    setSelection({ ...selection, [kind]: null });
-  }
-
-  function submit() {
-    if (!selection.audio || !selection.image) return;
-    setError(null);
-    create.mutate(
-      { audio: selection.audio, image: selection.image },
-      {
-        onSuccess: (beat) => navigate(`/beats/${beat.id}`),
-        onError: (e) => setError(e.message),
-      },
-    );
-  }
-
-  const ready = selection.audio !== null && selection.image !== null;
+  const waiting = selection.audio === null ? "the audio" : selection.image === null ? "the cover" : null;
   return (
-    <div className="flex max-w-3xl flex-col gap-8">
-      <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-        ← Library
-      </Link>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">New beat</h1>
-        <p className="text-sm text-muted-foreground">
-          Pick the audio and the cover separately; they can live in different folders.
-          Dropping both at once onto either slot works as well.
-        </p>
+    <div className="flex flex-col gap-6">
+      <div className="crumb">
+        <Link to="/" className="text-muted">
+          ← Library
+        </Link>
+        <span className="text-muted">/</span>
+        <span>New beat</span>
+        {create.isPending && (
+          <span className="end text-muted" role="status">
+            Uploading the files…
+          </span>
+        )}
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         <FileSlot
           kind="audio"
           file={selection.audio}
           onFiles={onFiles}
-          onClear={() => clear("audio")}
           disabled={create.isPending}
         />
         <FileSlot
           kind="image"
           file={selection.image}
           onFiles={onFiles}
-          onClear={() => clear("image")}
           disabled={create.isPending}
         />
       </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div className="note" role="alert">
+          <span className="note-title">That will not do</span>
+          <span className="text-soft">{error}</span>
+        </div>
       )}
-      <div className="flex items-center gap-3">
-        <Button type="button" onClick={submit} disabled={!ready || create.isPending}>
-          {create.isPending ? "Uploading files…" : "Create beat"}
-        </Button>
-        {!ready && !create.isPending && (
-          <span className="text-sm text-muted-foreground">
-            {selection.audio ? "Now add the cover image." : selection.image ? "Now add the audio." : "Both files are required."}
-          </span>
-        )}
-      </div>
+      {waiting && !create.isPending && (
+        <p className="text-muted">The Draft is created as soon as {waiting} is here.</p>
+      )}
     </div>
   );
 }

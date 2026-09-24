@@ -110,24 +110,57 @@ channel title. The secret is stored in the config directory and never shown agai
 **Disconnect** deletes the token and keeps the client. A banner at the top of every page
 says when the connection is missing or expired.
 
+#### Settings
+
+The page is three rows, what on the left and how on the right:
+
+- **YouTube** — the client ID and secret, an account card with the channel title and the
+  connection state (Connected, Access expired, Not connected, No client yet), and
+  **Reconnect now** / **Disconnect**. Coming back from Google, the page says whether it
+  worked and dismisses the message.
+- **Nightly stats** — the hour the nightly pull runs at (local time) and when it last ran.
+  **Run now** starts the same pull from YouTube by hand and shows the job it made, with its
+  progress, right there.
+- **Templates** — the title, description and tag templates every new Beat starts from;
+  `{name}` becomes the audio file name without extension.
+
 #### Add a beat from the web UI
 
-Press **New beat** (Library page or the top navigation). The page has two slots: one for
-the audio file (`.mp3`/`.wav`) and one for the cover image (`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`).
-Drop or pick each file on its own, from any folder; dropping both at once onto either slot
-also works. Press **Create beat**. This creates a draft with the title, description and tags from your templates
-(`title_template`, `description_template`, `tags_template` in `PUT /api/settings`; `{name}` is
-the audio file name without extension) and opens its page. Edit the metadata there (same
-limits as `config.yaml`: title 100, description 5000, tags 500 characters in total) and press
-**Upload to YouTube**: the server renders the video with ffmpeg and uploads it, showing the
-progress of both steps; when it is done the page links to the video. Privacy offers Private,
-Unlisted, Public and **Scheduled**: Scheduled reveals a date-and-time field (your local time,
-prefilled with tomorrow at the current hour) and uploads the video as private with that
-publish time, so YouTube makes it public then whether or not this machine is on. Until then
+Press **New beat** (Library page or the top navigation). The page is two drop zones and
+nothing else: one takes the audio file (`.mp3`/`.wav`), the other the cover image
+(`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`). Drop or pick each on its own, from any folder;
+dropping both at once onto either zone also works. There is no Create button — the moment
+both files are there the draft is created, with the title, description and tags from your
+templates (`title_template`, `description_template`, `tags_template` in `PUT /api/settings`;
+`{name}` is the audio file name without extension), and its page opens. A file the app
+cannot use is refused on the spot, with the reason; pick another and it carries on.
+
+The render starts right there, on the draft, so ffmpeg is working while you write. A draft's
+status stays **Draft** the whole time — the status says what you did with the beat, the job
+next to it says what is happening to it — and the draft is marked **Rendered** once the video
+file is ready.
+
+The draft's page puts the form on the left and the YouTube preview on the right: the cover
+letterboxed in a 16:9 frame, the title as you type it, the channel, the publish time when
+one is set, and whether the title fits a search result (YouTube cuts it past 70 characters)
+and how many of its tags it shares with another beat in the Library. Above the form sit the
+render's progress and its log, and the cover's resolution; "video ready" replaces them when
+the render is done. Everything you type saves by itself a moment after you stop — the head
+says **Draft saved 14:03** — so **Save draft** is only there when you want it now. Edit the
+metadata (same limits as `config.yaml`: title 100, description 5000,
+tags 500 characters in total) and press **Save & upload when rendered**: the beat becomes
+**Queued** at once. If the render has finished the upload starts immediately; if it has not,
+the upload starts by itself when the render is done. When it is done the page links to the
+video. A render that fails leaves the beat where it was, Draft or Queued, with the error on
+the job — **Retry render** runs it again and the upload still follows. Privacy is Public,
+Unlisted or Private, and Publish is **Now** or **Schedule**: Schedule reveals a
+date-and-time field (your local time, prefilled with tomorrow at the current hour) and
+uploads the video as private with that publish time, so YouTube makes it public then whether
+or not this machine is on. Until then
 the Library card and the Beat page show **Scheduled** with the time. The time must be at
 least 5 minutes ahead; if it has already passed when the upload job runs, the job fails, the
-Beat returns to draft and you pick a new time. A draft can be deleted
-with **Delete draft**; anything already on YouTube cannot be deleted from here. If YouTube is
+Beat returns to draft and you pick a new time.
+Anything already on YouTube cannot be deleted from here. If YouTube is
 not connected the upload job pauses and continues after you connect in Settings. If the
 network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
 over about an hour, before giving up; **Retry now** on the job skips the wait.
@@ -211,8 +244,15 @@ beat_upload/
   errors.py               exceptions the CLI reports without a traceback
 beat_server/              FastAPI app for `serve`: settings, SQLite models/repos, migrations
 web/                      React frontend, built into web/dist and served by beat_server
+design/ds/                the Design System: the one stylesheet the frontend links (ADR 0005)
+docs/adr/                 the decisions behind all of the above
 tests/                    pytest unit tests (no network, no ffmpeg)
 ```
+
+The frontend carries no styles of its own. Every colour, size, font, radius and component
+class comes from `design/ds/styles.css`, a mirror of the "Beat Upload" project in Claude
+Design; Tailwind is layout glue only. `design/ds/readme.md` is the guide, and
+`design/ds/components/*.html` show every class in use — open them in a browser.
 
 ## Development
 
@@ -222,6 +262,14 @@ ruff check . && ruff format .
 pytest
 cd web && npm install && npm run lint:tokens && npm run api:check && npm test && npm run build
 ```
+
+`npm run api:check` needs an interpreter that can import `beat_server`; with the venv not
+activated, pass it: `PYTHON=../.venv/bin/python npm run api:check`.
+
+`npm run lint:tokens` fails on a hex colour, an `oklch()` / `rgb()` / `hsl()`, a `style=`
+prop or any Tailwind colour / radius / font utility under `web/src/` — a missing colour or
+size is added to `design/ds/` and pushed to Claude Design, never written in `web/`. See
+`web/README.md` for the cascade rule that comes with a single unlayered stylesheet.
 
 Database schema changes: edit `beat_server/db/models.py`, then
 `alembic revision --autogenerate -m "..."` (config in `alembic.ini`, scripts in

@@ -2,12 +2,14 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { authStatusKey } from "./authQueries";
-import { GoogleForm } from "./GoogleForm";
-import { ScheduleForm } from "./ScheduleForm";
+import { NightlyStatsRow } from "./NightlyStatsRow";
+import { TemplatesRow } from "./TemplatesRow";
+import { YouTubeRow } from "./YouTubeRow";
 
 /**
- * The OAuth callback lands here with `?connected=1` or `?error=<message>`. Both refetch the
- * auth status; "Dismiss" clears the query string.
+ * Settings as rows: what on the left, how on the right. The OAuth callback lands here with
+ * `?connected=1` (a toast) or `?error=<message>` (a note); both refetch the auth status and
+ * "Dismiss" clears the query string.
  */
 export function SettingsPage() {
   const [params, setParams] = useSearchParams();
@@ -23,29 +25,31 @@ export function SettingsPage() {
   const dismiss = () => setParams({}, { replace: true });
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="flex flex-col">
+      {/* The DS sets the h2 margin; a Tailwind margin here would lose to it (unlayered CSS). */}
+      <h2>Settings</h2>
       {connected && (
-        <p role="status" className="rounded-md border border-border bg-muted px-4 py-2 text-sm">
-          YouTube connected.{" "}
-          <button type="button" className="underline" onClick={dismiss}>
+        <div role="status" className="toast mb-4">
+          <b>YouTube connected.</b>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>
             Dismiss
           </button>
-        </p>
+        </div>
       )}
       {error !== null && (
-        <p
-          role="alert"
-          className="rounded-md border border-destructive bg-destructive/10 px-4 py-2 text-sm text-destructive"
-        >
-          Connection failed: {error || "unknown error"}.{" "}
-          <button type="button" className="underline" onClick={dismiss}>
-            Dismiss
-          </button>
-        </p>
+        <div role="alert" className="note mb-4">
+          <span className="note-title">Connection failed</span>
+          <span>{error || "Google sent no reason."}</span>
+          <div>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={dismiss}>
+              Dismiss
+            </button>
+          </div>
+        </div>
       )}
-      <GoogleForm />
-      <ScheduleForm />
+      <YouTubeRow />
+      <NightlyStatsRow />
+      <TemplatesRow />
     </div>
   );
 }

@@ -1,8 +1,11 @@
-"""The Library over HTTP: list, one beat, its cover, its privacy; create, edit, upload
+"""The Library over HTTP: list, one beat, its cover, its privacy; create, edit, send
 and delete a draft.
 
-Multipart ``POST /api/beats`` stores the files and applies the owner's templates; the beat
-then stays a DRAFT until ``POST /api/beats/{id}/upload`` queues RENDER (which chains UPLOAD).
+Multipart ``POST /api/beats`` stores the files, applies the owner's templates and queues the
+RENDER at once (ADR 0004), so the video is being produced while the owner writes the
+Metadata. ``POST /api/beats/{id}/upload`` is the send action: the beat becomes QUEUED
+immediately and the UPLOAD is queued now if the video is already there, otherwise by the
+RENDER when it finishes.
 """
 
 from typing import Annotated
@@ -11,9 +14,9 @@ from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from beat_server.api.schemas import BeatOut, BeatPatch, JobOut, PrivacyIn
+from beat_server.api.schemas import BeatOut, BeatPatch, PrivacyIn
 from beat_server.db.models import Beat, BeatStatus, JobKind
-from beat_server.db.repo import BeatRepo, SettingsRepo
+from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
 from beat_server.deps import get_session, get_workspace
 from beat_server.jobs.events import EventBus
 from beat_server.jobs.queue import JobQueue
@@ -53,6 +56,11 @@ def get_queue(request: Request) -> JobQueue:
 QueueDep = Annotated[JobQueue, Depends(get_queue)]
 
 
+def beat_out(session: Session, beat: Beat) -> BeatOut:
+    """``BeatOut`` with the Job that is happening on this beat right now attached."""
+    return BeatOut.from_beat(beat, JobRepo(session).active_for_beat(beat.id))
+
+
 def load_beat(session: Session, beat_id: str) -> Beat:
     beat = BeatRepo(session).get(beat_id)
     if beat is None:
@@ -62,25 +70,32 @@ def load_beat(session: Session, beat_id: str) -> Beat:
 
 @router.get("", response_model=list[BeatOut])
 def list_beats(session: SessionDep) -> list[BeatOut]:
-    return [BeatOut.from_beat(beat) for beat in BeatRepo(session).list()]
+    active = JobRepo(session).active_by_beat()
+    return [BeatOut.from_beat(beat, active.get(beat.id)) for beat in BeatRepo(session).list()]
 
 
 @router.post("", response_model=BeatOut, status_code=201)
 def create_beat(
     session: SessionDep,
     ws: WorkspaceDep,
+    queue: QueueDep,
     audio: Annotated[UploadFile, File(description="one .mp3 or .wav")],
     image: Annotated[UploadFile, File(description="one .png/.jpg/.jpeg/.gif/.bmp")],
 ) -> BeatOut:
-    """A new DRAFT from an audio file and a cover image (multipart form)."""
+    """A new DRAFT from an audio file and a cover image (multipart form).
+
+    The RENDER is queued here and comes back as ``active_job``; no UPLOAD is created, that
+    waits for the owner to send the beat.
+    """
     template = default_metadata(SettingsRepo(session))
     beat = create_draft(ws, BeatRepo(session), audio, image, template)
-    return BeatOut.from_beat(beat)
+    job = queue.enqueue(JobKind.RENDER, beat.id)
+    return BeatOut.from_beat(beat, job)
 
 
 @router.get("/{beat_id}", response_model=BeatOut)
 def get_beat(beat_id: str, session: SessionDep) -> BeatOut:
-    return BeatOut.from_beat(load_beat(session, beat_id))
+    return beat_out(session, load_beat(session, beat_id))
 
 
 @router.patch("/{beat_id}", response_model=BeatOut)
@@ -93,12 +108,19 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep) -> BeatOut:
         )
     apply_patch(beat, body)
     BeatRepo(session).save(beat)
-    return BeatOut.from_beat(beat)
+    return beat_out(session, beat)
 
 
-@router.post("/{beat_id}/upload", response_model=JobOut)
-def upload_beat(beat_id: str, session: SessionDep, bus: BusDep, queue: QueueDep) -> JobOut:
-    """Queue the RENDER job (which chains UPLOAD). The beat becomes QUEUED."""
+@router.post("/{beat_id}/upload", response_model=BeatOut)
+def upload_beat(
+    beat_id: str, session: SessionDep, ws: WorkspaceDep, bus: BusDep, queue: QueueDep
+) -> BeatOut:
+    """Send the beat: "Save & upload when rendered". The beat becomes QUEUED at once.
+
+    The UPLOAD is queued here when the video is already Rendered, and by the RENDER that is
+    still running otherwise. A beat whose render failed (no video, no render pending) gets a
+    fresh RENDER, so sending is always enough on its own.
+    """
     beat = load_beat(session, beat_id)
     if beat.status != BeatStatus.DRAFT:
         raise BeatStateError(f"Beat {beat_id} is {beat.status}; only drafts can be uploaded.")
@@ -108,13 +130,27 @@ def upload_beat(beat_id: str, session: SessionDep, bus: BusDep, queue: QueueDep)
     beat.status = BeatStatus.QUEUED
     BeatRepo(session).save(beat)
     bus.publish_beat(beat.id, beat.status)
-    return JobOut.model_validate(queue.enqueue(JobKind.RENDER, beat.id))
+
+    jobs = JobRepo(session)
+    video = ws.beat_dir(beat.id) / beat.video_path if beat.video_path else None
+    if video is not None and video.is_file():
+        if not jobs.has_pending(JobKind.UPLOAD, beat.id):
+            queue.enqueue(JobKind.UPLOAD, beat.id)
+    elif not jobs.has_pending(JobKind.RENDER, beat.id):
+        queue.enqueue(JobKind.RENDER, beat.id)
+    return beat_out(session, beat)
 
 
 @router.delete("/{beat_id}", status_code=204)
-def delete_beat(beat_id: str, session: SessionDep, ws: WorkspaceDep) -> Response:
-    """Remove a DRAFT and its files. Uploaded beats stay (they live on YouTube)."""
-    delete_draft(ws, BeatRepo(session), load_beat(session, beat_id))
+def delete_beat(beat_id: str, session: SessionDep, ws: WorkspaceDep, queue: QueueDep) -> Response:
+    """Remove a DRAFT, its files and its pending Jobs. Uploaded beats stay (on YouTube).
+
+    A Render that is already running is left to notice the beat is gone and fail itself;
+    ADR 0004 accepts the wasted minute of CPU.
+    """
+    beat = load_beat(session, beat_id)
+    delete_draft(ws, BeatRepo(session), beat)
+    queue.cancel_for_beat(beat_id)
     return Response(status_code=204)
 
 
@@ -149,4 +185,4 @@ def change_privacy(
     beat.status = status_for(beat.privacy, beat.publish_at)
     BeatRepo(session).save(beat)
     bus.publish_beat(beat.id, beat.status)
-    return BeatOut.from_beat(beat)
+    return beat_out(session, beat)

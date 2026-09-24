@@ -17,7 +17,7 @@ function renderInRouter(node: ReactNode) {
 test("AuthBannerView renders for EXPIRED with a link to Settings", () => {
   renderInRouter(<AuthBannerView status="expired" />);
   expect(screen.getByRole("alert")).toHaveTextContent("expired");
-  expect(screen.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/settings");
+  expect(screen.getByRole("link", { name: "Reconnect →" })).toHaveAttribute("href", "/settings");
 });
 
 test("AuthBannerView is hidden for CONNECTED and while unknown", () => {

@@ -32,7 +32,12 @@ export function formatDateTime(iso: string | null | undefined): string {
   });
 }
 
-/** Local time as `<input type="datetime-local">` wants it: "2026-09-24T18:00". */
+/**
+ * Local time as `<input type="datetime-local">` wants it: "2026-09-24T18:00". The input has
+ * no seconds, so this cuts to the minute: anything comparing a stored timestamp against this
+ * round trip has to compare at minute granularity too, or every schedule set elsewhere reads
+ * as an edit (see `patchOf` in `features/beat/DraftBeatPage.tsx`).
+ */
 export function toDateTimeLocal(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (

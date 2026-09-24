@@ -34,6 +34,9 @@ export interface paths {
         /**
          * Create Beat
          * @description A new DRAFT from an audio file and a cover image (multipart form).
+         *
+         *     The RENDER is queued here and comes back as ``active_job``; no UPLOAD is created, that
+         *     waits for the owner to send the beat.
          */
         post: operations["create_beat_api_beats_post"];
         delete?: never;
@@ -55,7 +58,10 @@ export interface paths {
         post?: never;
         /**
          * Delete Beat
-         * @description Remove a DRAFT and its files. Uploaded beats stay (they live on YouTube).
+         * @description Remove a DRAFT, its files and its pending Jobs. Uploaded beats stay (on YouTube).
+         *
+         *     A Render that is already running is left to notice the beat is gone and fail itself;
+         *     ADR 0004 accepts the wasted minute of CPU.
          */
         delete: operations["delete_beat_api_beats__beat_id__delete"];
         options?: never;
@@ -78,7 +84,11 @@ export interface paths {
         put?: never;
         /**
          * Upload Beat
-         * @description Queue the RENDER job (which chains UPLOAD). The beat becomes QUEUED.
+         * @description Send the beat: "Save & upload when rendered". The beat becomes QUEUED at once.
+         *
+         *     The UPLOAD is queued here when the video is already Rendered, and by the RENDER that is
+         *     still running otherwise. A beat whose render failed (no video, no render pending) gets a
+         *     fresh RENDER, so sending is always enough on its own.
          */
         post: operations["upload_beat_api_beats__beat_id__upload_post"];
         delete?: never;
@@ -409,6 +419,9 @@ export interface components {
             comments: number;
             /** Has Files */
             has_files: boolean;
+            /** Rendered */
+            rendered: boolean;
+            active_job: components["schemas"]["JobOut"] | null;
             /** Cover Url */
             cover_url: string | null;
             /** Synced At */
@@ -444,7 +457,7 @@ export interface components {
          * BeatStatus
          * @enum {string}
          */
-        BeatStatus: "draft" | "queued" | "rendering" | "uploading" | "uploaded" | "scheduled" | "published";
+        BeatStatus: "draft" | "queued" | "uploading" | "uploaded" | "scheduled" | "published";
         /** Body_create_beat_api_beats_post */
         Body_create_beat_api_beats_post: {
             /**
@@ -793,7 +806,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobOut"];
+                    "application/json": components["schemas"]["BeatOut"];
                 };
             };
             /** @description Validation Error */

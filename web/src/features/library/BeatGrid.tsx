@@ -1,14 +1,18 @@
 import { BeatCard } from "./BeatCard";
+import { DropTile } from "./DropTile";
 import type { Beat } from "./queries";
+import type { BeatDrop } from "./useBeatDrop";
 
-export function BeatGrid({ beats }: { beats: Beat[] }) {
+type Props = { beats: Beat[]; failed: Set<string>; drop: BeatDrop };
+
+/** Mockup 1b: the drop tile is the first cell, every Beat a `.beat-card` after it. */
+export function BeatGrid({ beats, failed, drop }: Props) {
   return (
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="beat-grid page-body">
+      <DropTile drop={drop} variant="tile" />
       {beats.map((beat) => (
-        <li key={beat.id}>
-          <BeatCard beat={beat} />
-        </li>
+        <BeatCard key={beat.id} beat={beat} failed={failed.has(beat.id)} />
       ))}
-    </ul>
+    </div>
   );
 }
