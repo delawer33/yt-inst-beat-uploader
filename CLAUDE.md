@@ -31,6 +31,11 @@ PYTHON=../.venv/bin/python npm run api   # regenerate src/api/schema.d.ts from O
 
 `python main.py ...` equals `beat-upload ...`.
 
+Local server: `beat-upload serve` runs as the user unit `beat-upload.service` on :8765 and
+serves `web/dist`. Python change: `systemctl --user restart beat-upload.service`. Frontend
+change (`web/src`, `design/ds`): `cd web && npm run build`, then the same restart. Neither
+needs the other.
+
 ## Layout
 
 ```
