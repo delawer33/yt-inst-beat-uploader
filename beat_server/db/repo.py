@@ -48,7 +48,11 @@ class BeatRepo:
         ]
 
     def list(self) -> list[Beat]:
-        """Newest first: by publish date, drafts by the day they were added."""
+        """Newest first: by publish date, drafts by the day they were added.
+
+        The Library re-sorts on the client with the same key (``newestKey`` in
+        ``web/src/features/library/filters.ts``); change both or the two orders drift.
+        """
         newest = func.coalesce(Beat.published_at, Beat.created_at)
         stmt = select(Beat).order_by(newest.desc(), Beat.created_at.desc(), Beat.id)
         return list(self.session.scalars(stmt))

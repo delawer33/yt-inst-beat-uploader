@@ -74,8 +74,15 @@ export function totalViews(beats: Beat[]): number {
   return beats.reduce((sum, beat) => sum + beat.views, 0);
 }
 
-const newestFirst = (a: Beat, b: Beat) =>
-  serverDate(b.created_at).getTime() - serverDate(a.created_at).getTime();
+/**
+ * Same key the server sorts by (`BeatRepo.list` in `beat_server/db/repo.py`; change both or the
+ * two orders drift): a video ranks by its YouTube publish date, a Beat that has none by when it
+ * was created. `created_at` alone would rank synced videos by the moment sync stored them, which
+ * is the channel in reverse.
+ */
+const newestKey = (beat: Beat) => serverDate(beat.published_at ?? beat.created_at).getTime();
+
+const newestFirst = (a: Beat, b: Beat) => newestKey(b) - newestKey(a);
 
 /** Pure; never mutates the input list. Every sort falls back to newest first. */
 export function sortBeats(beats: Beat[], sort: Sort): Beat[] {

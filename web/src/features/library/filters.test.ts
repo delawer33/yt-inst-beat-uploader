@@ -145,3 +145,25 @@ test("stored toolbar preferences are read back, and anything unknown falls back"
   expect(parsePrefs("not json")).toEqual(DEFAULT_PREFS);
   expect(parsePrefs('{"filter":"nonsense"}')).toEqual(DEFAULT_PREFS);
 });
+
+test("newest ranks a synced video by its YouTube publish date, not by when sync stored it", () => {
+  // Sync stores the channel newest-first, so the oldest video gets the latest `created_at`.
+  const synced = [
+    beat({ id: "old", published_at: "2025-01-01T10:00:00", created_at: "2026-09-10T10:00:02" }),
+    beat({ id: "mid", published_at: "2026-03-01T10:00:00", created_at: "2026-09-10T10:00:01" }),
+    beat({ id: "new", published_at: "2026-09-01T10:00:00", created_at: "2026-09-10T10:00:00" }),
+    beat({ id: "draft", status: "draft", published_at: null, created_at: "2026-06-01T10:00:00" }),
+  ];
+  expect(sortBeats(synced, "newest").map((b) => b.id)).toEqual(["new", "draft", "mid", "old"]);
+  // The other sorts fall back to the same key: equal views rank by publish date too.
+  expect(sortBeats(synced, "views").map((b) => b.id)).toEqual(["new", "draft", "mid", "old"]);
+});
+
+test("two videos published in the same second keep the server's order", () => {
+  const same = "2026-09-01T10:00:00";
+  const tied = [
+    beat({ id: "first", published_at: same, created_at: "2026-09-10T10:00:00" }),
+    beat({ id: "second", published_at: same, created_at: "2026-09-10T10:00:01" }),
+  ];
+  expect(sortBeats(tied, "newest").map((b) => b.id)).toEqual(["first", "second"]);
+});
