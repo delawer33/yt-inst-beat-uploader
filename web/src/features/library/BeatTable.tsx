@@ -28,11 +28,11 @@ export function BeatTable({ beats }: { beats: Beat[] }) {
             return (
               <tr key={beat.id}>
                 <td>
-                  <span className="thumb">
+                  <div className="thumb">
                     {beat.cover_url !== null && (
                       <img src={beat.cover_url} alt="" loading="lazy" />
                     )}
-                  </span>
+                  </div>
                 </td>
                 <td>
                   <Link to={`/beats/${beat.id}`}>{title}</Link>
