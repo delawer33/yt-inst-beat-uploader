@@ -19,3 +19,13 @@ export const STATUS_TAG: Record<BeatStatus, string> = {
   scheduled: "tag-neutral",
   published: "tag-ink",
 };
+
+/** Design System `.badge` modifier per Beat status: the corner of every cover in the grid. */
+export const STATUS_BADGE: Record<BeatStatus, string> = {
+  draft: "badge badge-outline",
+  queued: "badge",
+  uploading: "badge badge-accent",
+  uploaded: "badge",
+  scheduled: "badge",
+  published: "badge badge-ink",
+};

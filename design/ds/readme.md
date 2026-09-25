@@ -44,7 +44,7 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 | --- | --- | --- |
 | `.btn` + `.btn-primary / -secondary / -ghost / -inverse`, `.btn-sm`, `.btn-icon`, `.btn-block`, `.btn-flush` + `.trail`, `.btn-grow` | Actions; inverse is the white button inside the red banner | components/buttons.html |
 | `.tag` + `.tag-outline` draft · `.tag-neutral` queued/uploaded/done · `.tag-accent` rendering/uploading · `.tag-ink` published · `.tag-failed` | Lifecycle status | components/buttons.html |
-| `.dot-live` (+ `.pulse`), `.badge` (+ `-failed`, `-ink`) | The red dot; corner badge on a cover | components/buttons.html, beat-card.html |
+| `.dot-live` (+ `.pulse`), `.badge` + `.badge-outline` draft · bare queued/uploaded/scheduled · `.badge-accent` uploading · `.badge-ink` published · `.badge-failed` | The red dot; the Beat status as a corner badge on every cover, same colour map as `.tag` | components/buttons.html, beat-card.html |
 | `.field` + `label` (+ `.counter`), `.input` (+ `.title`), `.tag-input`, `.input-row`, `.seg` (+ `.sm`, `.icon`) + `.seg-opt`, `.radio` + `.dot`, `.form-grid-2` | Forms on native elements | components/forms.html |
 | `.beat-grid`, `.beat-card` (+ `.working`, `.failed`, `.selected-multi`), `.cover` + `.rail`, `.beat-title`, `.beat-meta` (`.views`, `.delta`, `.state`), `.thumb` (`.md/.lg/.xl`, `img` inside is cropped to fill) | The Library cell and its list twin | components/beat-card.html |
 | `.drop` (+ `.active`, `.tile`, `.hero` — a block modifier, not the `.hero` type ramp), `.drop-title`, `.drop-hint` | Drop zone | components/dropzone.html |

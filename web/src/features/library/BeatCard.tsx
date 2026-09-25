@@ -2,20 +2,14 @@ import { Link } from "react-router";
 import { formatViews } from "@/lib/format";
 import { jobState, percentOf } from "./filters";
 import type { Beat } from "./queries";
+import { STATUS_BADGE, STATUS_LABEL } from "./status";
 
 type Badge = { text: string; className: string };
 
-/**
- * The corner badge, in precedence order: a failed Job first, then a Job waiting to start,
- * then a Draft whose video is already Rendered. A running Job shows the rail instead.
- */
-export function cardBadge(beat: Beat, failed: boolean): Badge | null {
+/** The corner badge on every cover: the Beat status, or "Failed" when its Job failed. */
+export function cardBadge(beat: Beat, failed: boolean): Badge {
   if (failed) return { text: "Failed", className: "badge badge-failed" };
-  const job = beat.active_job;
-  if (job !== null) return job.status === "running" ? null : { text: "Queued", className: "badge" };
-  if (beat.status === "queued") return { text: "Queued", className: "badge" };
-  if (beat.status === "draft" && beat.rendered) return { text: "Rendered", className: "badge badge-ink" };
-  return null;
+  return { text: STATUS_LABEL[beat.status], className: STATUS_BADGE[beat.status] };
 }
 
 export function BeatCard({ beat, failed = false }: { beat: Beat; failed?: boolean }) {
@@ -34,7 +28,9 @@ export function BeatCard({ beat, failed = false }: { beat: Beat; failed?: boolea
             <i style={{ width: `${percentOf(running)}%` }} />
           </div>
         )}
-        {badge !== null && <span className={badge.className}>{badge.text}</span>}
+        <span className={badge.className} data-status={beat.status}>
+          {badge.text}
+        </span>
       </div>
       <div className="beat-title" title={title}>
         {title}

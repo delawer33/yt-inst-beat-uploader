@@ -49,7 +49,7 @@ function renderCard(b: Beat, failed = false) {
 }
 
 test("a card shows the cover, the title and the views, and links to the beat", () => {
-  const { container } = renderCard(beat);
+  renderCard(beat);
   expect(screen.getByText("Dark Trap Beat")).toBeInTheDocument();
   expect(screen.getByLabelText("views")).toHaveTextContent("1.2K");
   expect(screen.getByRole("link")).toHaveAttribute("href", "/beats/b1");
@@ -57,7 +57,16 @@ test("a card shows the cover, the title and the views, and links to the beat", (
     "src",
     beat.cover_url,
   );
-  expect(container.querySelector(".badge")).toBeNull();
+});
+
+test("every card carries its Beat status as the corner badge", () => {
+  const { container } = renderCard(beat);
+  expect(container.querySelector(".badge")).toHaveTextContent("Published");
+  expect(container.querySelector(".badge")).toHaveClass("badge-ink");
+
+  const draft = renderCard({ ...beat, id: "b2", status: "draft" });
+  expect(draft.container.querySelector(".badge")).toHaveTextContent("Draft");
+  expect(draft.container.querySelector(".badge")).toHaveClass("badge-outline");
 });
 
 test("a beat with a running job shows the rail and the job state instead of views", () => {
@@ -68,16 +77,14 @@ test("a beat with a running job shows the rail and the job state instead of view
   expect(container.querySelector(".beat-card")).toHaveClass("working");
 });
 
-test("a queued job, a rendered draft and a failed job each get their corner badge", () => {
+test("a queued beat shows Queued; a failed job replaces the status badge with Failed", () => {
   const queued = { ...render_job, status: "queued" as const };
   renderCard({ ...beat, status: "queued", active_job: queued });
   expect(screen.getByText("Queued")).toBeInTheDocument();
 
-  renderCard({ ...beat, id: "b2", status: "draft", rendered: true, cover_url: null });
-  expect(screen.getByText("Rendered")).toBeInTheDocument();
-
   const { container } = renderCard({ ...beat, id: "b3", status: "draft" }, true);
   expect(screen.getByText("Failed")).toBeInTheDocument();
+  expect(screen.queryByText("Draft")).not.toBeInTheDocument();
   expect(container.querySelector(".beat-card")).toHaveClass("failed");
 });
 

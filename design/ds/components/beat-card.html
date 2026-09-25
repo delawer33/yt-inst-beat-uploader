@@ -26,11 +26,11 @@ code { font-size: .92em; }
 
 <div class="demo-head">States</div>
 <div class="beat-grid" style="grid-template-columns:repeat(3,1fr)">
-  <div class="beat-card"><div class="cover" style="background:linear-gradient(135deg,#e6b422 50%,#c8961a 50%)"></div><div class="beat-title">Gunna Type Beat — "Velvet"</div><div class="beat-meta"><span class="views">42,118</span><span class="delta">▲ 18% · 7d</span></div></div>
-  <div class="beat-card working"><div class="cover" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"><div class="rail"><i style="width:62%"></i></div></div><div class="beat-title">Central Cee Type Beat — "Ninety"</div><div class="beat-meta"><span class="state"><span class="dot-live pulse">●</span> Rendering</span><span class="num text-muted">62% · 1:40 left</span></div></div>
+  <div class="beat-card"><div class="cover" style="background:linear-gradient(135deg,#e6b422 50%,#c8961a 50%)"><span class="badge badge-ink">published</span></div><div class="beat-title">Gunna Type Beat — "Velvet"</div><div class="beat-meta"><span class="views">42,118</span><span class="delta">▲ 18% · 7d</span></div></div>
+  <div class="beat-card working"><div class="cover" style="background:linear-gradient(135deg,#3a5bd9 50%,#2c47ad 50%)"><span class="badge badge-outline">draft</span><div class="rail"><i style="width:62%"></i></div></div><div class="beat-title">Central Cee Type Beat — "Ninety"</div><div class="beat-meta"><span class="state"><span class="dot-live pulse">●</span> Rendering</span><span class="num text-muted">62% · 1:40 left</span></div></div>
   <div class="beat-card failed"><div class="cover" style="background:linear-gradient(135deg,#e0632b 50%,#b54e20 50%)"><span class="badge badge-failed">failed</span></div><div class="beat-title">Yeat Type Beat — "Static"</div><div class="beat-meta"><span class="state">Render failed</span></div></div>
   <div class="beat-card"><div class="cover" style="background:linear-gradient(135deg,#7a4fd6 50%,#5d3bab 50%)"><span class="badge">queued</span></div><div class="beat-title">Don Toliver Type Beat — "Halo"</div><div class="beat-meta"><span class="num text-muted">upload only · Sep 25 18:00</span></div></div>
-  <div class="beat-card selected-multi"><div class="cover" style="background:linear-gradient(135deg,#2fa36b 50%,#1f7a4f 50%)"></div><div class="beat-title">Lil Baby Type Beat — "Sable"</div><div class="beat-meta"><span class="views">9,402</span><span class="delta down">▼ 3% · 7d</span></div></div>
+  <div class="beat-card selected-multi"><div class="cover" style="background:linear-gradient(135deg,#2fa36b 50%,#1f7a4f 50%)"><span class="badge badge-accent">uploading</span></div><div class="beat-title">Lil Baby Type Beat — "Sable"</div><div class="beat-meta"><span class="views">9,402</span><span class="delta down">▼ 3% · 7d</span></div></div>
   <div class="drop tile"><div class="drop-title">Drop<br>mp3 + png</div><div class="drop-hint">or click</div></div>
 </div>
 <div class="demo-head">List row (same data as a table)</div>
@@ -41,7 +41,7 @@ code { font-size: .92em; }
     <tr><td><div class="thumb"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' fill='%233a5bd9'/%3E%3C/svg%3E" alt=""></div></td><td style="font-weight:600">Central Cee Type Beat — "Ninety"</td><td><span class="tag tag-accent">● Rendering</span></td><td class="num r text-muted">—</td><td class="num r text-muted">—</td><td class="num r text-muted">—</td></tr>
   </tbody>
 </table>
-<p class="note-text">Idle: cover, title, views, 7-day delta. Working: red outline + a rail on the cover. Failed: red outline + corner badge. Nothing else changes. Cover art stays in color; it is the user's content.</p>
+<p class="note-text">Every cover carries the Beat status as a corner badge (same colour map as <code>.tag</code>); a failed Job replaces it with <code>.badge-failed</code>. Idle: cover, title, views, 7-day delta. Working: red outline + a rail on the cover. Failed: red outline. Nothing else changes. Cover art stays in color; it is the user's content.</p>
 
 </main>
 </body>
