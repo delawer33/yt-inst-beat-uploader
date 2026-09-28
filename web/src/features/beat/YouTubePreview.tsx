@@ -73,7 +73,7 @@ export function YouTubePreview({
         </div>
         <div className="fact-row">
           <span className="text-muted">Cover in 16:9 frame</span>
-          <span>letterboxed on black</span>
+          <span>letterboxed on black, sepia 40%</span>
         </div>
         {shared && (
           <div className="fact-row">

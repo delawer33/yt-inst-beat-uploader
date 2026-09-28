@@ -9,7 +9,7 @@ import pytest
 
 from beat_upload import video
 from beat_upload.errors import VideoError
-from beat_upload.video import parse_ffmpeg_progress, probe_duration, render_video
+from beat_upload.video import parse_ffmpeg_progress, probe_duration, render_video, sepia_filter
 
 
 @pytest.mark.parametrize(
@@ -117,3 +117,18 @@ def test_probe_duration_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(VideoError, match="ffprobe failed"):
         probe_duration(tmp_path / "a.mp3")
+
+
+def test_sepia_filter_blends_with_identity() -> None:
+    assert (
+        sepia_filter(0)
+        == "colorchannelmixer=1.0000:0.0000:0.0000:0:0.0000:1.0000:0.0000:0:0.0000:0.0000:1.0000:0"
+    )
+    assert sepia_filter(1).startswith("colorchannelmixer=0.3930:0.7690:0.1890:0:")
+    assert sepia_filter(0.4).startswith("colorchannelmixer=0.7572:0.3076:0.0756:0:")
+
+
+def test_render_video_applies_sepia(tmp_path: Path, fake_ffmpeg: type[FakePopen]) -> None:
+    render_video(tmp_path / "a.mp3", tmp_path / "c.png", tmp_path / "v.mp4", lambda f: None)
+    cmd = fake_ffmpeg.calls[0]
+    assert sepia_filter() in cmd[cmd.index("-filter_complex") + 1]

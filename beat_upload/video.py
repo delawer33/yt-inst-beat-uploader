@@ -15,6 +15,11 @@ from beat_upload.errors import VideoError
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
 
+# Every render gets the same 40 % sepia: the classic sepia matrix blended 40/60 with identity.
+# The Draft preview mirrors it with CSS `filter: sepia(.4)`, which browsers compute the same way.
+SEPIA_STRENGTH = 0.4
+_SEPIA = ((0.393, 0.769, 0.189), (0.349, 0.686, 0.168), (0.272, 0.534, 0.131))
+
 ProgressFn = Callable[[float], None]  # fraction 0..1
 
 _MICROSECONDS = 1_000_000.0
@@ -58,15 +63,27 @@ def parse_ffmpeg_progress(line: str, duration: float) -> float | None:
     return max(0.0, min(1.0, seconds / duration))
 
 
+def sepia_filter(strength: float = SEPIA_STRENGTH) -> str:
+    """Pure. ffmpeg ``colorchannelmixer`` for a sepia of ``strength`` (0 = untouched, 1 = full)."""
+    rows = []
+    for i, row in enumerate(_SEPIA):
+        mixed = [
+            (1 - strength) * (1.0 if i == j else 0.0) + strength * c for j, c in enumerate(row)
+        ]
+        rows.append(":".join(f"{c:.4f}" for c in mixed) + ":0")  # alpha input stays 0
+    return "colorchannelmixer=" + ":".join(rows)
+
+
 def render_video(
     audio: Path, image: Path, output: Path, on_progress: ProgressFn | None = None
 ) -> Path:
     """Loop ``image`` for the duration of ``audio`` and write an H.264/AAC mp4."""
     ensure_ffmpeg()
 
-    scale_and_pad = (
+    filters = (
         f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=decrease,"
-        f"pad={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2"
+        f"pad={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2,"
+        f"{sepia_filter()}"
     )
     cmd = [
         "ffmpeg",
@@ -74,10 +91,11 @@ def render_video(
         "-loop", "1",
         "-i", str(image),
         "-i", str(audio),
-        "-filter_complex", scale_and_pad,
+        "-filter_complex", filters,
         "-c:v", "libx264",
         "-c:a", "aac",
         "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",  # moov atom first; YouTube otherwise flags nonStreamableMov
         "-shortest",
     ]  # fmt: skip
 
