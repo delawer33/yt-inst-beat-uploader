@@ -125,7 +125,7 @@ def test_sepia_filter_blends_with_identity() -> None:
         == "colorchannelmixer=1.0000:0.0000:0.0000:0:0.0000:1.0000:0.0000:0:0.0000:0.0000:1.0000:0"
     )
     assert sepia_filter(1).startswith("colorchannelmixer=0.3930:0.7690:0.1890:0:")
-    assert sepia_filter(0.4).startswith("colorchannelmixer=0.7572:0.3076:0.0756:0:")
+    assert sepia_filter(0.45).startswith("colorchannelmixer=0.7268:0.3461:0.0851:0:")
 
 
 def test_render_video_applies_sepia(tmp_path: Path, fake_ffmpeg: type[FakePopen]) -> None:

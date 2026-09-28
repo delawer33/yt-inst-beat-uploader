@@ -77,7 +77,7 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 
 ## Deliberate literals
 
-Everything visual comes from a token, with one exception: `.yt-frame` is `background: #000`, because it is a letterbox behind a 16:9 still and YouTube's own player shows black there. It must not follow the ground if the ground ever changes, so it takes no `--color-*`. Its `img` carries `filter: sepia(.4)`, the fixed grade every render gets, so the preview matches the video.
+Everything visual comes from a token, with one exception: `.yt-frame` is `background: #000`, because it is a letterbox behind a 16:9 still and YouTube's own player shows black there. It must not follow the ground if the ground ever changes, so it takes no `--color-*`. Its `img` carries `filter: sepia(.45)`, the fixed grade every render gets, so the preview matches the video.
 
 ## Files
 

@@ -15,9 +15,9 @@ from beat_upload.errors import VideoError
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
 
-# Every render gets the same 40 % sepia: the classic sepia matrix blended 40/60 with identity.
-# The Draft preview mirrors it with CSS `filter: sepia(.4)`, which browsers compute the same way.
-SEPIA_STRENGTH = 0.4
+# Every render gets the same 45 % sepia: the classic sepia matrix blended 45/55 with identity.
+# The Draft preview mirrors it with CSS `filter: sepia(.45)`, which browsers compute the same way.
+SEPIA_STRENGTH = 0.45
 _SEPIA = ((0.393, 0.769, 0.189), (0.349, 0.686, 0.168), (0.272, 0.534, 0.131))
 
 ProgressFn = Callable[[float], None]  # fraction 0..1
