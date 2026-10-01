@@ -1,276 +1,43 @@
-# YouTube Beat Uploader
+# Beat Upload
 
-CLI that turns a beat (audio + cover image) into a 1080p video with ffmpeg and uploads it to YouTube via the Data API v3.
+Turns a beat (audio + cover) into a 1080p video, uploads it to YouTube and tracks how it performs.
 
-Status: WIP. Instagram upload is planned, not implemented.
-
-## Requirements
-
-- Python 3.13+
-- `ffmpeg` on PATH
-- A Google Cloud OAuth client (Desktop app) with the YouTube Data API enabled
+![Library](docs/img/library.png)
 
 ## Install
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
+beat-upload serve --open-browser     # http://127.0.0.1:8765
 ```
 
-This gives you the `beat-upload` command. `python main.py` works the same way.
+Needs Python 3.13, `ffmpeg` on PATH and a Google Cloud OAuth client with the YouTube Data
+and Analytics APIs enabled. Connect the channel on the Settings page.
 
-## Usage
+## What it does
 
-### 1. Login
+- Drop an mp3 and a png: a Draft appears and the render starts while you write the metadata.
+- Title, description and tags come prefilled from your templates, with a YouTube-style preview.
+- "Save & upload when rendered" queues the upload; it runs by itself once the video is ready.
+- Publish now, or schedule a time and YouTube makes it public then, even with the laptop closed.
+- Change the privacy of anything already on the channel, the way YouTube Studio does it.
+- Imports every video the channel had before the app and shows views per beat.
+- Pulls daily views and watch time from the Analytics API every night and charts them per beat.
+- Runs as a user systemd service, so it survives reboots.
 
-Get a client ID and secret from [Google Cloud Console](https://developers.google.com/youtube/registering_an_application), then:
+The CLI does the same without the UI: `login`, `upload`, `videos`, `analytics`, `privacy`.
 
-```bash
-beat-upload login --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
-```
+## How it works
 
-Without flags the command prompts for both values. A browser opens for authorization. The token and client secrets are stored in the platform config directory:
+One Python package with no web or database code renders the video with ffmpeg and talks
+to YouTube. A FastAPI server on top keeps a SQLite library, a job queue and a scheduler, and
+serves the React frontend. A video is never re-rendered; the status of a Beat is what you did
+with it, a Job is what is happening right now.
 
-| OS      | Path                                          |
-|---------|-----------------------------------------------|
-| Linux   | `~/.config/beat-upload/`                      |
-| macOS   | `~/Library/Application Support/beat-upload/`  |
-| Windows | `%APPDATA%\beat-upload\`                      |
+Full guide: [docs/guide.md](docs/guide.md). Why it is built this way: [docs/adr](docs/adr).
+Vocabulary: [CONTEXT.md](CONTEXT.md).
 
-If the token expires or is revoked, run `login` again.
+## Status
 
-### 2. Upload
-
-Put these in one folder:
-
-- exactly one audio file (`.mp3`, `.wav`)
-- exactly one image (`.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`)
-- `config.yaml`
-
-```bash
-beat-upload upload /path/to/beat
-```
-
-The video is rendered to `video.mp4` in the same folder. If `video.mp4` already exists it is uploaded as is, so delete it to re-render.
-
-### 3. Stats
-
-```bash
-beat-upload channel            # subscribers, views, video count
-beat-upload videos             # all uploads, newest first
-beat-upload videos -n 10       # last 10
-beat-upload video VIDEO_ID     # one video with tags and description
-```
-
-### 4. Analytics
-
-```bash
-beat-upload analytics          # last 28 days: views, watch time, average view duration per video
-beat-upload analytics -d 7     # last 7 days
-```
-
-`avd` is the average view duration, `avd%` the share of the video an average viewer
-watches. Beats with `avd%` around 50 or more are the ones worth replicating. Videos with
-no views in the range are omitted.
-
-### 5. Privacy
-
-```bash
-beat-upload privacy unlisted VIDEO_ID [VIDEO_ID ...]
-beat-upload privacy private VIDEO_ID
-```
-
-Add `--json` to any read command for machine-readable output. The token needs the
-`youtube` and `yt-analytics.readonly` scopes; tokens created by older versions lack them,
-so run `login` again once.
-
-### 6. Web UI
-
-```bash
-beat-upload serve                 # http://127.0.0.1:8765
-beat-upload serve --port 9000 --open-browser
-```
-
-The server serves the built frontend from `web/dist` (see `web/README.md`; without a build
-`/` shows a plain "alive" page) and the API under `/api` (`/api/health`, `/docs`). Its data
-lives in the platform data directory (Linux: `~/.local/share/beat-upload/`, sqlite database
-and beat files); credentials stay in the config directory above. Override with
-`BEAT_UPLOAD_DATA_DIR`, `BEAT_UPLOAD_CONFIG_DIR`, `BEAT_UPLOAD_PORT`.
-
-#### Connect Google from the web UI
-
-In [Google Cloud Console](https://console.cloud.google.com/apis/credentials) create an
-OAuth client of type **Web application** (the CLI `login` uses a Desktop client; the web UI
-needs its own) with the authorised redirect URI
-`http://localhost:8765/api/auth/google/callback` (adjust the port if you run `serve` with
-another one). Open Settings in the UI, paste the client ID and secret, click **Save**, then
-**Connect YouTube**: Google asks for consent and sends you back to Settings, which shows the
-channel title. The secret is stored in the config directory and never shown again.
-**Disconnect** deletes the token and keeps the client. A banner at the top of every page
-says when the connection is missing or expired.
-
-#### Settings
-
-The page is three rows, what on the left and how on the right:
-
-- **YouTube** — the client ID and secret, an account card with the channel title and the
-  connection state (Connected, Access expired, Not connected, No client yet), and
-  **Reconnect now** / **Disconnect**. Coming back from Google, the page says whether it
-  worked and dismisses the message.
-- **Nightly stats** — the hour the nightly pull runs at (local time) and when it last ran.
-  **Run now** starts the same pull from YouTube by hand and shows the job it made, with its
-  progress, right there.
-- **Templates** — the title, description and tag templates every new Beat starts from;
-  `{name}` becomes the audio file name without extension.
-
-#### Add a beat from the web UI
-
-Press **New beat** (Library page or the top navigation). The page is two drop zones and
-nothing else: one takes the audio file (`.mp3`/`.wav`), the other the cover image
-(`.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`). Drop or pick each on its own, from any folder;
-dropping both at once onto either zone also works. There is no Create button — the moment
-both files are there the draft is created, with the title, description and tags from your
-templates (`title_template`, `description_template`, `tags_template` in `PUT /api/settings`;
-`{name}` is the audio file name without extension), and its page opens. A file the app
-cannot use is refused on the spot, with the reason; pick another and it carries on.
-
-The render starts right there, on the draft, so ffmpeg is working while you write. A draft's
-status stays **Draft** the whole time — the status says what you did with the beat, the job
-next to it says what is happening to it — and the draft is marked **Rendered** once the video
-file is ready.
-
-The draft's page puts the form on the left and the YouTube preview on the right: the cover
-letterboxed in a 16:9 frame, the title as you type it, the channel, the publish time when
-one is set, and whether the title fits a search result (YouTube cuts it past 70 characters)
-and how many of its tags it shares with another beat in the Library. Above the form sit the
-render's progress and its log, and the cover's resolution; "video ready" replaces them when
-the render is done. Everything you type saves by itself a moment after you stop — the head
-says **Draft saved 14:03** — so **Save draft** is only there when you want it now. Edit the
-metadata (same limits as `config.yaml`: title 100, description 5000,
-tags 500 characters in total) and press **Save & upload when rendered**: the beat becomes
-**Queued** at once. If the render has finished the upload starts immediately; if it has not,
-the upload starts by itself when the render is done. When it is done the page links to the
-video. A render that fails leaves the beat where it was, Draft or Queued, with the error on
-the job — **Retry render** runs it again and the upload still follows. Privacy is Public,
-Unlisted or Private, and Publish is **Now** or **Schedule**: Schedule reveals a
-date-and-time field (your local time, prefilled with tomorrow at the current hour) and
-uploads the video as private with that publish time, so YouTube makes it public then whether
-or not this machine is on. Until then
-the Library card and the Beat page show **Scheduled** with the time. The time must be at
-least 5 minutes ahead; if it has already passed when the upload job runs, the job fails, the
-Beat returns to draft and you pick a new time.
-Anything already on YouTube cannot be deleted from here. If YouTube is
-not connected the upload job pauses and continues after you connect in Settings. If the
-network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
-over about an hour, before giving up; **Retry now** on the job skips the wait.
-
-#### Change the visibility of an uploaded beat
-
-Once a beat is on YouTube its page keeps the same Privacy selector, working like the one in
-YouTube Studio. Private, Unlisted and Public apply as soon as you pick them. Picking
-**Scheduled** shows the date-and-time field (your local time) and a **Schedule** button;
-nothing changes until you press it. The video is set to private with that publish time, and
-the beat shows **Scheduled** with the time. On a Scheduled beat the field shows the current
-time: enter another one and press **Schedule** to reschedule, pick Private or Unlisted to
-cancel the schedule (the beat is back to uploaded), or pick Public to publish now; that last
-one asks once, since it cannot be undone. The same rule as for drafts applies: the time must
-be at least 5 minutes ahead, otherwise the page shows the error and nothing is sent to YouTube.
-
-#### Statistics
-
-The server collects daily views and watch time per video from the Analytics API once a
-night (hour in Settings, default 04:00 local; a run missed while the machine was asleep
-happens at the next start, a run that failed is retried an hour later, up to three
-times a day). The first run
-backfills the last 90 days. The Library shows
-the channel totals for the last 28 days, each Beat page its own chart. "Collect stats now"
-on the Library page (or `POST /api/stats/collect`) runs the job immediately. The same
-minute scheduler watches Scheduled Beats: once a publish time has passed it runs one sync
-so the badge flips to Published within about a minute while the machine is on, and on the
-first tick after sleep; a sync also picks up a time changed or removed in YouTube Studio.
-
-### 7. Run as a service
-
-To keep the web UI running permanently (Linux, systemd):
-
-```bash
-beat-upload install-service               # writes ~/.config/systemd/user/beat-upload.service
-beat-upload install-service --port 9000   # default port is 8765
-systemctl --user daemon-reload
-systemctl --user enable --now beat-upload
-loginctl enable-linger $USER              # start at boot, without logging in
-```
-
-The unit runs `<venv>/bin/beat-upload serve --port 8765` from the virtualenv you installed
-into, restarts on failure and opens `http://127.0.0.1:8765` after every reboot. A copy of
-the unit with placeholders is in `deploy/beat-upload.service`.
-
-Data stays where `serve` keeps it: `~/.local/share/beat-upload/` (sqlite database, beat files)
-and `~/.config/beat-upload/` (client secrets, token). Logs: `journalctl --user -u beat-upload -f`.
-
-### config.yaml
-
-```yaml
-youtube:
-  title: "My Beat Title"          # required, <= 100 chars
-  description: "Produced by ..."  # optional, <= 5000 chars
-  tags:                           # optional
-    - beats
-    - instrumental
-  category_id: 10                 # optional, default 10 (Music)
-  privacy_status: private         # optional: private (default) | public | unlisted
-  publish_at: 2026-10-01 18:00    # optional, local time: upload as Scheduled, YouTube
-                                  # makes it public then; needs privacy_status: private
-```
-
-`publish_at` must be at least 5 minutes ahead when the upload runs; a time that has already
-passed is an error, never silently moved.
-
-## Project layout
-
-```
-main.py                   entry point (python main.py ...)
-beat_upload/
-  cli.py                  Typer commands: login, upload, channel, videos, video, analytics, privacy
-  beat_folder.py          finds the audio and image in a beat folder
-  config.py               loads and validates config.yaml
-  video.py                renders the video with ffmpeg
-  youtube.py              uploads and edits privacy through the YouTube Data API
-  stats.py                reads channel and video statistics (Data API)
-  analytics.py            per-video watch time and view duration (Analytics API)
-  auth.py                 OAuth2 client secrets and token storage
-  workspace.py            where one channel owner's files live (config dir, data dir)
-  errors.py               exceptions the CLI reports without a traceback
-beat_server/              FastAPI app for `serve`: settings, SQLite models/repos, migrations
-web/                      React frontend, built into web/dist and served by beat_server
-design/ds/                the Design System: the one stylesheet the frontend links (ADR 0005)
-docs/adr/                 the decisions behind all of the above
-tests/                    pytest unit tests (no network, no ffmpeg)
-```
-
-The frontend carries no styles of its own. Every colour, size, font, radius and component
-class comes from `design/ds/styles.css`, a mirror of the "Beat Upload" project in Claude
-Design; Tailwind is layout glue only. `design/ds/readme.md` is the guide, and
-`design/ds/components/*.html` show every class in use — open them in a browser.
-
-## Development
-
-```bash
-pip install -e '.[dev]'
-ruff check . && ruff format .
-pytest
-cd web && npm install && npm run lint:tokens && npm run api:check && npm test && npm run build
-```
-
-`npm run api:check` needs an interpreter that can import `beat_server`; with the venv not
-activated, pass it: `PYTHON=../.venv/bin/python npm run api:check`.
-
-`npm run lint:tokens` fails on a hex colour, an `oklch()` / `rgb()` / `hsl()`, a `style=`
-prop or any Tailwind colour / radius / font utility under `web/src/` — a missing colour or
-size is added to `design/ds/` and pushed to Claude Design, never written in `web/`. See
-`web/README.md` for the cascade rule that comes with a single unlayered stylesheet.
-
-Database schema changes: edit `beat_server/db/models.py`, then
-`alembic revision --autogenerate -m "..."` (config in `alembic.ini`, scripts in
-`beat_server/db/migrations/`). The server applies migrations itself on startup.
+In daily use on one channel. Instagram is in the repo name and nowhere else.
