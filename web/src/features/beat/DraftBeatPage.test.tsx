@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { Beat } from "@/features/library/queries";
-import { AUTOSAVE_MS, DraftBeatView, formOf, patchOf } from "./DraftBeatPage";
+import { AUTOSAVE_MS, DraftBeatView, formOf, patchOf, rebase } from "./DraftBeatPage";
 
 const draft: Beat = {
   id: "b1",
@@ -36,10 +36,10 @@ function renderView(beat: Beat = draft, props: Partial<Parameters<typeof DraftBe
   const onSave = vi.fn();
   const onSend = vi.fn();
   const onDelete = vi.fn();
-  render(
+  const view = (b: Beat) => (
     <MemoryRouter>
       <DraftBeatView
-        beat={beat}
+        beat={b}
         channel="NOVA Beats"
         library={library}
         failedRender={null}
@@ -49,9 +49,12 @@ function renderView(beat: Beat = draft, props: Partial<Parameters<typeof DraftBe
         onRetry={vi.fn()}
         {...props}
       />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
-  return { onSave, onSend, onDelete };
+  const { rerender } = render(view(beat));
+  /** The live Beat changed on the server (a refetch, the answer to a save). */
+  const refetch = (next: Beat) => rerender(view(next));
+  return { onSave, onSend, onDelete, refetch };
 }
 
 const title = () => screen.getByLabelText(/^Title/);
@@ -223,4 +226,49 @@ test("a publish_at carrying seconds is not an edit: the form opens clean", () =>
   vi.advanceTimersByTime(AUTOSAVE_MS * 3);
   expect(onSave).not.toHaveBeenCalled();
   vi.useRealTimers();
+});
+
+const description = () => screen.getByLabelText(/^Description/);
+
+/**
+ * The overwrite: the form used to diff itself against the live Beat, so a change that came
+ * from the server after the page opened read as the owner's edit and was saved back as the
+ * old text.
+ */
+test("a server-side change to an untouched field shows up and is not saved back", () => {
+  vi.useFakeTimers();
+  const { onSave, refetch } = renderView();
+
+  refetch({ ...draft, description: "Written elsewhere.", tags: ["drill"] });
+
+  expect(description()).toHaveValue("Written elsewhere.");
+  expect(screen.getByRole("button", { name: "Remove tag drill" })).toBeInTheDocument();
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  vi.useRealTimers();
+});
+
+test("a field under edit keeps the owner's text when the Beat is refetched", () => {
+  vi.useFakeTimers();
+  const { onSave, refetch } = renderView();
+
+  fireEvent.change(title(), { target: { value: "Static" } });
+  refetch({ ...draft, title: "Server title", description: "Written elsewhere." });
+
+  expect(title()).toHaveValue("Static");
+  expect(description()).toHaveValue("Written elsewhere.");
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledTimes(1);
+  expect(onSave).toHaveBeenCalledWith({ title: "Static" });
+  vi.useRealTimers();
+});
+
+test("rebase adopts the server's value only where the form still holds the old one", () => {
+  const form = { ...formOf(draft), title: "Mine" };
+  const next: Beat = { ...draft, title: "Theirs", description: "New", privacy: "private" };
+  expect(rebase(form, draft, next)).toEqual({
+    ...formOf(next),
+    title: "Mine",
+  });
 });

@@ -48,6 +48,27 @@ export function formOf(beat: Beat): DraftForm {
   };
 }
 
+const FIELDS = ["title", "description", "tags", "privacy", "publishAt"] as const;
+
+function same<T>(a: T, b: T): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * The form after the live Beat moved from `from` to `to`. Pure. A field the owner has not
+ * touched (it still equals `from`) takes the server's new value; a field the owner changed
+ * keeps the owner's text.
+ */
+export function rebase(form: DraftForm, from: Beat, to: Beat): DraftForm {
+  const old = formOf(from);
+  const next = formOf(to);
+  const out = { ...form };
+  for (const key of FIELDS) {
+    if (same(form[key], old[key])) (out as Record<string, unknown>)[key] = next[key];
+  }
+  return out;
+}
+
 /**
  * `<input type="datetime-local">` carries no seconds, so a stored `publish_at` only ever
  * round-trips through the picker to the minute. Both sides of the comparison are cut to the
@@ -71,7 +92,7 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   const patch: BeatPatch = {};
   if (form.title !== beat.title) patch.title = form.title;
   if (form.description !== beat.description) patch.description = form.description;
-  if (JSON.stringify(form.tags) !== JSON.stringify(beat.tags)) patch.tags = form.tags;
+  if (!same(form.tags, beat.tags)) patch.tags = form.tags;
 
   const publishAt = isoOf(form.publishAt);
   const current = beat.publish_at ? minuteIso(serverDate(beat.publish_at)) : null;
@@ -184,12 +205,20 @@ export function DraftBeatView({
   savedAt = null,
 }: ViewProps) {
   const [form, setForm] = useState<DraftForm>(() => formOf(beat));
+  // The Beat the form was filled from. The form diffs against it, never against the live
+  // Beat: a change that arrives from the server is not the owner's edit and must not be
+  // saved back as the old text.
+  const [baseline, setBaseline] = useState<Beat>(beat);
+  if (beat !== baseline) {
+    setBaseline(beat);
+    setForm((f) => rebase(f, baseline, beat));
+  }
   const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const pending = useRef<BeatPatch | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const dirty = patchOf(form, beat);
+  const dirty = patchOf(form, baseline);
   const dirtyKey = JSON.stringify(dirty);
   pending.current = dirty;
 
@@ -443,7 +472,7 @@ export function DraftBeatView({
                 disabled={blocked || !beat.has_files}
                 onClick={() => {
                   cancelAutosave();
-                  onSend(patchOf(form, beat));
+                  onSend(patchOf(form, baseline));
                 }}
               >
                 Save &amp; upload when rendered <span className="trail">→</span>
@@ -455,7 +484,7 @@ export function DraftBeatView({
               disabled={blocked || Object.keys(dirty).length === 0}
               onClick={() => {
                 cancelAutosave();
-                onSave(patchOf(form, beat));
+                onSave(patchOf(form, baseline));
               }}
             >
               Save draft
