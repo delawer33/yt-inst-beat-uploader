@@ -47,6 +47,8 @@ class BeatOut(BaseModel):
     likes: int
     comments: int
     has_files: bool
+    # The audio file's name as it was dropped; ``None`` for beats from before it was kept.
+    source_name: str | None
     # A Draft whose video file is ready: sending it will not wait for a Render (CONTEXT.md,
     # "Rendered"). Stays true once set, so a beat that failed its upload is still Rendered.
     rendered: bool
@@ -78,6 +80,7 @@ class BeatOut(BaseModel):
             likes=beat.likes,
             comments=beat.comments,
             has_files=bool(beat.audio_path and beat.image_path),
+            source_name=beat.source_name,
             rendered=bool(beat.video_path),
             active_job=JobOut.model_validate(active_job) if active_job else None,
             cover_url=cover_url_for(beat),
@@ -116,3 +119,18 @@ class PrivacyIn(BaseModel):
 
     privacy: PrivacyStatus
     publish_at: datetime | None = None
+
+
+class FillIn(BaseModel):
+    """``POST /api/beats/{id}/fill``: the form as it is now, unsaved edits included."""
+
+    title: str
+    description: str
+    tags: list[str]
+
+
+class FillOut(BaseModel):
+    """What Fill from title wrote. Nothing is saved; the form takes it and autosaves."""
+
+    description: str
+    tags: list[str]

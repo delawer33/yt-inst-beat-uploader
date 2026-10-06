@@ -31,6 +31,7 @@ from beat_server.jobs.handlers import HANDLERS
 from beat_server.jobs.queue import JobQueue
 from beat_server.jobs.scheduler import Scheduler
 from beat_server.jobs.worker import Worker
+from beat_server.services.claude_cli import run_claude
 from beat_server.settings import ServerSettings
 from beat_upload.workspace import Workspace
 
@@ -112,6 +113,7 @@ def create_app(
         hour_getter=lambda session: stats_hour(SettingsRepo(session)),
     )
     app.state.on_reconnect = queue.resume_paused  # the auth callback calls it after login
+    app.state.fill_runner = run_claude  # Fill from title; tests put a fake here
 
     register_error_handlers(app)
     install_csrf(app)

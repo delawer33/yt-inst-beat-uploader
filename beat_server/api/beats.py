@@ -1,4 +1,4 @@
-"""The Library over HTTP: list, one beat, its cover, its privacy; create, edit, send
+"""The Library over HTTP: list, one beat, its cover, its privacy; create, edit, fill, send
 and delete a draft.
 
 Multipart ``POST /api/beats`` stores the files, applies the owner's templates and queues the
@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from beat_server.api.schemas import BeatOut, BeatPatch, PrivacyIn
+from beat_server.api.schemas import BeatOut, BeatPatch, FillIn, FillOut, PrivacyIn
 from beat_server.db.models import Beat, BeatStatus, JobKind
 from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
 from beat_server.deps import get_session, get_workspace
@@ -23,6 +23,7 @@ from beat_server.jobs.queue import JobQueue
 from beat_server.services.beats import (
     EDITABLE,
     apply_patch,
+    check_no_placeholders,
     create_draft,
     default_metadata,
     delete_draft,
@@ -31,6 +32,7 @@ from beat_server.services.beats import (
     to_naive_utc,
 )
 from beat_server.services.errors import BeatNotFound, BeatStateError
+from beat_server.services.fill import FillService
 from beat_server.services.sync import status_for
 from beat_upload.auth import get_valid_credentials
 from beat_upload.workspace import Workspace
@@ -54,6 +56,13 @@ def get_queue(request: Request) -> JobQueue:
 
 
 QueueDep = Annotated[JobQueue, Depends(get_queue)]
+
+
+def get_fill(request: Request) -> FillService:
+    return FillService(request.app.state.fill_runner)
+
+
+FillDep = Annotated[FillService, Depends(get_fill)]
 
 
 def beat_out(session: Session, beat: Beat) -> BeatOut:
@@ -111,6 +120,23 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep) -> BeatOut:
     return beat_out(session, beat)
 
 
+@router.post("/{beat_id}/fill", response_model=FillOut)
+def fill_beat(beat_id: str, body: FillIn, session: SessionDep, fill: FillDep) -> FillOut:
+    """Fill from title: description and tags for the form, written from the form's title and
+    the owner's Templates. Writes nothing. Not a Draft -> 409, a title with a Placeholder ->
+    422, the runner failed or answered badly -> 400 with what to fix.
+    """
+    beat = load_beat(session, beat_id)
+    filled = fill.fill(
+        beat,
+        title=body.title,
+        description=body.description,
+        tags=body.tags,
+        templates=default_metadata(SettingsRepo(session)),
+    )
+    return FillOut(description=filled.description, tags=filled.tags)
+
+
 @router.post("/{beat_id}/upload", response_model=BeatOut)
 def upload_beat(
     beat_id: str, session: SessionDep, ws: WorkspaceDep, bus: BusDep, queue: QueueDep
@@ -126,6 +152,7 @@ def upload_beat(
         raise BeatStateError(f"Beat {beat_id} is {beat.status}; only drafts can be uploaded.")
     if not (beat.audio_path and beat.image_path):
         raise BeatStateError(f"Beat {beat_id} has no audio or cover; add both first.")
+    check_no_placeholders(beat)
     metadata_of(beat)  # a passed publish_at is a 422 now, not a failed upload after rendering
     beat.status = BeatStatus.QUEUED
     BeatRepo(session).save(beat)

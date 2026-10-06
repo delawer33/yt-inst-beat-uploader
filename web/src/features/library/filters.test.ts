@@ -42,6 +42,7 @@ const beat = (over: Partial<Beat> & { id: string }): Beat => ({
   likes: 0,
   comments: 0,
   has_files: false,
+  source_name: null,
   rendered: false,
   active_job: null,
   cover_url: null,

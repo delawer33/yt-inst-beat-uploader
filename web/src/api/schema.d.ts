@@ -73,6 +73,28 @@ export interface paths {
         patch: operations["patch_beat_api_beats__beat_id__patch"];
         trace?: never;
     };
+    "/api/beats/{beat_id}/fill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fill Beat
+         * @description Fill from title: description and tags for the form, written from the form's title and
+         *     the owner's Templates. Writes nothing. Not a Draft -> 409, a title with a Placeholder ->
+         *     422, the runner failed or answered badly -> 400 with what to fix.
+         */
+        post: operations["fill_beat_api_beats__beat_id__fill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/beats/{beat_id}/upload": {
         parameters: {
             query?: never;
@@ -419,6 +441,8 @@ export interface components {
             comments: number;
             /** Has Files */
             has_files: boolean;
+            /** Source Name */
+            source_name: string | null;
             /** Rendered */
             rendered: boolean;
             active_job: components["schemas"]["JobOut"] | null;
@@ -493,6 +517,28 @@ export interface components {
             avg_view_seconds: number;
             /** Avg View Percent */
             avg_view_percent: number;
+        };
+        /**
+         * FillIn
+         * @description ``POST /api/beats/{id}/fill``: the form as it is now, unsaved edits included.
+         */
+        FillIn: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Tags */
+            tags: string[];
+        };
+        /**
+         * FillOut
+         * @description What Fill from title wrote. Nothing is saved; the form takes it and autosaves.
+         */
+        FillOut: {
+            /** Description */
+            description: string;
+            /** Tags */
+            tags: string[];
         };
         /** GoogleClientIn */
         GoogleClientIn: {
@@ -776,6 +822,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fill_beat_api_beats__beat_id__fill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FillIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FillOut"];
                 };
             };
             /** @description Validation Error */

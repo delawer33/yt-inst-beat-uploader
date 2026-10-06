@@ -23,6 +23,7 @@ const uploaded: Beat = {
   likes: 0,
   comments: 0,
   has_files: true,
+  source_name: null,
   rendered: false,
   active_job: null,
   cover_url: null,

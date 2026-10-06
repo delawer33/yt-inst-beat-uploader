@@ -8,6 +8,8 @@ Everything the [README](../README.md) leaves out: every CLI command, the web UI 
 - Python 3.13+
 - `ffmpeg` on PATH
 - A Google Cloud OAuth client (Desktop app) with the YouTube Data API enabled
+- Optional, for **Fill from title** in the web UI: Claude Code (`claude`) installed and
+  logged in for the user that runs the server
 
 ## Install
 
@@ -159,7 +161,20 @@ or not this machine is on. Until then
 the Library card and the Beat page show **Scheduled** with the time. The time must be at
 least 5 minutes ahead; if it has already passed when the upload job runs, the job fails, the
 Beat returns to draft and you pick a new time.
-Anything already on YouTube cannot be deleted from here. If YouTube is
+Anything already on YouTube cannot be deleted from here.
+
+Templates may carry Placeholders, `[[...]]` markers for what is not written yet (`[[Artist1]]`,
+`[[140]]`, a sentence about the sound). Type the title, then press **Fill from title** under
+it: it writes the description and tags from your templates and the title, takes BPM and key
+from an audio file name like `Dmin110.mp3` (shown as **Audio** among the file facts), drafts
+the sentence about the sound and adds five to eight neighbouring keywords to the tags.
+Whatever you already wrote in place of a Placeholder stays. The answer lands in the form and
+saves like any edit; nothing reaches YouTube until you send. It takes ten seconds or so, runs
+the local `claude` command (ADR 0006), and only works on a Draft whose title has no
+Placeholder left. A beat with a Placeholder anywhere in its title, description or tags
+cannot be sent: the button says where they are.
+
+ If YouTube is
 not connected the upload job pauses and continues after you connect in Settings. If the
 network drops (laptop asleep, Wi-Fi down) the job waits and retries by itself, five times
 over about an hour, before giving up; **Retry now** on the job skips the wait.

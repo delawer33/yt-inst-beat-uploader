@@ -17,3 +17,7 @@ class ConflictError(BeatUploadError):
 
 class BeatStateError(ConflictError):
     """E.g. changing privacy of a beat that is not on YouTube, editing a published beat."""
+
+
+class FillError(BeatUploadError):
+    """Fill from title could not run or came back with something unusable. Mapped to 400."""

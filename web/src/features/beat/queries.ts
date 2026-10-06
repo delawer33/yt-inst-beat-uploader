@@ -6,6 +6,8 @@ import { describe, unwrap } from "@/api/unwrap";
 import { beatKey, beatsKey, useBeatMutation, type Beat } from "@/features/library/queries";
 
 export type BeatPatch = components["schemas"]["BeatPatch"];
+export type FillIn = components["schemas"]["FillIn"];
+export type FillOut = components["schemas"]["FillOut"];
 
 export const BEATS_URL = "/api/beats";
 
@@ -38,6 +40,22 @@ export function usePatchBeat() {
       }),
     ),
   );
+}
+
+/**
+ * Fill from title: description and tags written from the form's title and the Templates.
+ * The server saves nothing and neither does this hook; the answer goes into the form.
+ */
+export function useFillBeat() {
+  return useMutation({
+    mutationFn: ({ id, form }: { id: string; form: FillIn }) =>
+      unwrap(
+        api.POST("/api/beats/{beat_id}/fill", {
+          params: { path: { beat_id: id } },
+          body: form,
+        }),
+      ),
+  });
 }
 
 /**

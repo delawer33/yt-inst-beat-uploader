@@ -77,6 +77,7 @@ def test_create_draft_stores_files_and_applies_template(workspace: Workspace, dr
     assert draft.description == "Dark Night prod. by me"
     assert draft.tags == ["trap", "free"]
     assert draft.privacy == "private"
+    assert draft.source_name == "Dark Night.mp3"
 
 
 def test_create_draft_rejects_two_audio_files(workspace: Workspace, repo: BeatRepo) -> None:
@@ -512,6 +513,7 @@ def test_post_beats_creates_draft(client: TestClient, workspace: Workspace) -> N
     body = response.json()
     assert body["status"] == "draft" and body["title"] == "My Beat"
     assert body["has_files"] is True
+    assert body["source_name"] == "My Beat.mp3"
     assert body["cover_url"] == f"/api/beats/{body['id']}/cover"
     assert client.get(body["cover_url"]).content == PNG
     assert (workspace.beat_dir(body["id"]) / "audio.mp3").is_file()
@@ -598,6 +600,42 @@ def test_send_queues_the_beat_and_a_render_when_there_is_no_video(
     assert beat_events == [(draft.id, "queued")]
     assert [j.kind for j in JobRepo(session).for_beat(draft.id)] == [JobKind.RENDER]
     assert client.post(f"/api/beats/{draft.id}/upload").status_code == 409  # not a draft anymore
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "named"),
+    [
+        ("title", "[[Artist1]] Type Beat", "title"),
+        ("description", "BPM: [[140]]", "description"),
+        ("tags", ["ok", "[[artist2]] type beat"], "tags"),
+    ],
+)
+def test_send_refuses_a_beat_with_a_placeholder(
+    client: TestClient,
+    session: Session,
+    repo: BeatRepo,
+    draft: Beat,
+    field: str,
+    value: object,
+    named: str,
+) -> None:
+    setattr(draft, field, value)
+    repo.save(draft)
+
+    response = client.post(f"/api/beats/{draft.id}/upload")
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert named in detail and "fill the placeholders first" in detail
+    session.expire_all()
+    assert repo.get(draft.id).status == BeatStatus.DRAFT
+    assert JobRepo(session).for_beat(draft.id) == []
+
+
+def test_a_draft_with_placeholders_is_still_saveable(client: TestClient, draft: Beat) -> None:
+    response = client.patch(f"/api/beats/{draft.id}", json={"description": "BPM: [[140]]"})
+    assert response.status_code == 200
+    assert response.json()["description"] == "BPM: [[140]]"
 
 
 def test_upload_endpoint_without_files_is_409(client: TestClient, repo: BeatRepo) -> None:

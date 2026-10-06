@@ -13,8 +13,9 @@ import {
   defaultPublishAt,
   tagsLength,
 } from "./metadata";
-import type { BeatPatch } from "./queries";
-import { useDeleteBeat, usePatchBeat, useUploadBeat } from "./queries";
+import { fillHint, sendHint } from "./placeholders";
+import type { BeatPatch, FillIn, FillOut } from "./queries";
+import { useDeleteBeat, useFillBeat, usePatchBeat, useUploadBeat } from "./queries";
 import { TagInput } from "./TagInput";
 import { YouTubePreview } from "./YouTubePreview";
 
@@ -124,6 +125,7 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
   const send = usePatchBeat();
   const upload = useUploadBeat();
   const remove = useDeleteBeat();
+  const fill = useFillBeat();
   const beats = useBeats();
   const auth = useAuthStatus();
   const jobs = useJobs(beat.id);
@@ -155,6 +157,9 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
       }}
       onDelete={() => remove.mutate(beat.id, { onSuccess: () => void navigate("/") })}
       onRetry={(id) => retry.mutate(id)}
+      onFill={(form, apply) => fill.mutate({ id: beat.id, form }, { onSuccess: apply })}
+      filling={fill.isPending}
+      fillError={fill.error?.message ?? null}
       saving={autosave.isPending || send.isPending || upload.isPending}
       deleting={remove.isPending}
       error={
@@ -178,6 +183,10 @@ type ViewProps = {
   onSend: (patch: BeatPatch) => void;
   onDelete: () => void;
   onRetry: (jobId: string) => void;
+  /** Fill from title with the form as it is; `apply` puts the answer into the form. */
+  onFill: (form: FillIn, apply: (filled: FillOut) => void) => void;
+  filling?: boolean;
+  fillError?: string | null;
   saving?: boolean;
   deleting?: boolean;
   error?: string | null;
@@ -199,6 +208,9 @@ export function DraftBeatView({
   onSend,
   onDelete,
   onRetry,
+  onFill,
+  filling = false,
+  fillError = null,
   saving = false,
   deleting = false,
   error = null,
@@ -258,6 +270,8 @@ export function DraftBeatView({
   const tooLong =
     form.title.length > MAX_TITLE || form.description.length > MAX_DESCRIPTION || tagsLen > MAX_TAGS;
   const blocked = saving || tooLong || !savable(form);
+  const titleHint = fillHint(form.title);
+  const placeholdersLeft = sendHint(form);
   const job = beat.active_job;
 
   return (
@@ -283,6 +297,12 @@ export function DraftBeatView({
               {beat.cover_url && <img src={beat.cover_url} alt={`Cover of ${beat.title}`} />}
             </div>
             <div className="file-meta">
+              {beat.source_name && (
+                <div className="fact-row">
+                  <span className="text-soft">Audio</span>
+                  <span>{beat.source_name}</span>
+                </div>
+              )}
               {coverSize && (
                 <div className="fact-row">
                   <span className="text-soft">Cover</span>
@@ -354,6 +374,24 @@ export function DraftBeatView({
               aria-invalid={form.title.length > MAX_TITLE || undefined}
               onChange={(e) => set("title", e.target.value)}
             />
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={filling || titleHint !== null || beat.status !== "draft"}
+                aria-busy={filling || undefined}
+                onClick={() => {
+                  cancelAutosave();
+                  onFill(
+                    { title: form.title, description: form.description, tags: form.tags },
+                    (filled) => setForm((f) => ({ ...f, ...filled })),
+                  );
+                }}
+              >
+                {filling ? "Filling…" : "Fill from title"}
+              </button>
+              {titleHint && <span className="drop-hint">{titleHint}</span>}
+            </div>
           </div>
 
           <div className="field">
@@ -450,11 +488,22 @@ export function DraftBeatView({
             </div>
           )}
 
+          {fillError && (
+            <div className="note" role="alert">
+              <div className="note-title">Fill from title did not run</div>
+              <span className="text-soft">{fillError}</span>
+            </div>
+          )}
+
           {error && (
             <div className="note" role="alert">
               <div className="note-title">YouTube will not take that</div>
               <span className="text-soft">{error}</span>
             </div>
+          )}
+
+          {beat.status === "draft" && placeholdersLeft && (
+            <span className="drop-hint">{placeholdersLeft}</span>
           )}
 
           {beat.status === "draft" && !beat.has_files && (
@@ -469,7 +518,7 @@ export function DraftBeatView({
               <button
                 type="button"
                 className="btn btn-primary btn-flush btn-grow"
-                disabled={blocked || !beat.has_files}
+                disabled={blocked || !beat.has_files || placeholdersLeft !== null}
                 onClick={() => {
                   cancelAutosave();
                   onSend(patchOf(form, baseline));

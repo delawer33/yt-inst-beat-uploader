@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { Beat } from "@/features/library/queries";
 import { AUTOSAVE_MS, DraftBeatView, formOf, patchOf, rebase } from "./DraftBeatPage";
@@ -19,6 +19,7 @@ const draft: Beat = {
   likes: 0,
   comments: 0,
   has_files: true,
+  source_name: "Dmin110.mp3",
   rendered: false,
   active_job: null,
   cover_url: "/api/beats/b1/cover",
@@ -36,6 +37,7 @@ function renderView(beat: Beat = draft, props: Partial<Parameters<typeof DraftBe
   const onSave = vi.fn();
   const onSend = vi.fn();
   const onDelete = vi.fn();
+  const onFill = vi.fn();
   const view = (b: Beat) => (
     <MemoryRouter>
       <DraftBeatView
@@ -47,6 +49,7 @@ function renderView(beat: Beat = draft, props: Partial<Parameters<typeof DraftBe
         onSend={onSend}
         onDelete={onDelete}
         onRetry={vi.fn()}
+        onFill={onFill}
         {...props}
       />
     </MemoryRouter>
@@ -54,7 +57,7 @@ function renderView(beat: Beat = draft, props: Partial<Parameters<typeof DraftBe
   const { rerender } = render(view(beat));
   /** The live Beat changed on the server (a refetch, the answer to a save). */
   const refetch = (next: Beat) => rerender(view(next));
-  return { onSave, onSend, onDelete, refetch };
+  return { onSave, onSend, onDelete, onFill, refetch };
 }
 
 const title = () => screen.getByLabelText(/^Title/);
@@ -271,4 +274,75 @@ test("rebase adopts the server's value only where the form still holds the old o
     ...formOf(next),
     title: "Mine",
   });
+});
+
+// --- Fill from title ------------------------------------------------------------------------
+
+const fillButton = () => screen.getByRole("button", { name: /Fill from title/ });
+
+test("the file facts show the audio file name as it was dropped", () => {
+  renderView();
+  expect(screen.getByText("Dmin110.mp3")).toBeInTheDocument();
+});
+
+test("Fill from title sends the form as it is and puts the answer into it", () => {
+  vi.useFakeTimers();
+  const { onFill, onSave } = renderView();
+  fireEvent.change(description(), { target: { value: "BPM: [[140]] mine" } });
+
+  fireEvent.click(fillButton());
+  expect(onFill).toHaveBeenCalledWith(
+    { title: "Ninety", description: "BPM: [[140]] mine", tags: ["uk drill"] },
+    expect.any(Function),
+  );
+  // The armed autosave was dropped: the fill's answer is what gets saved.
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+
+  const apply = onFill.mock.calls[0][1];
+  act(() => apply({ description: "BPM: 140 mine", tags: ["uk drill", "drill type beat"] }));
+  expect(description()).toHaveValue("BPM: 140 mine");
+  expect(screen.getByRole("button", { name: "Remove tag drill type beat" })).toBeInTheDocument();
+
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledWith({
+    description: "BPM: 140 mine",
+    tags: ["uk drill", "drill type beat"],
+  });
+  vi.useRealTimers();
+});
+
+test("Fill from title is dead while the title holds a Placeholder, and names it", () => {
+  renderView({ ...draft, title: "Travis Scott Type Beat x [[Artist2]] | [[Hard Trap]]" });
+  expect(fillButton()).toBeDisabled();
+  expect(screen.getByText("Title still has [[Artist2]]")).toBeInTheDocument();
+
+  fireEvent.change(title(), { target: { value: "Travis Scott Type Beat | Hard Trap" } });
+  expect(fillButton()).toBeEnabled();
+  expect(screen.queryByText(/Title still has/)).not.toBeInTheDocument();
+});
+
+test("Fill from title is dead on a Queued beat", () => {
+  renderView({ ...draft, status: "queued" });
+  expect(fillButton()).toBeDisabled();
+});
+
+test("a running fill says so and cannot be pressed twice", () => {
+  renderView(draft, { filling: true });
+  expect(screen.getByRole("button", { name: "Filling…" })).toBeDisabled();
+});
+
+test("a failed fill shows its note and leaves the form as it was", () => {
+  renderView(draft, { fillError: "`claude` is not logged in for this user." });
+  expect(screen.getByRole("alert")).toHaveTextContent("not logged in");
+  expect(description()).toHaveValue("Free for non-profit.");
+});
+
+test("the send button is dead while a Placeholder is left, and says where", () => {
+  renderView({ ...draft, description: "BPM: [[140]]" });
+  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeDisabled();
+  expect(screen.getByText("Fill the placeholders in the description")).toBeInTheDocument();
+
+  fireEvent.change(description(), { target: { value: "BPM: 140" } });
+  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeEnabled();
 });

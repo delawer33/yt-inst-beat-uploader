@@ -21,6 +21,7 @@ from beat_server.services.errors import BeatStateError
 from beat_upload.beat_folder import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS
 from beat_upload.config import MAX_TITLE_LENGTH, PrivacyStatus, YouTubeMetadata
 from beat_upload.errors import BeatFolderError
+from beat_upload.placeholders import fields_with_placeholder
 from beat_upload.workspace import Workspace
 
 KEY_TITLE_TEMPLATE = "title_template"
@@ -124,6 +125,7 @@ def create_draft(
         privacy=PrivacyStatus.PRIVATE.value,
         audio_path=audio_name,
         image_path=image_name,
+        source_name=Path(audio.filename).name if audio.filename else None,
     )
     return repo.add(beat)
 
@@ -131,6 +133,19 @@ def create_draft(
 def metadata_of(beat: Beat) -> YouTubeMetadata:
     """The beat's Metadata as ``upload_video`` wants it (validated on the way)."""
     return YouTubeMetadata.from_mapping(_mapping(beat))
+
+
+def check_no_placeholders(beat: Beat) -> None:
+    """``BeatStateError`` when the title, description or tags still hold a Placeholder.
+
+    Only sending refuses them: a Draft with Placeholders is a legitimate thing to save.
+    """
+    fields = fields_with_placeholder(beat.title, beat.description, list(beat.tags))
+    if fields:
+        raise BeatStateError(
+            f"The {' and '.join(fields)} of beat {beat.id} still hold [[...]] Placeholders; "
+            "fill the placeholders first."
+        )
 
 
 def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:

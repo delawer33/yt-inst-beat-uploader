@@ -63,6 +63,25 @@ and a log. What the UI shows progress for. A Job says what is happening to a Bea
 the Beat's status says what the owner has done with it.
 _Avoid_: Task, operation
 
+**Template**:
+The title, description and tags every new Beat starts from, kept in Settings. `{name}` in a
+Template is the audio file's name; a Template may also carry Placeholders.
+_Avoid_: Preset, default, boilerplate
+
+**Placeholder**:
+A `[[...]]` marker inside a Beat's Metadata standing for text that is not written yet: an
+artist, the substyle, BPM, key, the sentence about the sound. A Beat with a Placeholder left
+cannot be sent.
+_Avoid_: Variable, marker, tag
+
+**Fill from title**:
+Writing a Draft's description and tags from its title: the Template gives the shape, the
+title gives the artists and substyle, the audio file name gives BPM and key, and neighbouring
+keywords are added for the recommendations. What the owner already wrote in place of a
+Placeholder stays. "Artist" is whatever stands before "Type Beat" in the title, a name or a
+style; a title names none, one or two, and the result follows.
+_Avoid_: Autofill, generate, regenerate
+
 **Workspace**:
 Everything belonging to one channel owner: their credentials, their Library, their files.
 Today there is exactly one, local to the machine; the concept exists so there can be more.

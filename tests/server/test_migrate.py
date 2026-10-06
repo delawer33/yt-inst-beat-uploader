@@ -71,3 +71,32 @@ def test_0004_turns_rendering_beats_into_queued(tmp_path: Path) -> None:
             "a": "queued",
             "b": "draft",
         }
+
+
+def test_0005_adds_source_name_and_keeps_old_rows(tmp_path: Path) -> None:
+    from alembic import command
+    from sqlalchemy import text
+
+    from beat_server.db.migrate import alembic_config
+
+    db = tmp_path / "beat.sqlite3"
+    command.upgrade(alembic_config(db), "0004")
+    engine = make_engine(db)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO beats (id, status, title, description, tags, category_id, privacy,"
+                " views, likes, comments, created_at, updated_at)"
+                " VALUES ('a', 'draft', '', '', '[]', 10, 'private', 0, 0, 0,"
+                " '2026-10-06 00:00:00', '2026-10-06 00:00:00')"
+            )
+        )
+
+    upgrade_to_head(db)
+    columns = {c["name"] for c in inspect(engine).get_columns("beats")}
+    assert "source_name" in columns
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT source_name FROM beats")).scalar() is None
+
+    command.downgrade(alembic_config(db), "0004")
+    assert "source_name" not in {c["name"] for c in inspect(engine).get_columns("beats")}

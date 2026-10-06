@@ -3,12 +3,14 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from beat_server.api import beats as beats_api
 from beat_server.db.models import Beat, BeatStatus
 from beat_server.db.repo import BeatRepo, JobRepo
+from beat_server.services.errors import FillError
 from beat_upload.config import PrivacyStatus
 from beat_upload.errors import AuthError
 from beat_upload.workspace import Workspace
@@ -299,3 +301,69 @@ def test_upload_with_a_passed_publish_at_is_422_and_queues_nothing(
     session.expire_all()
     assert BeatRepo(session).get("stale").status == BeatStatus.DRAFT
     assert JobRepo(session).list() == []
+
+
+# --- Fill from title ----------------------------------------------------------------------
+
+
+def fake_fill(app: FastAPI, answer: dict | Exception) -> list[str]:
+    """Put a fake runner on the app; returns the prompts it was given."""
+    prompts: list[str] = []
+
+    def runner(prompt: str, schema: dict) -> dict:
+        prompts.append(prompt)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    app.state.fill_runner = runner
+    return prompts
+
+
+FORM = {
+    "title": 'Travis Scott Type Beat - "Lasso"',
+    "description": "BPM: [[140]] unsaved edit",
+    "tags": ["[[artist1]] type beat"],
+}
+
+
+def test_fill_returns_the_pair_and_writes_nothing(
+    app: FastAPI, client: TestClient, session: Session, beats: dict[str, Beat]
+) -> None:
+    prompts = fake_fill(app, {"description": "BPM: 140", "tags": ["travis scott type beat"]})
+
+    response = client.post("/api/beats/draft/fill", json=FORM)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"description": "BPM: 140", "tags": ["travis scott type beat"]}
+    assert "unsaved edit" in prompts[0]
+    session.expire_all()
+    beat = BeatRepo(session).get("draft")
+    assert (beat.title, beat.description, beat.tags) == ("Draft", "", [])
+
+
+def test_fill_of_a_beat_that_is_not_a_draft_is_409(
+    app: FastAPI, client: TestClient, beats: dict[str, Beat]
+) -> None:
+    prompts = fake_fill(app, {"description": "", "tags": []})
+    assert client.post("/api/beats/pub/fill", json=FORM).status_code == 409
+    assert client.post("/api/beats/nope/fill", json=FORM).status_code == 404
+    assert prompts == []
+
+
+def test_fill_with_a_placeholder_in_the_title_is_422(
+    app: FastAPI, client: TestClient, beats: dict[str, Beat]
+) -> None:
+    fake_fill(app, {"description": "", "tags": []})
+    response = client.post("/api/beats/draft/fill", json=FORM | {"title": "x [[Artist2]]"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Title still has [[Artist2]]; fix the title first."
+
+
+def test_fill_runner_failure_carries_its_message(
+    app: FastAPI, client: TestClient, beats: dict[str, Beat]
+) -> None:
+    fake_fill(app, FillError("`claude` is not logged in for this user."))
+    response = client.post("/api/beats/draft/fill", json=FORM)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "`claude` is not logged in for this user."

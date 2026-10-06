@@ -34,6 +34,7 @@ const draft: Beat = {
   likes: 0,
   comments: 0,
   has_files: true,
+  source_name: "Dmin110.mp3",
   rendered: true,
   active_job: null,
   cover_url: "/api/beats/b1/cover",
@@ -163,4 +164,46 @@ test("an autosave during the send's PATCH leaves the upload alone", async () => 
   vi.useRealTimers();
 
   await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(1));
+});
+
+const fillButton = () => screen.getByRole("button", { name: /Fill from title/ });
+const description = () => screen.getByLabelText(/^Description/);
+
+test("a fill puts the server's answer into the form and the autosave patches it", async () => {
+  api.POST.mockImplementation(async (path: string) =>
+    path === "/api/beats/{beat_id}/fill"
+      ? { data: { description: "Filled.", tags: ["uk drill", "drill type beat"] } }
+      : { data: { ...draft, status: "queued" } },
+  );
+  api.PATCH.mockImplementation(async (_path: string, { body }: { body: object }) => ({
+    data: { ...draft, ...body },
+  }));
+  renderPage();
+
+  fireEvent.click(fillButton());
+
+  await waitFor(() => expect(description()).toHaveValue("Filled."));
+  expect(api.POST).toHaveBeenCalledWith("/api/beats/{beat_id}/fill", {
+    params: { path: { beat_id: "b1" } },
+    body: { title: "Ninety", description: "Free for non-profit.", tags: ["uk drill"] },
+  });
+  await waitFor(
+    () =>
+      expect(api.PATCH).toHaveBeenCalledWith("/api/beats/{beat_id}", {
+        params: { path: { beat_id: "b1" } },
+        body: { description: "Filled.", tags: ["uk drill", "drill type beat"] },
+      }),
+    { timeout: AUTOSAVE_MS * 3 },
+  );
+});
+
+test("a failed fill leaves the form and shows the server's note", async () => {
+  api.POST.mockResolvedValue({ error: { detail: "`claude` is not logged in for this user." } });
+  renderPage();
+
+  fireEvent.click(fillButton());
+
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("not logged in"));
+  expect(description()).toHaveValue("Free for non-profit.");
+  expect(api.PATCH).not.toHaveBeenCalled();
 });
