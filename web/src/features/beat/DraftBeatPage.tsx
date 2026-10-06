@@ -49,8 +49,6 @@ export function formOf(beat: Beat): DraftForm {
   };
 }
 
-const FIELDS = ["title", "description", "tags", "privacy", "publishAt"] as const;
-
 function same<T>(a: T, b: T): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -58,16 +56,29 @@ function same<T>(a: T, b: T): boolean {
 /**
  * The form after the live Beat moved from `from` to `to`. Pure. A field the owner has not
  * touched (it still equals `from`) takes the server's new value; a field the owner changed
- * keeps the owner's text.
+ * keeps the owner's text. A new value that is only this form's own save coming back (it
+ * equals `sent`, what the form last saved) is never adopted: the form already holds that
+ * edit or a newer one, such as the owner undoing it while the save was in flight.
  */
-export function rebase(form: DraftForm, from: Beat, to: Beat): DraftForm {
+export function rebase(
+  form: DraftForm,
+  from: Beat,
+  to: Beat,
+  sent: DraftForm | null = null,
+): DraftForm {
   const old = formOf(from);
   const next = formOf(to);
-  const out = { ...form };
-  for (const key of FIELDS) {
-    if (same(form[key], old[key])) (out as Record<string, unknown>)[key] = next[key];
-  }
-  return out;
+  const adopt = <K extends keyof DraftForm>(key: K): DraftForm[K] => {
+    const echo = sent !== null && same(next[key], sent[key]);
+    return !echo && same(form[key], old[key]) ? next[key] : form[key];
+  };
+  return {
+    title: adopt("title"),
+    description: adopt("description"),
+    tags: adopt("tags"),
+    privacy: adopt("privacy"),
+    publishAt: adopt("publishAt"),
+  };
 }
 
 /**
@@ -221,10 +232,17 @@ export function DraftBeatView({
   // Beat: a change that arrives from the server is not the owner's edit and must not be
   // saved back as the old text.
   const [baseline, setBaseline] = useState<Beat>(beat);
+  // The form as it was when it last saved: lets `rebase` tell that save's echo apart from
+  // a change made somewhere else.
+  const [sent, setSent] = useState<DraftForm | null>(null);
   if (beat !== baseline) {
     setBaseline(beat);
-    setForm((f) => rebase(f, baseline, beat));
+    setForm((f) => rebase(f, baseline, beat, sent));
   }
+  const save = (patch: BeatPatch) => {
+    setSent(form);
+    onSave(patch);
+  };
   const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const pending = useRef<BeatPatch | null>(null);
@@ -252,7 +270,7 @@ export function DraftBeatView({
     if (body === null || Object.keys(body).length === 0 || !savable(form)) return;
     timer.current = setTimeout(() => {
       timer.current = null;
-      onSave(body);
+      save(body);
     }, AUTOSAVE_MS);
     return cancelAutosave;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -380,8 +398,8 @@ export function DraftBeatView({
                 className="btn btn-secondary btn-sm"
                 disabled={filling || titleHint !== null || beat.status !== "draft"}
                 aria-busy={filling || undefined}
+                // The armed autosave keeps running: if the fill fails, the edit still saves.
                 onClick={() => {
-                  cancelAutosave();
                   onFill(
                     { title: form.title, description: form.description, tags: form.tags },
                     (filled) => setForm((f) => ({ ...f, ...filled })),
@@ -408,6 +426,8 @@ export function DraftBeatView({
               className="input"
               rows={6}
               value={form.description}
+              // The fill is about to replace it; typing now would be lost.
+              readOnly={filling}
               aria-invalid={form.description.length > MAX_DESCRIPTION || undefined}
               onChange={(e) => set("description", e.target.value)}
             />
@@ -420,7 +440,12 @@ export function DraftBeatView({
                 {tagsLen} / {MAX_TAGS}
               </span>
             </label>
-            <TagInput id="tags" tags={form.tags} onChange={(tags) => set("tags", tags)} />
+            <TagInput
+              id="tags"
+              tags={form.tags}
+              disabled={filling}
+              onChange={(tags) => set("tags", tags)}
+            />
           </div>
 
           <div className="form-grid-2">
@@ -518,9 +543,10 @@ export function DraftBeatView({
               <button
                 type="button"
                 className="btn btn-primary btn-flush btn-grow"
-                disabled={blocked || !beat.has_files || placeholdersLeft !== null}
+                disabled={blocked || filling || !beat.has_files || placeholdersLeft !== null}
                 onClick={() => {
                   cancelAutosave();
+                  setSent(form);
                   onSend(patchOf(form, baseline));
                 }}
               >
@@ -533,7 +559,7 @@ export function DraftBeatView({
               disabled={blocked || Object.keys(dirty).length === 0}
               onClick={() => {
                 cancelAutosave();
-                onSave(patchOf(form, baseline));
+                save(patchOf(form, baseline));
               }}
             >
               Save draft

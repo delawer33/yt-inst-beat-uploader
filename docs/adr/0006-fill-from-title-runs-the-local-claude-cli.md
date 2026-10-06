@@ -24,4 +24,7 @@ of the repository).
 - One press costs a few seconds and a few cents of subscription quota. The call is
   synchronous: the result goes into the form, never straight into the database, so the owner
   sees it before the autosave takes it.
+- The model is Sonnet, not Haiku: through the CLI, on the owner's Template, Sonnet answered
+  in about 13 seconds with the neighbouring keywords, Haiku took about a minute and left them
+  out.
 - The runner is one function; swapping the CLI for an API client later is a local change.

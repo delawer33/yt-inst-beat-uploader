@@ -27,7 +27,9 @@ export function BeatPage() {
     );
   }
   return OWNERS.has(beat.data.status) ? (
-    <DraftBeatPage beat={beat.data} />
+    // Keyed so a Draft-to-Draft navigation does not carry one Beat's mutations (a running
+    // fill, its error) onto the next.
+    <DraftBeatPage key={beat.data.id} beat={beat.data} />
   ) : (
     <PublishedBeatPage beat={beat.data} />
   );

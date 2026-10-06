@@ -35,8 +35,9 @@ FILL_SCHEMA: dict[str, Any] = {
 RULES = f"""\
 Rules, in this order:
 1. The shape and wording come from the Templates. Keep every line, emoji, link and sentence of
-   the description Template; only the [[...]] Placeholders change. `{{name}}` in a Template is
-   the beat's name as the title gives it (the quoted name).
+   the description Template; only the [[...]] Placeholders change. `{{name}}` in a Template
+   stood for the audio file's name; the title may have renamed the beat since, so write the
+   name the title gives it (the quoted name).
 2. Fill the Placeholders from the title. "Artist" is whatever stands before "Type Beat" in the
    title; the substyle is what follows the last "|". Where the Template repeats the title, write
    the title exactly as given.
@@ -159,7 +160,9 @@ def _parse(answer: dict[str, Any]) -> Filled:
     ):
         raise FillError("The fill did not come back as a description and a list of tags.")
     clean: list[str] = []
+    seen: set[str] = set()
     for tag in (t.strip() for t in tags):
-        if tag and tag.lower() not in {c.lower() for c in clean}:
+        if tag and tag.lower() not in seen:
+            seen.add(tag.lower())
             clean.append(tag)
     return Filled(description=description.strip(), tags=clean)

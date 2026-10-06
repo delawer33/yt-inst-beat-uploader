@@ -295,9 +295,10 @@ test("Fill from title sends the form as it is and puts the answer into it", () =
     { title: "Ninety", description: "BPM: [[140]] mine", tags: ["uk drill"] },
     expect.any(Function),
   );
-  // The armed autosave was dropped: the fill's answer is what gets saved.
-  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
-  expect(onSave).not.toHaveBeenCalled();
+  // The armed autosave still runs: a fill that fails must not cost the owner's edit.
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledWith({ description: "BPM: [[140]] mine" });
+  onSave.mockClear();
 
   const apply = onFill.mock.calls[0][1];
   act(() => apply({ description: "BPM: 140 mine", tags: ["uk drill", "drill type beat"] }));
@@ -327,9 +328,12 @@ test("Fill from title is dead on a Queued beat", () => {
   expect(fillButton()).toBeDisabled();
 });
 
-test("a running fill says so and cannot be pressed twice", () => {
-  renderView(draft, { filling: true });
+test("a running fill says so, cannot be pressed twice, and holds the fields it will write", () => {
+  renderView({ ...draft, rendered: true }, { filling: true });
   expect(screen.getByRole("button", { name: "Filling…" })).toBeDisabled();
+  expect(description()).toHaveAttribute("readonly");
+  expect(screen.getByLabelText("Add a tag")).toBeDisabled();
+  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeDisabled();
 });
 
 test("a failed fill shows its note and leaves the form as it was", () => {
@@ -345,4 +349,22 @@ test("the send button is dead while a Placeholder is left, and says where", () =
 
   fireEvent.change(description(), { target: { value: "BPM: 140" } });
   expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeEnabled();
+});
+
+test("an edit undone while its save is in flight is not brought back by the answer", () => {
+  vi.useFakeTimers();
+  const { onSave, refetch } = renderView();
+
+  fireEvent.change(description(), { target: { value: "Free.x" } });
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenLastCalledWith({ description: "Free.x" });
+
+  // Backspace before the PATCH comes back; then the answer to the save lands.
+  fireEvent.change(description(), { target: { value: "Free for non-profit." } });
+  refetch({ ...draft, description: "Free.x" });
+
+  expect(description()).toHaveValue("Free for non-profit.");
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenLastCalledWith({ description: "Free for non-profit." });
+  vi.useRealTimers();
 });

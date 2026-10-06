@@ -58,7 +58,7 @@ class Beat(Base):
     audio_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     video_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # The audio file's name as the owner dropped it ("Dmin110.mp3"); None before 0005.
+    # The audio file's name as the owner dropped it ("Dmin110.mp3"); None on older beats.
     source_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # naive UTC

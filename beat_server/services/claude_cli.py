@@ -18,9 +18,7 @@ from typing import Any
 
 from beat_server.services.errors import FillError
 
-# Measured on the owner's Template: sonnet answers in ~13 s with the neighbouring keywords,
-# haiku took ~60 s and left them out.
-MODEL = "sonnet"
+MODEL = "sonnet"  # the fastest tier through this CLI that also adds neighbouring keywords
 TIMEOUT_SECONDS = 60
 NOT_LOGGED_IN = "Not logged in"
 

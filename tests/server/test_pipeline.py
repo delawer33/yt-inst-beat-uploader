@@ -632,6 +632,19 @@ def test_send_refuses_a_beat_with_a_placeholder(
     assert JobRepo(session).for_beat(draft.id) == []
 
 
+def test_a_queued_beat_cannot_take_a_placeholder_back(
+    client: TestClient, session: Session, repo: BeatRepo, draft: Beat
+) -> None:
+    assert client.post(f"/api/beats/{draft.id}/upload").status_code == 200
+
+    response = client.patch(f"/api/beats/{draft.id}", json={"description": "BPM: [[140]]"})
+
+    assert response.status_code == 409
+    assert "fill the placeholders first" in response.json()["detail"]
+    session.expire_all()
+    assert repo.get(draft.id).description == "Dark Night prod. by me"
+
+
 def test_a_draft_with_placeholders_is_still_saveable(client: TestClient, draft: Beat) -> None:
     response = client.patch(f"/api/beats/{draft.id}", json={"description": "BPM: [[140]]"})
     assert response.status_code == 200

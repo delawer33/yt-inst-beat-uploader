@@ -109,13 +109,18 @@ def get_beat(beat_id: str, session: SessionDep) -> BeatOut:
 
 @router.patch("/{beat_id}", response_model=BeatOut)
 def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep) -> BeatOut:
-    """Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409."""
+    """Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
+
+    A Draft may hold Placeholders; a Queued beat may not take one back (409).
+    """
     beat = load_beat(session, beat_id)
     if beat.status not in EDITABLE:
         raise BeatStateError(
             f"Beat {beat_id} is {beat.status}; metadata can only be edited before upload."
         )
     apply_patch(beat, body)
+    if beat.status == BeatStatus.QUEUED:
+        check_no_placeholders(beat)  # it is on its way to YouTube; the send was the guard
     BeatRepo(session).save(beat)
     return beat_out(session, beat)
 
