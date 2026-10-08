@@ -27,7 +27,7 @@ from beat_upload.errors import ConfigError
 
 MAX_TITLE_LENGTH = 100
 MAX_DESCRIPTION_LENGTH = 5000
-MAX_TAGS_LENGTH = 500  # YouTube counts the characters of all tags together
+MAX_TAGS_LENGTH = 500  # YouTube counts all tags together, see tags_length()
 FORBIDDEN_CHARS = "<>"  # YouTube rejects angle brackets in title and description
 MUSIC_CATEGORY_ID = 10
 # YouTube wants a scheduled publish time in the future; a few minutes of slack cover the
@@ -39,6 +39,12 @@ class PrivacyStatus(StrEnum):
     PRIVATE = "private"
     PUBLIC = "public"
     UNLISTED = "unlisted"
+
+
+def tags_length(tags: list[str]) -> int:
+    """Characters YouTube charges for a tag list: a tag with a space is wrapped in quotes,
+    and the tags are joined with commas."""
+    return sum(len(t) + (2 if " " in t else 0) for t in tags) + max(len(tags) - 1, 0)
 
 
 @dataclass(frozen=True)
@@ -75,7 +81,7 @@ class YouTubeMetadata:
         tags = data.get("tags") or []
         if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
             raise ConfigError("youtube.tags must be a list of strings")
-        if sum(len(t) for t in tags) > MAX_TAGS_LENGTH:
+        if tags_length(tags) > MAX_TAGS_LENGTH:
             raise ConfigError(f"youtube.tags must be <= {MAX_TAGS_LENGTH} characters in total")
 
         category_id = _parse_category_id(data.get("category_id", MUSIC_CATEGORY_ID))

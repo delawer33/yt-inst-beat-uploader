@@ -6,8 +6,10 @@ export const MAX_TAGS = 500;
 /** Beyond this a title is cut in a YouTube search result; it is not an error. */
 export const SEARCH_TITLE_LIMIT = 70;
 
+/** Characters YouTube charges: a tag with a space is wrapped in quotes, tags are joined by commas. */
 export function tagsLength(tags: string[]): number {
-  return tags.reduce((n, t) => n + t.length, 0);
+  if (tags.length === 0) return 0;
+  return tags.reduce((n, t) => n + t.length + (t.includes(" ") ? 2 : 0), 0) + tags.length - 1;
 }
 
 /** Default publish time for a new schedule: tomorrow at the current hour, local time. */

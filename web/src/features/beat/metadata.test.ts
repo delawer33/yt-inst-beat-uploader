@@ -1,7 +1,8 @@
 import { sharedTags, tagsLength, titleFit } from "./metadata";
 
 test("tagsLength counts the characters YouTube counts", () => {
-  expect(tagsLength(["uk drill", "type beat"])).toBe(17);
+  expect(tagsLength(["uk drill", "type beat"])).toBe(22); // "uk drill","type beat"
+  expect(tagsLength(["drill"])).toBe(5);
   expect(tagsLength([])).toBe(0);
 });
 

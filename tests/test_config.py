@@ -100,6 +100,19 @@ def test_tags_total_length_limit() -> None:
         YouTubeMetadata.from_mapping({"title": "t", "tags": ["a" * 300, "b" * 201]})
 
 
+def test_tags_length_counts_quotes_and_commas() -> None:
+    from beat_upload.config import tags_length
+
+    assert tags_length([]) == 0
+    assert tags_length(["abc"]) == 3
+    assert tags_length(["a b"]) == 5  # "a b"
+    assert tags_length(["ab", "cd"]) == 5  # ab,cd
+    # 26 tags of 17 letters with a space each: 26*19 + 25 commas = 519 > 500 for YouTube,
+    # even though the bare letters are only 442.
+    tags = [f"tag number {i:06d}" for i in range(26)]
+    assert sum(len(t) for t in tags) < 500 < tags_length(tags)
+
+
 # --- publish_at ------------------------------------------------------------------------------
 
 

@@ -53,7 +53,8 @@ Rules, in this order:
 8. Hashtags are lower case with no spaces: #travisscotttypebeat.
 9. Tags: the Template's artist tags first, then the substyle, then five to eight neighbouring
    keywords (related artists, adjacent styles), then the rest of the Template's tags. All tags
-   together stay within {MAX_TAGS_LENGTH} characters. No tag is repeated.
+   together stay within {MAX_TAGS_LENGTH} characters, counting the quotes YouTube puts around a
+   tag with a space and the commas between tags. No tag is repeated.
 10. Never write < or > anywhere. Never change the title.
 Answer only through the structured output, and write nothing before it: `description` is the
 complete finished description, every line of it, ready to paste into YouTube; `tags` is the
