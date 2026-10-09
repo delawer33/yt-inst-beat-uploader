@@ -16,6 +16,8 @@ import {
 import { fillHint, sendHint } from "./placeholders";
 import type { BeatPatch, FillIn, FillOut } from "./queries";
 import { useDeleteBeat, useFillBeat, usePatchBeat, useUploadBeat } from "./queries";
+import { CoverStylePicker } from "./CoverStylePicker";
+import { coverStyleName, type CoverStyle } from "./coverStyles";
 import { TagInput } from "./TagInput";
 import { YouTubePreview } from "./YouTubePreview";
 
@@ -37,6 +39,7 @@ export type DraftForm = {
   privacy: Privacy;
   /** Local `datetime-local` value, or null for "publish now". */
   publishAt: string | null;
+  coverStyle: CoverStyle;
 };
 
 export function formOf(beat: Beat): DraftForm {
@@ -46,6 +49,7 @@ export function formOf(beat: Beat): DraftForm {
     tags: beat.tags,
     privacy: beat.privacy,
     publishAt: beat.publish_at ? toDateTimeLocal(serverDate(beat.publish_at)) : null,
+    coverStyle: beat.cover_style,
   };
 }
 
@@ -78,6 +82,9 @@ export function rebase(
     tags: adopt("tags"),
     privacy: adopt("privacy"),
     publishAt: adopt("publishAt"),
+    // Only a Draft may change its Cover Style: once the Beat has left Draft, a pick the
+    // server never took is dropped instead of being sent (and refused) with every save.
+    coverStyle: to.status === "draft" ? adopt("coverStyle") : next.coverStyle,
   };
 }
 
@@ -112,6 +119,9 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   // YouTube only schedules private videos, so a schedule decides the privacy.
   const privacy: Privacy = form.publishAt === null ? form.privacy : "private";
   if (privacy !== beat.privacy) patch.privacy = privacy;
+  if (beat.status === "draft" && form.coverStyle !== beat.cover_style) {
+    patch.cover_style = form.coverStyle;
+  }
   return patch;
 }
 
@@ -312,7 +322,18 @@ export function DraftBeatView({
         <div className="col-form">
           <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3.5">
             <div className="thumb lg">
-              {beat.cover_url && <img src={beat.cover_url} alt={`Cover of ${beat.title}`} />}
+              {beat.cover_url && (
+                <img
+                  src={beat.cover_url}
+                  alt={`Cover of ${beat.title}`}
+                  onLoad={(e) =>
+                    setCoverSize({
+                      width: e.currentTarget.naturalWidth,
+                      height: e.currentTarget.naturalHeight,
+                    })
+                  }
+                />
+              )}
             </div>
             <div className="file-meta">
               {beat.source_name && (
@@ -588,12 +609,39 @@ export function DraftBeatView({
             beatId={beat.id}
             title={form.title}
             tags={form.tags}
+            coverStyle={beat.has_files ? form.coverStyle : null}
             coverUrl={beat.cover_url}
             channel={channel}
             publishAt={isoOf(form.publishAt)}
             library={library}
-            onCoverSize={setCoverSize}
           />
+          {beat.status === "draft" && beat.rendered && beat.video_style === null && (
+            <div className="note" role="status">
+              <div className="note-title">Rendered before Cover Styles</div>
+              <span className="text-soft">
+                The video on disk is the old sepia one, without the Label. Render it again to get
+                the look above.
+              </span>
+              <div className="job-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={saving}
+                  onClick={() => save({ cover_style: form.coverStyle })}
+                >
+                  Render in {coverStyleName(form.coverStyle)}
+                </button>
+              </div>
+            </div>
+          )}
+          {beat.has_files && (
+            <CoverStylePicker
+              beatId={beat.id}
+              value={form.coverStyle}
+              disabled={beat.status !== "draft" || saving}
+              onChange={(style) => set("coverStyle", style)}
+            />
+          )}
         </div>
       </div>
     </div>

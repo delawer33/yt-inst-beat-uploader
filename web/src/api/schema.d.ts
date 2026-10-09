@@ -69,6 +69,10 @@ export interface paths {
         /**
          * Patch Beat
          * @description Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
+         *
+         *     A Draft may hold Placeholders; a Queued beat may not take one back (409). A new
+         *     ``cover_style`` (Draft only, else 409) queues a Render unless one is already waiting:
+         *     that one reads the style when it starts.
          */
         patch: operations["patch_beat_api_beats__beat_id__patch"];
         trace?: never;
@@ -131,6 +135,28 @@ export interface paths {
          * @description The local cover image; 404 when the beat only exists on YouTube.
          */
         get: operations["get_cover_api_beats__beat_id__cover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/preview/{style}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Preview
+         * @description The first frame of the video this beat gets in ``style``: the cover painted in it,
+         *     the Label on top, letterboxed in 16:9, as a 960 px JPEG. Rendered on first request and
+         *     kept; 404 when the beat has no local cover.
+         */
+        get: operations["get_preview_api_beats__beat_id__preview__style__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -443,6 +469,8 @@ export interface components {
             has_files: boolean;
             /** Source Name */
             source_name: string | null;
+            cover_style: components["schemas"]["CoverStyle"];
+            video_style: components["schemas"]["CoverStyle"] | null;
             /** Rendered */
             rendered: boolean;
             active_job: components["schemas"]["JobOut"] | null;
@@ -474,6 +502,7 @@ export interface components {
             /** Tags */
             tags?: string[] | null;
             privacy?: components["schemas"]["PrivacyStatus"] | null;
+            cover_style?: components["schemas"]["CoverStyle"] | null;
             /** Publish At */
             publish_at?: string | null;
         };
@@ -502,6 +531,11 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * CoverStyle
+         * @enum {string}
+         */
+        CoverStyle: "purple_yellow_5tone" | "purple_yellow_thick_ink" | "golden_wind" | "dio_green" | "diamond_pink_cyan" | "stone_ocean" | "blood_3tone";
         /** DayPoint */
         DayPoint: {
             /**
@@ -907,6 +941,36 @@ export interface operations {
             header?: never;
             path: {
                 beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preview_api_beats__beat_id__preview__style__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+                style: components["schemas"]["CoverStyle"];
             };
             cookie?: never;
         };

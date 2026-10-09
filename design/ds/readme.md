@@ -59,6 +59,7 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 | `.card`, `.elev-sm/md/lg`, `.hr`, `.hr-soft` | Generic surface, elevation, rules | foundations/layout.html |
 | `.field > .group-label`, `.toolbar` (wraps) | Naming a `.seg` group where no single control carries the label; a filter bar with one chip per status | components/forms.html, components/navigation.html |
 | `.crumb` (+ `.end`), `.split-form` (`--preview-w`) + `.col-form` / `.col-preview`, `.fact-row`, `.yt-frame`, `.yt-meta`, `.yt-title`, `.tag-input button.tag` + `.tag-entry` | The Draft screen: breadcrumb head, form beside the YouTube preview, fact rows, editable tag box | components/forms.html |
+| `.style-pick` + `.style-opt` (hidden radio + `img`) | The Cover Style picker: square tiles of the cover rendered in each style, the chosen one ringed in the accent | components/forms.html |
 
 ## Do
 
@@ -73,11 +74,11 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 - No red for decoration, hover, or charts beyond the one peak bar.
 - No light theme yet (the segment in Settings says "soon" and is disabled).
 - No smoothing, gridlines or gradients in charts.
-- No stylesheet in the app. A missing colour, size or state is added here and pushed, never written in `web/`; `npm run lint:tokens` fails the build on a hex, an inline style or a Tailwind colour / radius / font utility under `web/src/`.
+- No stylesheet in the app. A missing colour, size or state is added here, never written in `web/`; `npm run lint:tokens` fails the build on a hex, an inline style or a Tailwind colour / radius / font utility under `web/src/`.
 
 ## Deliberate literals
 
-Everything visual comes from a token, with one exception: `.yt-frame` is `background: #000`, because it is a letterbox behind a 16:9 still and YouTube's own player shows black there. It must not follow the ground if the ground ever changes, so it takes no `--color-*`. Its `img` carries `filter: sepia(.45)`, the fixed grade every render gets, so the preview matches the video.
+Everything visual comes from a token, with one exception: `.yt-frame` is `background: #000`, because it is a letterbox behind a 16:9 still and YouTube's own player shows black there. It must not follow the ground if the ground ever changes, so it takes no `--color-*`. Its `img` is a still the server renders with the video's own ffmpeg filter (Cover Style and Label), so the preview matches the video with no CSS filter.
 
 ## Files
 

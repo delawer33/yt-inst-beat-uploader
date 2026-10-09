@@ -1,9 +1,13 @@
 import { formatDateTime } from "@/lib/format";
+import { coverStyleName, previewUrl, type CoverStyle } from "./coverStyles";
 import { sharedTags, titleFit, type SharedTags } from "./metadata";
 
 type Props = {
   title: string;
   tags: string[];
+  /** The Cover Style the video will have; null when the Beat has no cover to render. */
+  coverStyle: CoverStyle | null;
+  /** The plain cover, shown when the server could not render the still. */
   coverUrl: string | null;
   /** The channel from the connection, when there is one; nothing is shown otherwise. */
   channel: string | null;
@@ -12,24 +16,22 @@ type Props = {
   /** The rest of the Library, for "Tags shared with". */
   library: { id: string; title: string; tags: string[] }[];
   beatId: string;
-  /** Natural size of the cover, once the browser has loaded it. */
-  onCoverSize?: (size: { width: number; height: number }) => void;
 };
 
 /**
- * How the video will look on YouTube while it is still a Draft: the cover letterboxed in a
- * 16:9 frame, the title as typed, the channel, the schedule — then the facts that decide
+ * How the video will look on YouTube while it is still a Draft: its first frame as the server
+ * renders it (cover in its Cover Style, the Label, letterboxed in 16:9), the title as typed, the channel, the schedule — then the facts that decide
  * whether it reads well in a search result.
  */
 export function YouTubePreview({
   title,
   tags,
+  coverStyle,
   coverUrl,
   channel,
   publishAt,
   library,
   beatId,
-  onCoverSize,
 }: Props) {
   const fit = titleFit(title);
   const shared: SharedTags | null = sharedTags(tags, library, beatId);
@@ -42,16 +44,13 @@ export function YouTubePreview({
       <div className="label">As it will appear on YouTube</div>
       <div className="flex flex-col gap-2.5">
         <div className="yt-frame">
-          {coverUrl && (
+          {coverStyle && (
             <img
-              src={coverUrl}
+              src={previewUrl(beatId, coverStyle)}
               alt=""
-              onLoad={(e) =>
-                onCoverSize?.({
-                  width: e.currentTarget.naturalWidth,
-                  height: e.currentTarget.naturalHeight,
-                })
-              }
+              onError={(e) => {
+                if (coverUrl && !e.currentTarget.src.endsWith(coverUrl)) e.currentTarget.src = coverUrl;
+              }}
             />
           )}
         </div>
@@ -71,10 +70,12 @@ export function YouTubePreview({
             {fit.verdict} · <span className="num">{fit.chars}</span> chars
           </span>
         </div>
-        <div className="fact-row">
-          <span className="text-muted">Cover in 16:9 frame</span>
-          <span>letterboxed on black, sepia 45%</span>
-        </div>
+        {coverStyle && (
+          <div className="fact-row">
+            <span className="text-muted">Cover in 16:9 frame</span>
+            <span>{coverStyleName(coverStyle)}, label, letterboxed</span>
+          </div>
+        )}
         {shared && (
           <div className="fact-row">
             <span className="text-muted">Tags shared with “{shared.title}”</span>

@@ -21,6 +21,8 @@ const beat: Beat = {
   comments: 3,
   has_files: false,
   source_name: null,
+  cover_style: "purple_yellow_5tone",
+  video_style: null,
   rendered: false,
   active_job: null,
   cover_url: "https://i.ytimg.com/vi/abc123/hqdefault.jpg",

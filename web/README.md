@@ -37,9 +37,9 @@ out of `design/ds/styles.css`, so `text-muted` and `tag-accent` pass as the DS c
 are. The one allowed inline style is a fill's percentage width or height — the DS pattern
 for `.progress > i`, `.rail > i` and `.bars > i`, which cannot be a class.
 
-Anything visual that is missing is added to the Design System (`design/ds/styles.css`, its
-`readme.md` row and a component-page example) and pushed back to the Claude Design project
-in the same task — never written locally.
+Anything visual that is missing is added to the Design System mirror (`design/ds/styles.css`,
+its `readme.md` row and a component-page example) — never written locally. Syncing the mirror
+with the Claude Design project is the owner's own job, not part of a task.
 
 ### The cascade, in one paragraph
 

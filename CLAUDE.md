@@ -43,7 +43,9 @@ beat_upload/            core, no web and no DB (ADR 0002)
   cli.py                Typer commands only; catches BeatUploadError and prints it
   beat_folder.py        the one audio + one image rule; every beat-folder constant
   config.py             config.yaml -> YouTubeMetadata; every YouTube limit
-  video.py              render_video(): the ffmpeg command
+  video.py              render_cover() one styled frame, render_video() loops it
+  cover_style.py        the seven Cover Styles as ffmpeg filters (gradient map + ink)
+  label.py              the Label, drawn with Pillow; League Gothic ships in fonts/
   youtube.py            upload_video(), set_privacy()
   stats.py, analytics.py   Data API / Analytics API reads; parse_* are pure
   auth.py, workspace.py    OAuth files and data dir of one channel owner (platformdirs)
@@ -75,25 +77,24 @@ Beat status.
 
 ## Design
 
-The look lives in the Claude Design project **Beat Upload** (design system,
-`166cce5a-06a3-489b-824d-031ba1f90d1b`). `design/ds/` is its mirror in the repo and the
-frontend links `design/ds/styles.css` directly. Screens are drawn in the project **Beat
-Upload UI mockups** (`68b7877c-e58e-465a-a16c-ac6026847cd3`, file `Beat Upload.dc.html`).
-Both are read and written with the `DesignSync` tool. ADR 0005 has the why.
+`design/ds/styles.css` is the one stylesheet the frontend links; `design/ds/readme.md` and
+`design/ds/components/*.html` document its classes. It mirrors the Claude Design project
+**Beat Upload** (`166cce5a-06a3-489b-824d-031ba1f90d1b`); screens are drawn in **Beat Upload
+UI mockups** (`68b7877c-e58e-465a-a16c-ac6026847cd3`). Syncing the mirror with Claude Design
+is the owner's own occasional job: never push to or pull from the Design System in a task.
+ADR 0005 has the why.
 
-- Before any task that touches the look: pull the Design System, diff it against
-  `design/ds/`, show the user what differs.
 - A visual change made here goes into `design/ds/styles.css`, `readme.md` and the component
-  page, and is pushed to the Design System in the same task. Never a local stylesheet in
-  `web/`; Tailwind is layout glue only (flex, grid, gap), never colour, radius or type.
-  `web/src/styles/globals.css` is the Tailwind entry point and holds nothing else.
+  page. Never a local stylesheet in `web/`; Tailwind is layout glue only (flex, grid, gap),
+  never colour, radius or type. `web/src/styles/globals.css` is the Tailwind entry point and
+  holds nothing else.
 - Cascade: `design/ds/styles.css` is imported unlayered, Tailwind utilities live in
   `@layer utilities`, so a DS class silently beats a utility on the same property at any
   specificity. A DS class owns every property it sets; Tailwind may only add others.
 - New page or element: the user chooses per task. **Code first** for small things (a variant,
-  a column, a state): build it from existing classes, add what is missing to the Design
-  System. **Design first** for a new page or interaction (a calendar, a Jobs page): the user
-  draws it in the mockups project, then you read the Mockup and build it from the classes.
+  a column, a state): build it from existing classes, add what is missing to `design/ds/`.
+  **Design first** for a new page or interaction (a calendar, a Jobs page): the user draws
+  it in the mockups project and hands you the Mockup; build it from the classes.
 - Whether a code-first screen also gets a Mockup is the user's call; do not add one unasked.
 - A screen is built only from the blocks the API has data for. Leave the rest out, no
   placeholders, and tell the user what was dropped.
@@ -120,5 +121,8 @@ The stray copies in the repo root are leftovers and unused by the code.
 
 - OAuth token gets revoked every 7 days while the Cloud Console consent screen is in
   "Testing". Publishing the app to "Production" fixes it. Otherwise reconnect in Settings.
-- CLI: `video.mp4` is never re-rendered; delete it to pick up a changed audio or image.
+- CLI: `video.mp4` is never re-rendered; delete it to pick up a changed audio, image or
+  `cover_style`.
+- Videos rendered before Cover Styles (sepia) have `video_style` NULL and count as current
+  until the owner picks a style on that Draft.
 - `requirements.txt` duplicates `pyproject.toml` dependencies for `pip install -r` users.

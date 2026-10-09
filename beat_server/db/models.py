@@ -7,6 +7,8 @@ from enum import StrEnum
 from sqlalchemy import JSON, Date, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from beat_upload.cover_style import DEFAULT_COVER_STYLE, CoverStyle
+
 
 class BeatStatus(StrEnum):
     DRAFT = "draft"
@@ -60,6 +62,16 @@ class Beat(Base):
     video_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # The audio file's name as the owner dropped it ("Dmin110.mp3"); None on older beats.
     source_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The Cover Style the owner chose, and the one ``video_path`` was rendered with. They
+    # differ while a new Render is due. ``video_style`` is None on videos rendered before
+    # Cover Styles existed (sepia); those count as current until the owner picks a style.
+    cover_style: Mapped[CoverStyle] = mapped_column(
+        String(32),
+        default=DEFAULT_COVER_STYLE,
+        server_default=DEFAULT_COVER_STYLE.value,
+        nullable=False,
+    )
+    video_style: Mapped[CoverStyle | None] = mapped_column(String(32), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # naive UTC
     views: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -70,6 +82,11 @@ class Beat(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
+
+    @property
+    def video_is_current(self) -> bool:
+        """Is there a video, rendered in the Cover Style the owner chose? (CONTEXT: Rendered)"""
+        return self.video_path is not None and self.video_style in (None, self.cover_style)
 
 
 class Job(Base):

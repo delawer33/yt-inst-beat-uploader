@@ -24,6 +24,8 @@ const uploaded: Beat = {
   comments: 0,
   has_files: true,
   source_name: null,
+  cover_style: "purple_yellow_5tone",
+  video_style: null,
   rendered: false,
   active_job: null,
   cover_url: null,

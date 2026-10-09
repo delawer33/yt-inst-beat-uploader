@@ -11,7 +11,7 @@ import typer
 from beat_upload import auth
 from beat_upload.analytics import YouTubeAnalytics
 from beat_upload.beat_folder import BeatFolder, find_beat_folder
-from beat_upload.config import PrivacyStatus, load_youtube_metadata
+from beat_upload.config import PrivacyStatus, load_cover_style, load_youtube_metadata
 from beat_upload.errors import BeatUploadError
 from beat_upload.stats import VideoStats, YouTubeStats
 from beat_upload.video import render_video
@@ -222,8 +222,9 @@ def _ensure_video(beat: BeatFolder) -> None:
     if beat.video_path.is_file():
         typer.echo(f"Video already exists, skipping render: {beat.video_path}")
         return
-    typer.echo(f"Rendering video from {beat.audio.name} + {beat.image.name}...")
-    render_video(beat.audio, beat.image, beat.video_path)
+    style = load_cover_style(beat.config_path)
+    typer.echo(f"Rendering video from {beat.audio.name} + {beat.image.name} in {style}...")
+    render_video(beat.audio, beat.image, beat.video_path, style=style)
     typer.echo(f"Video created: {beat.video_path}")
 
 

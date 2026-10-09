@@ -9,6 +9,7 @@ Expected layout::
       category_id: 10
       privacy_status: private   # private | public | unlisted
       publish_at: 2026-10-01 18:00   # optional, local time; needs private (Scheduled)
+    cover_style: stone_ocean         # optional, see CoverStyle; default purple_yellow_5tone
 
 ``publish_at`` is the time YouTube itself makes the video public (``status.publishAt``).
 It is read as local time unless it carries an offset, and kept as an aware UTC datetime.
@@ -23,6 +24,7 @@ from typing import Any
 
 import yaml
 
+from beat_upload.cover_style import CoverStyle, parse_cover_style
 from beat_upload.errors import ConfigError
 
 MAX_TITLE_LENGTH = 100
@@ -104,6 +106,19 @@ class YouTubeMetadata:
 
 def load_youtube_metadata(config_path: Path) -> YouTubeMetadata:
     """Read ``config.yaml`` and return its validated ``youtube`` section."""
+    youtube = _read_config(config_path).get("youtube")
+    if not isinstance(youtube, dict):
+        raise ConfigError(f"{config_path} must contain a 'youtube' section")
+
+    return YouTubeMetadata.from_mapping(youtube)
+
+
+def load_cover_style(config_path: Path) -> CoverStyle:
+    """The top-level ``cover_style`` of ``config.yaml``; the default when it is not there."""
+    return parse_cover_style(_read_config(config_path).get("cover_style"))
+
+
+def _read_config(config_path: Path) -> dict[str, Any]:
     if not config_path.is_file():
         raise ConfigError(f"{config_path.name} not found in {config_path.parent}")
 
@@ -114,12 +129,7 @@ def load_youtube_metadata(config_path: Path) -> YouTubeMetadata:
 
     if not isinstance(raw, dict):
         raise ConfigError(f"{config_path} must contain a mapping at the top level")
-
-    youtube = raw.get("youtube")
-    if not isinstance(youtube, dict):
-        raise ConfigError(f"{config_path} must contain a 'youtube' section")
-
-    return YouTubeMetadata.from_mapping(youtube)
+    return raw
 
 
 def _parse_category_id(value: Any) -> int:

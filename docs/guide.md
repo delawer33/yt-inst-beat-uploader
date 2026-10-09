@@ -141,8 +141,15 @@ status stays **Draft** the whole time — the status says what you did with the 
 next to it says what is happening to it — and the draft is marked **Rendered** once the video
 file is ready.
 
-The draft's page puts the form on the left and the YouTube preview on the right: the cover
-letterboxed in a 16:9 frame, the title as you type it, the channel, the publish time when
+Every video paints its cover in a **Cover Style**: the cover goes grey, its brightness is cut
+into a few bands, each band gets one fixed colour and ink outlines go on top, so any cover
+comes out in the channel's series. The **Label** (PRODUCED BY / DELAWER / YOU BETTER RUN, in
+the Parental Advisory layout) is stamped top right on every one. A new draft renders in
+Purple Yellow 5-tone; the tiles under the preview show your cover in each of the seven
+styles, and picking another one renders the draft again. Only a Draft can change its style.
+
+The draft's page puts the form on the left and the YouTube preview on the right: the video's
+first frame as the server renders it (cover, Cover Style, Label, letterboxed in 16:9), the title as you type it, the channel, the publish time when
 one is set, and whether the title fits a search result (YouTube cuts it past 70 characters)
 and how many of its tags it shares with another beat in the Library. Above the form sit the
 render's progress and its log, and the cover's resolution; "video ready" replaces them when
@@ -234,6 +241,9 @@ youtube:
   privacy_status: private         # optional: private (default) | public | unlisted
   publish_at: 2026-10-01 18:00    # optional, local time: upload as Scheduled, YouTube
                                   # makes it public then; needs privacy_status: private
+cover_style: stone_ocean          # optional, default purple_yellow_5tone; also
+                                  # purple_yellow_thick_ink, golden_wind, dio_green,
+                                  # diamond_pink_cyan, blood_3tone
 ```
 
 `publish_at` must be at least 5 minutes ahead when the upload runs; a time that has already
@@ -247,7 +257,9 @@ beat_upload/
   cli.py                  Typer commands: login, upload, channel, videos, video, analytics, privacy
   beat_folder.py          finds the audio and image in a beat folder
   config.py               loads and validates config.yaml
-  video.py                renders the video with ffmpeg
+  video.py                renders the cover frame and the video with ffmpeg
+  cover_style.py          the seven Cover Styles as ffmpeg filters
+  label.py                draws the Label with Pillow; the font is in fonts/
   youtube.py              uploads and edits privacy through the YouTube Data API
   stats.py                reads channel and video statistics (Data API)
   analytics.py            per-video watch time and view duration (Analytics API)
@@ -280,7 +292,7 @@ activated, pass it: `PYTHON=../.venv/bin/python npm run api:check`.
 
 `npm run lint:tokens` fails on a hex colour, an `oklch()` / `rgb()` / `hsl()`, a `style=`
 prop or any Tailwind colour / radius / font utility under `web/src/` — a missing colour or
-size is added to `design/ds/` and pushed to Claude Design, never written in `web/`. See
+size is added to `design/ds/`, never written in `web/`. See
 `web/README.md` for the cascade rule that comes with a single unlayered stylesheet.
 
 Database schema changes: edit `beat_server/db/models.py`, then

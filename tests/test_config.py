@@ -8,8 +8,10 @@ from beat_upload.config import (
     MAX_TITLE_LENGTH,
     PrivacyStatus,
     YouTubeMetadata,
+    load_cover_style,
     load_youtube_metadata,
 )
+from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import ConfigError
 
 VALID = {
@@ -171,3 +173,19 @@ def test_load_from_file_with_publish_at(tmp_path: Path) -> None:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(f"youtube:\n  title: Hello\n  publish_at: {local:%Y-%m-%d %H:%M}\n")
     assert load_youtube_metadata(cfg).publish_at == local.astimezone().astimezone(UTC)
+
+
+def test_cover_style_defaults_and_reads_the_top_level_key(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("youtube:\n  title: Beat\n", encoding="utf-8")
+    assert load_cover_style(config) is CoverStyle.PURPLE_YELLOW_5TONE
+    config.write_text("youtube:\n  title: Beat\ncover_style: blood_3tone\n", encoding="utf-8")
+    assert load_cover_style(config) is CoverStyle.BLOOD_3TONE
+    assert load_youtube_metadata(config).title == "Beat"
+
+
+def test_cover_style_unknown_name(tmp_path: Path) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("youtube:\n  title: Beat\ncover_style: sepia\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="cover_style must be one of"):
+        load_cover_style(config)

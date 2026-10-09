@@ -1,5 +1,10 @@
 """The two job handlers that turn a draft into a video on YouTube: RENDER, then UPLOAD.
 
+The RENDER paints the cover in the Beat's Cover Style. The owner may change the style of a
+Draft at any time; the PATCH queues a new RENDER, and the Beat's ``video_style`` says which
+style the video on disk has. A RENDER whose video already has the chosen style skips ffmpeg,
+and one that finishes with a style the owner has since changed never leads to an UPLOAD.
+
 The RENDER starts when the Beat is created, before the owner has decided anything (ADR 0004),
 so it never touches the Beat's status: that says what the owner did. It only records the
 rendered file and, if the owner has already sent the Beat (QUEUED), enqueues the UPLOAD
@@ -60,22 +65,42 @@ async def run_render(ctx: JobContext) -> None:
     image = beat_dir / beat.image_path
     video = beat_dir / VIDEO_FILENAME
 
-    if video.is_file():
-        ctx.log(f"{VIDEO_FILENAME} already rendered, skipping ffmpeg")
+    if video.is_file() and beat.video_is_current:
+        ctx.log(f"{VIDEO_FILENAME} already rendered in {beat.video_style or 'its style'}")
     else:
+        style = beat.cover_style
+        # Written next to the video and moved over it only if the owner still wants this
+        # style, so the video on disk is always whole and always matches ``video_style``.
+        part = video.with_name(f"{video.stem}.part{video.suffix}")
         ctx.progress(0.0, "Rendering")
-        await asyncio.to_thread(
-            render_video, audio, image, video, lambda f: ctx.progress(f, "Rendering")
-        )
-    beat.video_path = VIDEO_FILENAME
-    repo.save(beat)
+        try:
+            await asyncio.to_thread(
+                render_video,
+                audio,
+                image,
+                part,
+                lambda f: ctx.progress(f, "Rendering"),
+                style=style,
+            )
+            ctx.session.refresh(beat)  # the owner may have picked another style meanwhile
+            if beat.cover_style == style:
+                part.replace(video)
+                beat.video_style = style
+                beat.video_path = VIDEO_FILENAME
+                repo.save(beat)
+            else:
+                ctx.log(f"Rendered {style}, but the beat is now {beat.cover_style}; dropped")
+        finally:
+            part.unlink(missing_ok=True)
     ctx.progress(1.0, "Rendered")
-    # The owner may have sent the beat while ffmpeg ran, so read the status back first.
+    # The owner may have sent the beat or changed its style while ffmpeg ran: read it back.
     ctx.session.refresh(beat)
     ctx.bus.publish_beat(beat.id, beat.status)
-    if beat.status == BeatStatus.QUEUED and not JobRepo(ctx.session).has_pending(
-        JobKind.UPLOAD, beat.id
-    ):
+    jobs = JobRepo(ctx.session)
+    if not beat.video_is_current:
+        if not jobs.has_waiting(JobKind.RENDER, beat.id):
+            ctx.enqueue(JobKind.RENDER, beat.id)
+    elif beat.status == BeatStatus.QUEUED and not jobs.has_pending(JobKind.UPLOAD, beat.id):
         ctx.enqueue(JobKind.UPLOAD, beat.id)
 
 
@@ -126,6 +151,11 @@ def _video_file(ctx: JobContext, beat: Beat) -> Path:
     video = ctx.workspace.beat_dir(beat.id) / (beat.video_path or VIDEO_FILENAME)
     if not beat.video_path or not video.is_file():
         raise BeatStateError(f"Beat {beat.id} has no rendered video; render it first.")
+    if not beat.video_is_current:
+        raise BeatStateError(
+            f"Beat {beat.id} was rendered in {beat.video_style}, not {beat.cover_style}; "
+            "render it again first."
+        )
     return video
 
 

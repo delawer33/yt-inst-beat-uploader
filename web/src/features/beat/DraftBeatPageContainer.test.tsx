@@ -35,6 +35,8 @@ const draft: Beat = {
   comments: 0,
   has_files: true,
   source_name: "Dmin110.mp3",
+  cover_style: "purple_yellow_5tone",
+  video_style: null,
   rendered: true,
   active_job: null,
   cover_url: "/api/beats/b1/cover",

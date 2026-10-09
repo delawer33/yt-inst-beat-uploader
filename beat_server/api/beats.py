@@ -1,5 +1,5 @@
 """The Library over HTTP: list, one beat, its cover, its privacy; create, edit, fill, send
-and delete a draft.
+and delete a draft; preview its cover in a Cover Style.
 
 Multipart ``POST /api/beats`` stores the files, applies the owner's templates and queues the
 RENDER at once (ADR 0004), so the video is being produced while the owner writes the
@@ -29,12 +29,15 @@ from beat_server.services.beats import (
     delete_draft,
     metadata_of,
     metadata_with_privacy,
+    preview_of,
+    set_cover_style,
     to_naive_utc,
 )
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_server.services.fill import FillService
 from beat_server.services.sync import status_for
 from beat_upload.auth import get_valid_credentials
+from beat_upload.cover_style import CoverStyle
 from beat_upload.workspace import Workspace
 from beat_upload.youtube import set_privacy
 
@@ -108,10 +111,12 @@ def get_beat(beat_id: str, session: SessionDep) -> BeatOut:
 
 
 @router.patch("/{beat_id}", response_model=BeatOut)
-def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep) -> BeatOut:
+def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep, queue: QueueDep) -> BeatOut:
     """Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
 
-    A Draft may hold Placeholders; a Queued beat may not take one back (409).
+    A Draft may hold Placeholders; a Queued beat may not take one back (409). A new
+    ``cover_style`` (Draft only, else 409) queues a Render unless one is already waiting:
+    that one reads the style when it starts.
     """
     beat = load_beat(session, beat_id)
     if beat.status not in EDITABLE:
@@ -119,9 +124,12 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep) -> BeatOut:
             f"Beat {beat_id} is {beat.status}; metadata can only be edited before upload."
         )
     apply_patch(beat, body)
+    render_due = body.cover_style is not None and set_cover_style(beat, body.cover_style)
     if beat.status == BeatStatus.QUEUED:
         check_no_placeholders(beat)  # it is on its way to YouTube; the send was the guard
     BeatRepo(session).save(beat)
+    if render_due and not JobRepo(session).has_waiting(JobKind.RENDER, beat.id):
+        queue.enqueue(JobKind.RENDER, beat.id)
     return beat_out(session, beat)
 
 
@@ -165,7 +173,7 @@ def upload_beat(
 
     jobs = JobRepo(session)
     video = ws.beat_dir(beat.id) / beat.video_path if beat.video_path else None
-    if video is not None and video.is_file():
+    if video is not None and video.is_file() and beat.video_is_current:
         if not jobs.has_pending(JobKind.UPLOAD, beat.id):
             queue.enqueue(JobKind.UPLOAD, beat.id)
     elif not jobs.has_pending(JobKind.RENDER, beat.id):
@@ -194,6 +202,17 @@ def get_cover(beat_id: str, session: SessionDep, ws: WorkspaceDep) -> FileRespon
     if path is None or not path.is_file():
         raise BeatNotFound(f"Beat {beat_id} has no local cover.")
     return FileResponse(path)
+
+
+@router.get("/{beat_id}/preview/{style}", response_class=FileResponse)
+def get_preview(
+    beat_id: str, style: CoverStyle, session: SessionDep, ws: WorkspaceDep
+) -> FileResponse:
+    """The first frame of the video this beat gets in ``style``: the cover painted in it,
+    the Label on top, letterboxed in 16:9, as a 960 px JPEG. Rendered on first request and
+    kept; 404 when the beat has no local cover.
+    """
+    return FileResponse(preview_of(ws, load_beat(session, beat_id), style))
 
 
 @router.post("/{beat_id}/privacy", response_model=BeatOut)

@@ -49,7 +49,9 @@ already be rendering or Rendered; that is the state of its Job, not of the Beat.
 _Avoid_: New, pending, unsent
 
 **Rendered**:
-A Draft whose video file is ready, so sending it will not wait for a Render.
+A Draft whose video file is ready in the Cover Style the owner chose, so sending it will
+not wait for a Render. Choosing another Cover Style makes it un-Rendered until the new
+Render is done.
 _Avoid_: Encoded, prepared
 
 **Queued**:
@@ -81,6 +83,20 @@ keywords are added for the recommendations. What the owner already wrote in plac
 Placeholder stays. "Artist" is whatever stands before "Type Beat" in the title, a name or a
 style; a title names none, one or two, and the result follows.
 _Avoid_: Autofill, generate, regenerate
+
+**Cover Style**:
+One of seven named looks a Render paints the cover in: the cover goes grey, its brightness
+is cut into a few bands, each band gets one fixed colour and ink outlines go on top. Chosen
+per Beat by the mood of the beat; the colours come from the Cover Style, not from the cover,
+so every video on the channel reads as one series.
+_Avoid_: Palette, filter, sepia, theme
+
+**Label**:
+The channel's own mark stamped on every cover during the Render, in the layout of the
+Parental Advisory label: a black box with three lines, PRODUCED BY / DELAWER / YOU BETTER RUN,
+top right. Always on, always black and white, drawn after the Cover Style so it keeps its
+shape.
+_Avoid_: Badge, watermark, logo, stamp, Parental Advisory
 
 **Workspace**:
 Everything belonging to one channel owner: their credentials, their Library, their files.

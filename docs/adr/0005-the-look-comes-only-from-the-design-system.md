@@ -24,3 +24,9 @@ are the same edit.
 - shadcn/ui, class-variance-authority and the Radix primitives are removed as the components
   are rewritten.
 - The token lint changes meaning: no hex, no colour or radius utilities outside `design/ds/`.
+
+## Amendment, 2026-10-09
+
+Changes to the look are made in the mirror, `design/ds/`, and stop there. Syncing the mirror
+with the Claude Design project, in either direction, is the owner's own occasional job and
+never part of a task. "Pushed back" above now means: the owner carries it over when they sync.

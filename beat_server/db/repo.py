@@ -161,6 +161,20 @@ class JobRepo:
         )
         return bool(self.session.scalar(stmt))
 
+    def has_waiting(self, kind: JobKind, beat_id: str) -> bool:
+        """Is a job of ``kind`` for ``beat_id`` queued or paused, not yet started? A job like
+        that will read the Beat as it is when it starts, so a later change needs no new one."""
+        stmt = (
+            select(func.count())
+            .select_from(Job)
+            .where(
+                Job.kind == kind,
+                Job.beat_id == beat_id,
+                Job.status.in_((JobStatus.QUEUED, JobStatus.PAUSED)),
+            )
+        )
+        return bool(self.session.scalar(stmt))
+
     def latest(self, kind: JobKind) -> Job | None:
         """The most recently created job of ``kind``, whatever its status."""
         stmt = select(Job).where(Job.kind == kind).order_by(Job.created_at.desc(), Job.id).limit(1)

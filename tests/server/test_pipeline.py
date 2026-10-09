@@ -28,7 +28,9 @@ from beat_server.services.beats import (
 )
 from beat_server.services.errors import BeatStateError
 from beat_upload.config import PrivacyStatus, YouTubeMetadata
+from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import AuthError, BeatFolderError, ConfigError, NetworkError, VideoError
+from beat_upload.video import cover_fingerprint
 from beat_upload.workspace import Workspace
 
 MP3 = b"ID3" + b"\x00" * 32
@@ -215,7 +217,7 @@ async def test_run_render_on_a_draft_renders_and_enqueues_nothing(
     """The Render started by the drop leaves a Rendered Draft: no status change, no UPLOAD."""
     calls: list[tuple[Path, Path, Path]] = []
 
-    def fake_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+    def fake_render(audio: Path, image: Path, output: Path, on_progress, style=None) -> Path:  # noqa: ANN001
         calls.append((audio, image, output))
         on_progress(0.5)
         output.write_bytes(b"mp4")
@@ -226,11 +228,13 @@ async def test_run_render_on_a_draft_renders_and_enqueues_nothing(
     await make_worker(app).run_one(job)
 
     beat_dir = workspace.beat_dir(draft.id)
-    assert calls == [(beat_dir / "audio.mp3", beat_dir / "cover.png", beat_dir / "video.mp4")]
+    assert calls == [(beat_dir / "audio.mp3", beat_dir / "cover.png", beat_dir / "video.part.mp4")]
     job = reload_job(session, job)
     assert job.status == JobStatus.DONE, job.error
     beat = reload_beat(session, draft)
     assert beat.video_path == "video.mp4"
+    assert beat.video_style == CoverStyle.PURPLE_YELLOW_5TONE
+    assert not (beat_dir / "video.part.mp4").exists()
     assert beat.status == BeatStatus.DRAFT  # the owner has not sent it yet
     assert beat_events == [(draft.id, "draft")]  # the Library hears the beat is now Rendered
     assert JobRepo(session).next_queued() is None
@@ -247,7 +251,7 @@ async def test_run_render_on_a_sent_beat_enqueues_upload(
 ) -> None:
     """The owner sent the beat while ffmpeg ran: the Render enqueues the UPLOAD behind it."""
 
-    def fake_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+    def fake_render(audio: Path, image: Path, output: Path, on_progress, style=None) -> Path:  # noqa: ANN001
         output.write_bytes(b"mp4")
         return output
 
@@ -279,7 +283,7 @@ async def test_run_render_progress_reaches_job(
 
     bus.publish = spy
 
-    def fake_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+    def fake_render(audio: Path, image: Path, output: Path, on_progress, style=None) -> Path:  # noqa: ANN001
         on_progress(0.25)
         on_progress(0.75)
         output.write_bytes(b"mp4")
@@ -292,11 +296,17 @@ async def test_run_render_progress_reaches_job(
 
 
 async def test_run_render_failure_leaves_the_draft_a_draft(
-    app: FastAPI, session: Session, draft: Beat, monkeypatch: pytest.MonkeyPatch
+    app: FastAPI,
+    session: Session,
+    workspace: Workspace,
+    draft: Beat,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The failure lives on the Job (ADR 0004); the Beat's status is the owner's, untouched."""
+    """The failure lives on the Job (ADR 0004); the Beat's status is the owner's, untouched.
+    ffmpeg's half-written file does not stay behind."""
 
-    def fake_render(*args, **kwargs) -> Path:  # noqa: ANN002, ANN003
+    def fake_render(audio: Path, image: Path, output: Path, *args, **kwargs) -> Path:  # noqa: ANN002, ANN003
+        output.write_bytes(b"half")
         raise VideoError("ffmpeg failed")
 
     monkeypatch.setattr(pipeline, "render_video", fake_render)
@@ -307,6 +317,7 @@ async def test_run_render_failure_leaves_the_draft_a_draft(
     beat = reload_beat(session, draft)
     assert beat.status == BeatStatus.DRAFT and beat.video_path is None
     assert JobRepo(session).next_queued() is None
+    assert not (workspace.beat_dir(draft.id) / "video.part.mp4").exists()
 
 
 async def test_run_render_refuses_uploaded_beat(
@@ -676,7 +687,7 @@ async def test_full_chain_render_then_upload(
 ) -> None:
     """Upload click -> RENDER -> UPLOAD -> published, driven with run_one twice."""
 
-    def fake_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+    def fake_render(audio: Path, image: Path, output: Path, on_progress, style=None) -> Path:  # noqa: ANN001
         output.write_bytes(b"mp4")
         return output
 
@@ -729,7 +740,7 @@ async def test_run_render_failure_leaves_a_sent_beat_queued_and_retry_works(
     body = client.get(f"/api/beats/{draft.id}").json()
     assert body["rendered"] is False and body["active_job"] is None
 
-    def good_render(audio: Path, image: Path, output: Path, on_progress) -> Path:  # noqa: ANN001
+    def good_render(audio: Path, image: Path, output: Path, on_progress, style=None) -> Path:  # noqa: ANN001
         output.write_bytes(b"mp4")
         return output
 
@@ -820,3 +831,222 @@ async def test_render_of_a_deleted_draft_fails_cleanly(
     await make_worker(app).run_one(job)
     done = reload_job(session, job)
     assert done.status == JobStatus.FAILED and "does not exist" in (done.error or "")
+
+
+# --- Cover Style ------------------------------------------------------------------------
+
+
+def recording_render(styles: list[CoverStyle]):  # noqa: ANN201
+    def fake_render(audio: Path, image: Path, output: Path, on_progress, style=None) -> Path:  # noqa: ANN001
+        styles.append(style)
+        output.write_bytes(f"mp4 {style}".encode())
+        return output
+
+    return fake_render
+
+
+def test_new_draft_has_the_default_cover_style(client: TestClient, draft: Beat) -> None:
+    body = client.get(f"/api/beats/{draft.id}").json()
+    assert body["cover_style"] == "purple_yellow_5tone"
+
+
+async def test_render_paints_the_chosen_cover_style(
+    app: FastAPI, session: Session, repo: BeatRepo, draft: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    styles: list[CoverStyle] = []
+    monkeypatch.setattr(pipeline, "render_video", recording_render(styles))
+    draft.cover_style = CoverStyle.BLOOD_3TONE
+    repo.save(draft)
+    job = app.state.queue.enqueue(JobKind.RENDER, draft.id)
+    await make_worker(app).run_one(job)
+    assert styles == [CoverStyle.BLOOD_3TONE]
+    assert reload_beat(session, draft).video_style == CoverStyle.BLOOD_3TONE
+
+
+async def test_changing_the_style_of_a_rendered_draft_renders_again(
+    app: FastAPI,
+    client: TestClient,
+    session: Session,
+    workspace: Workspace,
+    draft: Beat,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    styles: list[CoverStyle] = []
+    monkeypatch.setattr(pipeline, "render_video", recording_render(styles))
+    await make_worker(app).run_one(app.state.queue.enqueue(JobKind.RENDER, draft.id))
+    assert client.get(f"/api/beats/{draft.id}").json()["rendered"] is True
+
+    body = client.patch(f"/api/beats/{draft.id}", json={"cover_style": "stone_ocean"}).json()
+    assert body["cover_style"] == "stone_ocean"
+    assert body["rendered"] is False  # the video on disk has the old look
+    assert body["active_job"]["kind"] == "render"
+    # A second change while that Render waits adds no Render: it reads the style when it starts.
+    client.patch(f"/api/beats/{draft.id}", json={"cover_style": "dio_green"})
+    job = JobRepo(session).next_queued()
+    assert job is not None
+    await make_worker(app).run_one(job)
+    assert JobRepo(session).next_queued() is None
+
+    assert styles == [CoverStyle.PURPLE_YELLOW_5TONE, CoverStyle.DIO_GREEN]
+    video = workspace.beat_dir(draft.id) / "video.mp4"
+    assert video.read_bytes() == b"mp4 dio_green"
+    assert client.get(f"/api/beats/{draft.id}").json()["rendered"] is True
+
+
+def test_picking_the_style_the_video_has_needs_no_render(
+    client: TestClient, session: Session, workspace: Workspace, repo: BeatRepo, draft: Beat
+) -> None:
+    (workspace.beat_dir(draft.id) / "video.mp4").write_bytes(b"mp4")
+    draft.video_path, draft.video_style = "video.mp4", CoverStyle.GOLDEN_WIND
+    draft.cover_style = CoverStyle.STONE_OCEAN
+    repo.save(draft)
+    body = client.patch(f"/api/beats/{draft.id}", json={"cover_style": "golden_wind"}).json()
+    assert body["rendered"] is True and body["active_job"] is None
+
+
+def test_a_sepia_video_from_before_cover_styles_is_kept_until_the_owner_picks_one(
+    client: TestClient, workspace: Workspace, repo: BeatRepo, draft: Beat
+) -> None:
+    (workspace.beat_dir(draft.id) / "video.mp4").write_bytes(b"sepia")
+    draft.video_path = "video.mp4"  # video_style stays None, as the migration leaves it
+    repo.save(draft)
+    assert client.get(f"/api/beats/{draft.id}").json()["rendered"] is True
+    body = client.get(f"/api/beats/{draft.id}").json()
+    assert body["video_style"] is None
+    # Even the style it already shows renders it again: the video on disk is sepia.
+    body = client.patch(f"/api/beats/{draft.id}", json={"cover_style": body["cover_style"]}).json()
+    assert body["rendered"] is False and body["active_job"]["kind"] == "render"
+
+
+def test_cover_style_is_draft_only(client: TestClient, repo: BeatRepo, draft: Beat) -> None:
+    draft.status = BeatStatus.QUEUED
+    repo.save(draft)
+    response = client.patch(f"/api/beats/{draft.id}", json={"cover_style": "stone_ocean"})
+    assert response.status_code == 409
+    assert "only change on a Draft" in response.json()["detail"]
+
+
+def test_unknown_cover_style_is_422(client: TestClient, draft: Beat) -> None:
+    response = client.patch(f"/api/beats/{draft.id}", json={"cover_style": "sepia"})
+    assert response.status_code == 422
+
+
+async def test_a_render_that_finishes_in_an_old_style_does_not_upload(
+    app: FastAPI,
+    session: Session,
+    repo: BeatRepo,
+    draft: Beat,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The owner changed the style while ffmpeg ran, then sent the beat: the old-style
+    video must not go to YouTube; another Render follows instead of the Upload."""
+
+    def render_then_owner_acts(audio: Path, image: Path, output: Path, on_progress, style=None):  # noqa: ANN001, ANN202
+        output.write_bytes(b"mp4")
+        with app.state.session_factory() as other:
+            beat = BeatRepo(other).get(draft.id)
+            assert beat is not None
+            beat.cover_style = CoverStyle.STONE_OCEAN
+            beat.status = BeatStatus.QUEUED
+            BeatRepo(other).save(beat)
+        return output
+
+    monkeypatch.setattr(pipeline, "render_video", render_then_owner_acts)
+    await make_worker(app).run_one(app.state.queue.enqueue(JobKind.RENDER, draft.id))
+    follow_up = JobRepo(session).next_queued()
+    assert follow_up is not None and follow_up.kind == JobKind.RENDER
+
+
+def test_send_with_a_video_in_an_old_style_renders_first(
+    client: TestClient, session: Session, workspace: Workspace, repo: BeatRepo, draft: Beat
+) -> None:
+    (workspace.beat_dir(draft.id) / "video.mp4").write_bytes(b"mp4")
+    draft.video_path, draft.video_style = "video.mp4", CoverStyle.GOLDEN_WIND
+    draft.cover_style = CoverStyle.STONE_OCEAN
+    repo.save(draft)
+    body = client.post(f"/api/beats/{draft.id}/upload").json()
+    assert body["status"] == "queued" and body["active_job"]["kind"] == "render"
+
+
+def test_preview_is_rendered_once_and_kept(
+    client: TestClient, workspace: Workspace, draft: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[Path, CoverStyle, int]] = []
+
+    def fake_cover(image: Path, output: Path, style: CoverStyle, out_width: int) -> Path:
+        calls.append((image, style, out_width))
+        output.write_bytes(b"\xff\xd8jpeg")
+        return output
+
+    monkeypatch.setattr(beats_service, "render_cover", fake_cover)
+    for _ in range(2):
+        response = client.get(f"/api/beats/{draft.id}/preview/blood_3tone")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/jpeg"
+    beat_dir = workspace.beat_dir(draft.id)
+    assert calls == [(beat_dir / "cover.png", CoverStyle.BLOOD_3TONE, 960)]
+    fingerprint = cover_fingerprint(CoverStyle.BLOOD_3TONE)
+    assert [p.name for p in (beat_dir / "previews").iterdir()] == [f"blood_3tone-{fingerprint}.jpg"]
+
+
+def test_a_preview_from_an_older_recipe_is_replaced(
+    client: TestClient, workspace: Workspace, draft: Beat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_cover(image: Path, output: Path, style: CoverStyle, out_width: int) -> Path:
+        output.write_bytes(b"new")
+        return output
+
+    monkeypatch.setattr(beats_service, "render_cover", fake_cover)
+    previews = workspace.beat_dir(draft.id) / "previews"
+    previews.mkdir()
+    (previews / "stone_ocean-0000000000.jpg").write_bytes(b"old")
+    (previews / "dio_green-0000000000.jpg").write_bytes(b"other style")
+    assert client.get(f"/api/beats/{draft.id}/preview/stone_ocean").content == b"new"
+    assert sorted(p.name for p in previews.iterdir()) == sorted(
+        ["dio_green-0000000000.jpg", f"stone_ocean-{cover_fingerprint(CoverStyle.STONE_OCEAN)}.jpg"]
+    )
+
+
+def test_preview_of_unknown_style_or_beat_without_cover(
+    client: TestClient, repo: BeatRepo, draft: Beat
+) -> None:
+    assert client.get(f"/api/beats/{draft.id}/preview/sepia").status_code == 422
+    draft.image_path = None
+    repo.save(draft)
+    assert client.get(f"/api/beats/{draft.id}/preview/stone_ocean").status_code == 404
+
+
+async def test_switching_back_while_a_render_runs_keeps_the_video_that_matches(
+    app: FastAPI,
+    client: TestClient,
+    session: Session,
+    workspace: Workspace,
+    repo: BeatRepo,
+    draft: Beat,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Video in A, the owner picks B, B starts rendering, the owner picks A again: B's
+    render is thrown away and the A video stays, Rendered, with nothing left to do."""
+    video = workspace.beat_dir(draft.id) / "video.mp4"
+    video.write_bytes(b"mp4 golden_wind")
+    draft.video_path, draft.video_style = "video.mp4", CoverStyle.GOLDEN_WIND
+    draft.cover_style = CoverStyle.GOLDEN_WIND
+    repo.save(draft)
+
+    def render_while_owner_switches_back(audio, image, output, on_progress, style=None):  # noqa: ANN001, ANN202
+        assert style == CoverStyle.STONE_OCEAN
+        output.write_bytes(b"mp4 stone_ocean")
+        client.patch(f"/api/beats/{draft.id}", json={"cover_style": "golden_wind"})
+        return output
+
+    monkeypatch.setattr(pipeline, "render_video", render_while_owner_switches_back)
+    client.patch(f"/api/beats/{draft.id}", json={"cover_style": "stone_ocean"})
+    job = JobRepo(session).next_queued()
+    assert job is not None
+    await make_worker(app).run_one(job)
+
+    assert video.read_bytes() == b"mp4 golden_wind"
+    assert not (video.parent / "video.part.mp4").exists()
+    body = client.get(f"/api/beats/{draft.id}").json()
+    assert body["rendered"] is True and body["video_style"] == "golden_wind"
+    assert JobRepo(session).next_queued() is None

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus
 from beat_upload.config import PrivacyStatus
+from beat_upload.cover_style import CoverStyle
 from beat_upload.youtube import video_url
 
 
@@ -49,8 +50,14 @@ class BeatOut(BaseModel):
     has_files: bool
     # The audio file's name as it was dropped; ``None`` for beats from before it was kept.
     source_name: str | None
-    # A Draft whose video file is ready: sending it will not wait for a Render (CONTEXT.md,
-    # "Rendered"). Stays true once set, so a beat that failed its upload is still Rendered.
+    # The Cover Style the owner chose; the Render paints the cover in it.
+    cover_style: CoverStyle
+    # The Cover Style the video on disk has. ``None`` with ``rendered`` means a video from
+    # before Cover Styles (sepia, no Label); picking any style renders it again.
+    video_style: CoverStyle | None
+    # A Draft whose video file is ready in its Cover Style: sending it will not wait for a
+    # Render (CONTEXT.md, "Rendered"). Stays true through a failed upload; turns false when
+    # the owner picks another Cover Style, until the new Render is done.
     rendered: bool
     # What is happening to this Beat right now, if anything: the Job the Library's "Working"
     # filter looks at. ``None`` when no job of its is queued, running or paused.
@@ -81,7 +88,9 @@ class BeatOut(BaseModel):
             comments=beat.comments,
             has_files=bool(beat.audio_path and beat.image_path),
             source_name=beat.source_name,
-            rendered=bool(beat.video_path),
+            cover_style=CoverStyle(beat.cover_style),
+            video_style=CoverStyle(beat.video_style) if beat.video_style else None,
+            rendered=beat.video_is_current,
             active_job=JobOut.model_validate(active_job) if active_job else None,
             cover_url=cover_url_for(beat),
             synced_at=beat.synced_at,
@@ -107,6 +116,8 @@ class BeatPatch(BaseModel):
     description: str | None = None
     tags: list[str] | None = None
     privacy: PrivacyStatus | None = None
+    # Draft only: a new Cover Style queues a new Render.
+    cover_style: CoverStyle | None = None
     # Scheduled publish time; ``null`` clears it (check ``model_fields_set`` to tell the two
     # apart from "not sent"). A naive value counts as local time, like in config.yaml.
     publish_at: datetime | None = None

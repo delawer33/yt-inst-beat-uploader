@@ -17,11 +17,13 @@ from fastapi import UploadFile
 from beat_server.api.schemas import BeatPatch
 from beat_server.db.models import Beat, BeatStatus, new_id
 from beat_server.db.repo import BeatRepo, SettingsRepo
-from beat_server.services.errors import BeatStateError
+from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_upload.beat_folder import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS
 from beat_upload.config import MAX_TITLE_LENGTH, PrivacyStatus, YouTubeMetadata
+from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import BeatFolderError
 from beat_upload.placeholders import fields_with_placeholder
+from beat_upload.video import cover_fingerprint, render_cover
 from beat_upload.workspace import Workspace
 
 KEY_TITLE_TEMPLATE = "title_template"
@@ -38,6 +40,9 @@ AUDIO_BASENAME = "audio"
 COVER_BASENAME = "cover"
 
 EDITABLE = frozenset({BeatStatus.DRAFT, BeatStatus.QUEUED})
+
+PREVIEW_DIR = "previews"
+PREVIEW_WIDTH = 960
 
 
 def default_metadata(settings: SettingsRepo) -> dict[str, Any]:
@@ -178,6 +183,51 @@ def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:
     if touches_schedule:
         beat.publish_at = to_naive_utc(metadata.publish_at)
     return beat
+
+
+def set_cover_style(beat: Beat, style: CoverStyle) -> bool:
+    """Choose the Cover Style of a Draft. True when the video on disk no longer matches, so
+    a Render is due; the caller saves and queues it. Not a Draft -> ``BeatStateError``.
+    """
+    if beat.status != BeatStatus.DRAFT:
+        raise BeatStateError(
+            f"Beat {beat.id} is {beat.status}; the cover style can only change on a Draft."
+        )
+    legacy = beat.video_path is not None and beat.video_style is None
+    if style == beat.cover_style and not legacy:
+        return False
+    if legacy:
+        beat.video_path = None  # a sepia video matches no Cover Style, the current one included
+    beat.cover_style = style
+    return not beat.video_is_current
+
+
+def preview_of(ws: Workspace, beat: Beat, style: CoverStyle) -> Path:
+    """The cover in ``style`` as the video will show it, rendered once and kept next to the
+    beat's files (the cover of a beat never changes) under a name that carries the render's
+    fingerprint, so a changed Cover Style or Label renders afresh. No local cover ->
+    ``BeatNotFound``.
+    """
+    beat_dir = ws.beat_dir(beat.id)
+    cover = beat_dir / beat.image_path if beat.image_path else None
+    if cover is None or not cover.is_file():
+        raise BeatNotFound(f"Beat {beat.id} has no local cover.")
+    preview = beat_dir / PREVIEW_DIR / f"{style}-{cover_fingerprint(style)}.jpg"
+    if preview.is_file():
+        return preview
+    preview.parent.mkdir(exist_ok=True)
+    for stale in preview.parent.glob(f"{style}-*.jpg"):  # painted by an older recipe
+        if stale != preview:
+            stale.unlink(missing_ok=True)
+    # Rendered under a name of its own and moved into place: two requests for the same
+    # preview each write their own file, and nobody is ever served half a JPEG.
+    part = preview.with_name(f"{style}.{new_id()}.jpg")
+    try:
+        render_cover(cover, part, style, out_width=PREVIEW_WIDTH)
+        part.replace(preview)
+    finally:
+        part.unlink(missing_ok=True)
+    return preview
 
 
 def metadata_with_privacy(

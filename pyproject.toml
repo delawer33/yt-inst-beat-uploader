@@ -22,6 +22,7 @@ dependencies = [
     "alembic>=1.13",
     "python-multipart>=0.0.9",
     "itsdangerous>=2.2",
+    "Pillow>=10",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +44,7 @@ packages = [
 
 [tool.setuptools.package-data]
 beat_server = ["db/migrations/script.py.mako"]
+beat_upload = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.ruff]
 line-length = 100

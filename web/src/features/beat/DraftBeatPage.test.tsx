@@ -20,6 +20,8 @@ const draft: Beat = {
   comments: 0,
   has_files: true,
   source_name: "Dmin110.mp3",
+  cover_style: "purple_yellow_5tone",
+  video_style: null,
   rendered: false,
   active_job: null,
   cover_url: "/api/beats/b1/cover",
@@ -367,4 +369,72 @@ test("an edit undone while its save is in flight is not brought back by the answ
   vi.advanceTimersByTime(AUTOSAVE_MS);
   expect(onSave).toHaveBeenLastCalledWith({ description: "Free for non-profit." });
   vi.useRealTimers();
+});
+
+test("picking a Cover Style autosaves it and the preview shows the server's still", () => {
+  vi.useFakeTimers();
+  const { onSave } = renderView();
+  const group = screen.getByRole("radiogroup", { name: /Cover style · Purple Yellow 5-tone/ });
+  expect(group).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Purple Yellow 5-tone" })).toBeChecked();
+
+  fireEvent.click(screen.getByRole("radio", { name: "Stone Ocean" }));
+  expect(screen.getByRole("radiogroup", { name: /Cover style · Stone Ocean/ })).toBeInTheDocument();
+  const frame = document.querySelector(".yt-frame img");
+  expect(frame?.getAttribute("src")).toBe("/api/beats/b1/preview/stone_ocean");
+  expect(screen.getByText("Stone Ocean, label, letterboxed")).toBeInTheDocument();
+
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledWith({ cover_style: "stone_ocean" });
+  vi.useRealTimers();
+});
+
+test("a Queued beat shows its Cover Style but cannot change it", () => {
+  renderView({ ...draft, status: "queued", cover_style: "blood_3tone" });
+  expect(screen.getByRole("radio", { name: "Blood 3-tone" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "Stone Ocean" })).toBeDisabled();
+});
+
+test("a Draft without its files has no Cover Style to pick", () => {
+  renderView({ ...draft, has_files: false });
+  expect(screen.queryByRole("radiogroup", { name: /Cover style/ })).not.toBeInTheDocument();
+  expect(document.querySelector(".yt-frame img")).toBeNull();
+});
+
+test("patchOf sends the Cover Style only when it changed", () => {
+  expect(patchOf(formOf(draft), draft)).toEqual({});
+  expect(patchOf({ ...formOf(draft), coverStyle: "dio_green" }, draft)).toEqual({
+    cover_style: "dio_green",
+  });
+});
+
+test("a Cover Style picked while the Beat became Queued is dropped, not sent and refused", () => {
+  vi.useFakeTimers();
+  const { onSave, refetch } = renderView();
+  fireEvent.click(screen.getByRole("radio", { name: "Stone Ocean" }));
+  refetch({ ...draft, status: "queued" });
+  expect(screen.getByRole("radio", { name: "Purple Yellow 5-tone" })).toBeChecked();
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+  fireEvent.change(title(), { target: { value: "Edited" } });
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledWith({ title: "Edited" });
+  vi.useRealTimers();
+});
+
+test("patchOf never sends a Cover Style for a Beat that is no longer a Draft", () => {
+  const queued: Beat = { ...draft, status: "queued" };
+  expect(patchOf({ ...formOf(queued), coverStyle: "dio_green" }, queued)).toEqual({});
+});
+
+test("a Draft rendered before Cover Styles says so and renders again in the chosen style", () => {
+  const { onSave } = renderView({ ...draft, rendered: true, video_style: null });
+  expect(screen.getByText("Rendered before Cover Styles")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Render in Purple Yellow 5-tone" }));
+  expect(onSave).toHaveBeenCalledWith({ cover_style: "purple_yellow_5tone" });
+});
+
+test("a Draft rendered in its Cover Style shows no such note", () => {
+  renderView({ ...draft, rendered: true, video_style: "purple_yellow_5tone" });
+  expect(screen.queryByText("Rendered before Cover Styles")).not.toBeInTheDocument();
 });
