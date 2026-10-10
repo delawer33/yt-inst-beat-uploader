@@ -56,7 +56,7 @@ beat_server/            FastAPI app for `serve`
   api/                  routers + pydantic schemas (the OpenAPI the frontend is generated from)
   db/                   SQLAlchemy models, repos, alembic migrations (packaged)
   jobs/                 queue, worker, scheduler, SSE event bus
-  services/             sync, pipeline (render -> upload), stats
+  services/             sync, pipeline (render -> upload), beatstars (Studio job), stats
 web/src/                React 19 + TS, TanStack Query, react-router
   api/                  generated schema.d.ts + openapi-fetch client; never hand-write types
   components/           AppShell (sidebar, banner), shared pieces

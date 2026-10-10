@@ -35,6 +35,11 @@ from beat_server.services.beats import (
     set_cover_style,
     to_naive_utc,
 )
+from beat_server.services.beatstars import (
+    beatstars_due,
+    check_ready_to_send,
+    ready_for_upload,
+)
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_server.services.fill import FillService
 from beat_server.services.sync import status_for
@@ -175,8 +180,10 @@ def upload_beat(
     """Send the beat: "Save & upload when rendered". The beat becomes QUEUED at once.
 
     The UPLOAD is queued here when the video is already Rendered, and by the RENDER that is
-    still running otherwise. A beat whose render failed (no video, no render pending) gets a
-    fresh RENDER, so sending is always enough on its own.
+    still running otherwise. A public or scheduled Bounce Folder beat also gets a BEATSTARS
+    Job; the UPLOAD waits for it, and whichever of the two finishes last queues it. A beat
+    whose render failed (no video, no render pending) gets a fresh RENDER, so sending is
+    always enough on its own.
     """
     beat = load_beat(session, beat_id)
     if beat.status != BeatStatus.DRAFT:
@@ -185,14 +192,17 @@ def upload_beat(
         raise BeatStateError(f"Beat {beat_id} has no audio or cover; add both first.")
     check_no_placeholders(beat)
     metadata_of(beat)  # a passed publish_at is a 422 now, not a failed upload after rendering
+    check_ready_to_send(beat)  # a title BeatStars cannot read is refused now, not by the Job
     beat.status = BeatStatus.QUEUED
     BeatRepo(session).save(beat)
     bus.publish_beat(beat.id, beat.status)
 
     jobs = JobRepo(session)
+    if beatstars_due(beat) and not jobs.has_pending(JobKind.BEATSTARS, beat.id):
+        queue.enqueue(JobKind.BEATSTARS, beat.id)  # next to the Render
     video = ws.beat_dir(beat.id) / beat.video_path if beat.video_path else None
     if video is not None and video.is_file() and beat.video_is_current:
-        if not jobs.has_pending(JobKind.UPLOAD, beat.id):
+        if ready_for_upload(beat) and not jobs.has_pending(JobKind.UPLOAD, beat.id):
             queue.enqueue(JobKind.UPLOAD, beat.id)
     elif not jobs.has_pending(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)

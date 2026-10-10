@@ -314,8 +314,15 @@ export function DraftBeatView({
         <span className={clsx("tag", beat.status === "queued" ? "tag-accent" : "tag-outline")}>
           {beat.status === "queued" ? "Queued" : "Draft"}
         </span>
-        <span className="end text-muted num" role="status">
-          {savedLabel(lastSaved)}
+        <span className="end flex gap-4">
+          {beat.beatstars?.url != null && (
+            <a className="num" href={beat.beatstars.url} target="_blank" rel="noreferrer">
+              BeatStars ↗
+            </a>
+          )}
+          <span className="text-muted num" role="status">
+            {savedLabel(lastSaved)}
+          </span>
         </span>
       </div>
 

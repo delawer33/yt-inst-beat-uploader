@@ -7,6 +7,7 @@ held to exactly the same limits. Templates for a new beat (title, description, t
 """
 
 import json
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,6 +37,10 @@ DEFAULT_DESCRIPTION_TEMPLATE = ""
 DEFAULT_TAGS_TEMPLATE: list[str] = []
 
 NAME_PLACEHOLDER = "{name}"
+
+# ``{beatstars|DM @delawer33 on Instagram}`` in a description Template: the link to the
+# Beat's BeatStars Track once it exists, else the text after the ``|`` (possibly nothing).
+BEATSTARS_MARKER = re.compile(r"\{beatstars(?:\|(?P<fallback>[^}]*))?\}")
 
 AUDIO_BASENAME = "audio"
 COVER_BASENAME = "cover"
@@ -174,9 +179,23 @@ def create_draft_from_folder(
     return repo.add(beat)
 
 
+def with_beatstars_link(description: str, url: str | None) -> str:
+    """``description`` with every ``{beatstars|fallback}`` marker swapped for ``url``, or for
+    its fallback text when there is no Track. The Beat keeps the marker; only what goes to
+    YouTube has it swapped."""
+
+    def swap(match: re.Match[str]) -> str:
+        return url if url else (match["fallback"] or "")
+
+    return BEATSTARS_MARKER.sub(swap, description)
+
+
 def metadata_of(beat: Beat) -> YouTubeMetadata:
-    """The beat's Metadata as ``upload_video`` wants it (validated on the way)."""
-    return YouTubeMetadata.from_mapping(_mapping(beat))
+    """The beat's Metadata as ``upload_video`` wants it (validated on the way), the
+    BeatStars marker of its description turned into the link or its fallback."""
+    data = _mapping(beat)
+    data["description"] = with_beatstars_link(beat.description, beat.beatstars_url)
+    return YouTubeMetadata.from_mapping(data)
 
 
 def check_no_placeholders(beat: Beat) -> None:

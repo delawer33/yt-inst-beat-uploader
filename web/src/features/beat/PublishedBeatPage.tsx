@@ -86,11 +86,18 @@ export function PublishedBeatView({
         <span className={`tag ${STATUS_TAG[beat.status]}`} data-status={beat.status}>
           {STATUS_LABEL[beat.status]}
         </span>
-        {beat.youtube_url !== null && (
-          <a className="end num" href={beat.youtube_url} target="_blank" rel="noreferrer">
-            {shortUrl(beat.youtube_url)} ↗
-          </a>
-        )}
+        <span className="end flex gap-4">
+          {beat.beatstars?.url != null && (
+            <a className="num" href={beat.beatstars.url} target="_blank" rel="noreferrer">
+              BeatStars ↗
+            </a>
+          )}
+          {beat.youtube_url !== null && (
+            <a className="num" href={beat.youtube_url} target="_blank" rel="noreferrer">
+              {shortUrl(beat.youtube_url)} ↗
+            </a>
+          )}
+        </span>
       </div>
 
       <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-7">

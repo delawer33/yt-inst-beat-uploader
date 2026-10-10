@@ -19,6 +19,7 @@ After=network-online.target
 ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
+PassEnvironment=WAYLAND_DISPLAY DISPLAY
 
 [Install]
 WantedBy=default.target
