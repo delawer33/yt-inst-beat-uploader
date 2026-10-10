@@ -15,7 +15,13 @@ import {
 } from "./metadata";
 import { fillHint, sendHint } from "./placeholders";
 import type { BeatPatch, FillIn, FillOut } from "./queries";
-import { useDeleteBeat, useFillBeat, usePatchBeat, useUploadBeat } from "./queries";
+import {
+  useDeleteBeat,
+  useFillBeat,
+  usePatchBeat,
+  useSkipBeatStars,
+  useUploadBeat,
+} from "./queries";
 import { BeatStarsBlock } from "./BeatStarsBlock";
 import { CoverStylePicker } from "./CoverStylePicker";
 import { coverStyleName, type CoverStyle } from "./coverStyles";
@@ -168,11 +174,19 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
   const auth = useAuthStatus();
   const jobs = useJobs(beat.id);
   const retry = useRetryJob();
+  const skip = useSkipBeatStars();
   const navigate = useNavigate();
 
   const failed = beat.active_job === null && !beat.rendered
     ? (jobs.data ?? []).find((job) => job.kind === "render" && job.status === "failed") ?? null
     : null;
+
+  // A Queued beat with nothing running whose newest BeatStars job failed (jobs: newest first).
+  const lastBeatStars = (jobs.data ?? []).find((job) => job.kind === "beatstars");
+  const failedBeatStars =
+    beat.status === "queued" && beat.active_job === null && lastBeatStars?.status === "failed"
+      ? lastBeatStars
+      : null;
 
   const saved = [autosave, send]
     .map((m) => (m.isSuccess ? m.submittedAt : 0))
@@ -187,6 +201,9 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
       channel={auth.data?.channel?.title ?? null}
       library={beats.data ?? []}
       failedRender={failed}
+      failedBeatStars={failedBeatStars}
+      onSkipBeatStars={() => skip.mutate(beat.id)}
+      skipping={skip.isPending}
       onSave={(body) => autosave.mutate({ id: beat.id, patch: body })}
       onSend={(body) => {
         const go = () => upload.mutate(beat.id);
@@ -205,6 +222,7 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
         send.error?.message ??
         upload.error?.message ??
         remove.error?.message ??
+        skip.error?.message ??
         null
       }
       savedAt={saved > 0 ? new Date(saved) : null}
@@ -217,6 +235,10 @@ type ViewProps = {
   channel: string | null;
   library: { id: string; title: string; tags: string[] }[];
   failedRender: Job | null;
+  /** The failed BEATSTARS Job of a Queued beat: offers Retry or sending without BeatStars. */
+  failedBeatStars?: Job | null;
+  onSkipBeatStars?: () => void;
+  skipping?: boolean;
   onSave: (patch: BeatPatch) => void;
   onSend: (patch: BeatPatch) => void;
   onDelete: () => void;
@@ -242,6 +264,9 @@ export function DraftBeatView({
   channel,
   library,
   failedRender,
+  failedBeatStars = null,
+  onSkipBeatStars,
+  skipping = false,
   onSave,
   onSend,
   onDelete,
@@ -418,6 +443,34 @@ export function DraftBeatView({
                   onClick={() => onRetry(failedRender.id)}
                 >
                   Retry render
+                </button>
+              </div>
+            </div>
+          )}
+
+          {failedBeatStars && (
+            <div className="note" role="alert">
+              <div className="note-title">BeatStars failed</div>
+              {failedBeatStars.error && <pre className="log">{failedBeatStars.error}</pre>}
+              <span className="text-soft">
+                Retry continues the same Studio draft. Without BeatStars the video goes up with
+                the fallback line in the description.
+              </span>
+              <div className="job-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onRetry(failedBeatStars.id)}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={skipping}
+                  onClick={() => onSkipBeatStars?.()}
+                >
+                  Upload without BeatStars
                 </button>
               </div>
             </div>

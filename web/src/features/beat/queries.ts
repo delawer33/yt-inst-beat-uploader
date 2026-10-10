@@ -81,6 +81,15 @@ export function useUploadBeat() {
   });
 }
 
+/** "Upload without BeatStars": the failed BeatStars job is given up on and the Upload queued. */
+export function useSkipBeatStars() {
+  return useBeatMutation((id: string) =>
+    unwrap(
+      api.POST("/api/beats/{beat_id}/skip-beatstars", { params: { path: { beat_id: id } } }),
+    ),
+  );
+}
+
 export function useDeleteBeat() {
   const queryClient = useQueryClient();
   return useMutation({

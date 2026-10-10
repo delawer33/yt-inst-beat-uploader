@@ -19,7 +19,10 @@ exists after the Track does; the other order costs a second YouTube call (`video
 ## Consequences
 
 - A failed BEATSTARS Job leaves the Beat Queued; the error is on the Job and a retry
-  continues the same Studio draft (the track id is saved the moment Studio makes it).
+  continues the same Studio draft (the track id is saved the moment Studio makes it). The
+  owner may instead choose "Upload without BeatStars" (`POST /api/beats/{id}/skip-beatstars`,
+  only for a Queued beat whose BeatStars Job failed): the Beat is marked skipped and the
+  description gets the fallback.
 - The Upload can start minutes after the video is rendered, and a scheduled publish time that
   passes while Studio works fails the Upload the way it always did (the Beat goes to Draft).
 - The web server needs a display: the service gets `WAYLAND_DISPLAY`, and the window (class

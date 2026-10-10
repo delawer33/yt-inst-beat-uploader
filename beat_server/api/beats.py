@@ -37,6 +37,7 @@ from beat_server.services.beats import (
 )
 from beat_server.services.beatstars import (
     beatstars_due,
+    check_can_skip,
     check_ready_to_send,
     ready_for_upload,
 )
@@ -209,6 +210,31 @@ def upload_beat(
     video = ws.beat_dir(beat.id) / beat.video_path if beat.video_path else None
     if video is not None and video.is_file() and beat.video_is_current:
         if ready_for_upload(beat) and not jobs.has_pending(JobKind.UPLOAD, beat.id):
+            queue.enqueue(JobKind.UPLOAD, beat.id)
+    elif not jobs.has_pending(JobKind.RENDER, beat.id):
+        queue.enqueue(JobKind.RENDER, beat.id)
+    return beat_out(session, beat)
+
+
+@router.post("/{beat_id}/skip-beatstars", response_model=BeatOut)
+def skip_beatstars(
+    beat_id: str, session: SessionDep, ws: WorkspaceDep, bus: BusDep, queue: QueueDep
+) -> BeatOut:
+    """ "Upload without BeatStars": give up on the failed BEATSTARS Job of a Queued beat.
+
+    The beat is marked skipped by the owner, so its description gets the marker's fallback,
+    and the UPLOAD is queued now, or by the RENDER still to run. Any other beat -> 409.
+    """
+    beat = load_beat(session, beat_id)
+    check_can_skip(session, beat)
+    beat.beatstars_skipped = True
+    BeatRepo(session).save(beat)
+    bus.publish_beat(beat.id, beat.status)
+
+    jobs = JobRepo(session)
+    video = ws.beat_dir(beat.id) / beat.video_path if beat.video_path else None
+    if video is not None and video.is_file() and beat.video_is_current:
+        if not jobs.has_pending(JobKind.UPLOAD, beat.id):
             queue.enqueue(JobKind.UPLOAD, beat.id)
     elif not jobs.has_pending(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)

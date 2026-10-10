@@ -251,3 +251,51 @@ def test_track_of_uses_exact_name_matches_plus_genre_moods_when_fill_never_ran(
     beat.beatstars_instruments = ["Bass"]
     track = beatstars.track_of(beat)
     assert (track.moods, track.instruments) == (["Dark"], ["Bass"])
+
+
+async def test_skip_after_a_failed_beatstars_job_queues_the_upload_with_the_fallback(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    beat_id = make_beat(client, bounce)
+    client.post(f"/api/beats/{beat_id}/upload")
+    await run_next(app, session, JobKind.RENDER)
+    fakes.fail_after_create = "TK1"
+    await run_next(app, session, JobKind.BEATSTARS)
+
+    response = client.post(f"/api/beats/{beat_id}/skip-beatstars")
+    assert response.status_code == 200
+    assert response.json()["beatstars"]["release"] == "skipped_by_owner"
+    assert kinds_waiting(session) == [JobKind.UPLOAD]
+    await run_next(app, session, JobKind.UPLOAD)
+    assert fakes.uploaded[0].description == "Free beat.\nDM @delawer33 on Instagram"
+    assert beat_of(session, beat_id).beatstars_url is None
+
+
+async def test_skip_waits_for_the_render_when_the_video_is_not_there_yet(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    beat_id = make_beat(client, bounce)
+    client.post(f"/api/beats/{beat_id}/upload")
+    fakes.fail_after_create = "TK1"
+    await run_next(app, session, JobKind.RENDER)
+    await run_next(app, session, JobKind.BEATSTARS)
+    beat = beat_of(session, beat_id)
+    beat.video_path = None  # the video went away: the Render has to run again
+    BeatRepo(session).save(beat)
+
+    assert client.post(f"/api/beats/{beat_id}/skip-beatstars").status_code == 200
+    assert kinds_waiting(session) == [JobKind.RENDER]
+
+
+def test_skip_is_refused_unless_a_beatstars_job_failed_on_a_queued_beat(
+    client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    beat_id = make_beat(client, bounce)
+    draft = client.post(f"/api/beats/{beat_id}/skip-beatstars")
+    assert draft.status_code == 409 and "Queued" in draft.json()["detail"]
+
+    client.post(f"/api/beats/{beat_id}/upload")  # Queued, BEATSTARS job still waiting
+    waiting = client.post(f"/api/beats/{beat_id}/skip-beatstars")
+    assert waiting.status_code == 409 and "failed" in waiting.json()["detail"]
+    assert not beat_of(session, beat_id).beatstars_skipped
+    assert client.post("/api/beats/nope/skip-beatstars").status_code == 404

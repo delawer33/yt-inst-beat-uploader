@@ -149,6 +149,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/skip-beatstars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Beatstars
+         * @description "Upload without BeatStars": give up on the failed BEATSTARS Job of a Queued beat.
+         *
+         *     The beat is marked skipped by the owner, so its description gets the marker's fallback,
+         *     and the UPLOAD is queued now, or by the RENDER still to run. Any other beat -> 409.
+         */
+        post: operations["skip_beatstars_api_beats__beat_id__skip_beatstars_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/beats/{beat_id}/cover": {
         parameters: {
             query?: never;
@@ -1010,6 +1033,37 @@ export interface operations {
         };
     };
     upload_beat_api_beats__beat_id__upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_beatstars_api_beats__beat_id__skip_beatstars_post: {
         parameters: {
             query?: never;
             header?: never;

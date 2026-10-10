@@ -20,7 +20,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from beat_server.db.models import Beat, BeatStatus, JobKind
+from sqlalchemy.orm import Session
+
+from beat_server.db.models import Beat, BeatStatus, JobKind, JobStatus
 from beat_server.db.repo import BeatRepo, JobRepo
 from beat_server.jobs.worker import JobContext
 from beat_server.services.errors import BeatNotFound, BeatStateError
@@ -72,6 +74,21 @@ def queue_upload_if_ready(ctx: JobContext, beat: Beat) -> None:
         and not JobRepo(ctx.session).has_pending(JobKind.UPLOAD, beat.id)
     ):
         ctx.enqueue(JobKind.UPLOAD, beat.id)
+
+
+def check_can_skip(session: Session, beat: Beat) -> None:
+    """Refuse "Upload without BeatStars" unless the Beat is Queued, comes from a Bounce Folder
+    and its newest BEATSTARS Job failed with nothing of that kind pending."""
+    if beat.status != BeatStatus.QUEUED or beat.bounce_folder is None:
+        raise BeatStateError(
+            f"Beat {beat.id} is {beat.status}; only a Queued Bounce Folder beat can skip BeatStars."
+        )
+    jobs = JobRepo(session)
+    latest = next((j for j in jobs.for_beat(beat.id) if j.kind == JobKind.BEATSTARS), None)
+    if jobs.has_pending(JobKind.BEATSTARS, beat.id) or latest is None:
+        raise BeatStateError(f"Beat {beat.id} has no failed BeatStars job to give up on.")
+    if latest.status != JobStatus.FAILED:
+        raise BeatStateError(f"The BeatStars job of beat {beat.id} has not failed; wait or retry.")
 
 
 def release_at(beat: Beat) -> datetime | None:

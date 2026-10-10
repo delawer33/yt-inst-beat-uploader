@@ -548,3 +548,33 @@ test("Fill from title writes the matched moods and instruments into the block an
   });
   vi.useRealTimers();
 });
+
+describe("a Queued beat whose BeatStars job failed", () => {
+  const queued: Beat = { ...draft, status: "queued", rendered: true };
+  const failedJob = {
+    id: "j9",
+    beat_id: "b1",
+    kind: "beatstars",
+    status: "failed",
+    progress: 0.1,
+    message: "",
+    error: "TK1: the form refused it",
+  } as unknown as Parameters<typeof DraftBeatView>[0]["failedBeatStars"];
+
+  test("shows the error with Retry and Upload without BeatStars, each calling its action", () => {
+    const onRetry = vi.fn();
+    const onSkipBeatStars = vi.fn();
+    renderView(queued, { failedBeatStars: failedJob, onRetry, onSkipBeatStars });
+    expect(screen.getByText("BeatStars failed")).toBeInTheDocument();
+    expect(screen.getByText("TK1: the form refused it")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledWith("j9");
+    fireEvent.click(screen.getByRole("button", { name: "Upload without BeatStars" }));
+    expect(onSkipBeatStars).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows neither button when nothing failed", () => {
+    renderView(queued);
+    expect(screen.queryByRole("button", { name: "Upload without BeatStars" })).toBeNull();
+  });
+});
