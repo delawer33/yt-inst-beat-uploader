@@ -19,10 +19,13 @@ from beat_server.db.models import Beat, BeatStatus, new_id
 from beat_server.db.repo import BeatRepo, SettingsRepo
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_upload.beat_folder import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS
+from beat_upload.beatstars.catalog import INSTRUMENTS, MOODS, in_catalog
+from beat_upload.beatstars.naming import MAX_MOODS
+from beat_upload.beatstars.track import MAX_INSTRUMENTS
 from beat_upload.bounce_folder import read_bounce_folder
 from beat_upload.config import MAX_TITLE_LENGTH, PrivacyStatus, YouTubeMetadata
 from beat_upload.cover_style import CoverStyle
-from beat_upload.errors import BeatFolderError, BounceFolderError
+from beat_upload.errors import BeatFolderError, BounceFolderError, ConfigError
 from beat_upload.placeholders import fields_with_placeholder
 from beat_upload.video import cover_fingerprint, render_cover
 from beat_upload.workspace import Workspace
@@ -221,7 +224,25 @@ def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:
     beat.privacy = metadata.privacy_status.value
     if touches_schedule:
         beat.publish_at = to_naive_utc(metadata.publish_at)
+    if patch.beatstars_moods is not None:
+        beat.beatstars_moods = _from_catalog(patch.beatstars_moods, MOODS, MAX_MOODS, "mood")
+    if patch.beatstars_instruments is not None:
+        beat.beatstars_instruments = _from_catalog(
+            patch.beatstars_instruments, INSTRUMENTS, MAX_INSTRUMENTS, "instrument"
+        )
     return beat
+
+
+def _from_catalog(values: list[str], catalog: tuple[str, ...], limit: int, what: str) -> list[str]:
+    """``values`` spelled as the BeatStars ``catalog`` spells them; ``ConfigError`` for one
+    that is not in it or for more than BeatStars takes."""
+    found = in_catalog(values, catalog)
+    unknown = [v for v in values if not in_catalog([v], catalog)]
+    if unknown:
+        raise ConfigError(f"Not a BeatStars {what}: {', '.join(unknown)}.")
+    if len(found) > limit:
+        raise ConfigError(f"BeatStars takes at most {limit} {what}s, got {len(found)}.")
+    return found
 
 
 def set_cover_style(beat: Beat, style: CoverStyle) -> bool:

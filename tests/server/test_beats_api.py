@@ -335,7 +335,12 @@ def test_fill_returns_the_pair_and_writes_nothing(
     response = client.post("/api/beats/draft/fill", json=FORM)
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"description": "BPM: 140", "tags": ["travis scott type beat"]}
+    assert response.json() == {
+        "description": "BPM: 140",
+        "tags": ["travis scott type beat"],
+        "beatstars_moods": [],
+        "beatstars_instruments": [],
+    }
     assert "unsaved edit" in prompts[0]
     session.expire_all()
     beat = BeatRepo(session).get("draft")

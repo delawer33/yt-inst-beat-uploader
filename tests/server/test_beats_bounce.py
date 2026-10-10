@@ -69,3 +69,83 @@ def test_a_missing_or_relative_path_is_refused(client: TestClient, tmp_path: Pat
         client.post("/api/beats/from-folder", json={"path": str(tmp_path / "x")}).status_code == 422
     )
     assert client.post("/api/beats/from-folder", json={"path": "Jungle"}).status_code == 422
+
+
+TITLE = '[FREE] Yeat x Playboi Carti Type Beat 2026 - "Naughty" | Melodic Guitar Trap'
+
+
+def make_beat(client: TestClient, tmp_path: Path) -> str:
+    return client.post("/api/beats/from-folder", json={"path": str(bounce(tmp_path))}).json()["id"]
+
+
+def test_the_preview_is_built_from_the_title_the_way_the_old_tracks_were(
+    client: TestClient, tmp_path: Path
+) -> None:
+    beat_id = make_beat(client, tmp_path)
+    body = client.patch(f"/api/beats/{beat_id}", json={"title": TITLE, "privacy": "public"}).json()
+    preview = body["beatstars"]
+    assert preview["error"] is None
+    assert preview["title"] == "Naughty | Yeat x Playboi Carti Type Beat"
+    assert preview["tags"] == ["yeat type beat", "playboi carti type beat", "melodic guitar trap"]
+    assert preview["genres"] == ["Trap", "Hip Hop"]
+    # Fill never ran: the exact word of the name, and the substyle tops moods up
+    assert preview["moods"] == ["Calm", "Sad", "Melancholy"]
+    assert preview["instruments"] == ["Guitar"]
+    assert preview["samples"] is True and preview["release"] == "with_video"
+
+
+def test_a_title_that_does_not_read_is_an_error_in_the_preview_not_a_failed_request(
+    client: TestClient, tmp_path: Path
+) -> None:
+    beat_id = make_beat(client, tmp_path)
+    response = client.get(f"/api/beats/{beat_id}")
+    assert response.status_code == 200
+    preview = response.json()["beatstars"]
+    assert "Type Beat" in preview["error"]
+    assert preview["title"] == "" and preview["tags"] == [] and preview["genres"] == []
+
+
+def test_the_release_follows_privacy_and_schedule(client: TestClient, tmp_path: Path) -> None:
+    beat_id = make_beat(client, tmp_path)
+
+    def release(**patch: object) -> str:
+        body = client.patch(f"/api/beats/{beat_id}", json={"title": TITLE} | patch).json()
+        return body["beatstars"]["release"]
+
+    assert release(privacy="private") == "skipped_private"
+    assert release(privacy="unlisted") == "skipped_private"
+    assert release(privacy="public") == "with_video"
+    assert release(privacy="private", publish_at="2999-01-01T12:00:00") == "with_video"
+
+
+def test_moods_and_instruments_are_saved_spelled_as_beatstars_spells_them(
+    client: TestClient, session: Session, tmp_path: Path
+) -> None:
+    beat_id = make_beat(client, tmp_path)
+    response = client.patch(
+        f"/api/beats/{beat_id}",
+        json={
+            "title": TITLE,
+            "beatstars_moods": ["calm", "SAD"],
+            "beatstars_instruments": ["acoustic guitar"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    preview = response.json()["beatstars"]
+    assert preview["moods"] == ["Calm", "Sad"] and preview["instruments"] == ["Acoustic guitar"]
+    session.expire_all()
+    beat = BeatRepo(session).get(beat_id)
+    assert beat is not None and beat.beatstars_moods == ["Calm", "Sad"]
+
+
+def test_a_mood_outside_the_list_is_422(client: TestClient, tmp_path: Path) -> None:
+    beat_id = make_beat(client, tmp_path)
+    response = client.patch(
+        f"/api/beats/{beat_id}", json={"title": TITLE, "beatstars_moods": ["rhytmic"]}
+    )
+    assert response.status_code == 422
+    assert "rhytmic" in response.json()["detail"]
+    response = client.patch(
+        f"/api/beats/{beat_id}", json={"title": TITLE, "beatstars_instruments": ["808"]}
+    )
+    assert response.status_code == 422

@@ -16,6 +16,7 @@ import {
 import { fillHint, sendHint } from "./placeholders";
 import type { BeatPatch, FillIn, FillOut } from "./queries";
 import { useDeleteBeat, useFillBeat, usePatchBeat, useUploadBeat } from "./queries";
+import { BeatStarsBlock } from "./BeatStarsBlock";
 import { CoverStylePicker } from "./CoverStylePicker";
 import { coverStyleName, type CoverStyle } from "./coverStyles";
 import { TagInput } from "./TagInput";
@@ -41,6 +42,9 @@ export type DraftForm = {
   /** Local `datetime-local` value, or null for "publish now". */
   publishAt: string | null;
   coverStyle: CoverStyle;
+  /** BeatStars moods and instruments (a Bounce Folder Beat); empty otherwise. */
+  beatstarsMoods: string[];
+  beatstarsInstruments: string[];
 };
 
 export function formOf(beat: Beat): DraftForm {
@@ -51,6 +55,8 @@ export function formOf(beat: Beat): DraftForm {
     privacy: beat.privacy,
     publishAt: beat.publish_at ? toDateTimeLocal(serverDate(beat.publish_at)) : null,
     coverStyle: beat.cover_style,
+    beatstarsMoods: beat.beatstars?.moods ?? [],
+    beatstarsInstruments: beat.beatstars?.instruments ?? [],
   };
 }
 
@@ -86,6 +92,8 @@ export function rebase(
     // Only a Draft may change its Cover Style: once the Beat has left Draft, a pick the
     // server never took is dropped instead of being sent (and refused) with every save.
     coverStyle: to.status === "draft" ? adopt("coverStyle") : next.coverStyle,
+    beatstarsMoods: adopt("beatstarsMoods"),
+    beatstarsInstruments: adopt("beatstarsInstruments"),
   };
 }
 
@@ -122,6 +130,14 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   if (privacy !== beat.privacy) patch.privacy = privacy;
   if (beat.status === "draft" && form.coverStyle !== beat.cover_style) {
     patch.cover_style = form.coverStyle;
+  }
+  if (beat.beatstars) {
+    if (!same(form.beatstarsMoods, beat.beatstars.moods)) {
+      patch.beatstars_moods = form.beatstarsMoods;
+    }
+    if (!same(form.beatstarsInstruments, beat.beatstars.instruments)) {
+      patch.beatstars_instruments = form.beatstarsInstruments;
+    }
   }
   return patch;
 }
@@ -424,7 +440,17 @@ export function DraftBeatView({
                 onClick={() => {
                   onFill(
                     { title: form.title, description: form.description, tags: form.tags },
-                    (filled) => setForm((f) => ({ ...f, ...filled })),
+                    ({ description, tags, beatstars_moods, beatstars_instruments }) =>
+                      setForm((f) => ({
+                        ...f,
+                        description,
+                        tags,
+                        // A Beat that is not from a Bounce Folder gets none back: keep the form's.
+                        ...(beat.beatstars && {
+                          beatstarsMoods: beatstars_moods,
+                          beatstarsInstruments: beatstars_instruments,
+                        }),
+                      })),
                   );
                 }}
               >
@@ -533,6 +559,14 @@ export function DraftBeatView({
                 Your local time. Uploaded as private; YouTube makes it public then.
               </span>
             </div>
+          )}
+
+          {beat.beatstars && (
+            <BeatStarsBlock
+              preview={beat.beatstars}
+              moods={form.beatstarsMoods}
+              instruments={form.beatstarsInstruments}
+            />
           )}
 
           {fillError && (

@@ -131,3 +131,52 @@ def test_bpm_and_key_come_from_the_bounce_folder_facts() -> None:
     fill(runner, beat)
     assert "BPM 104, key F# minor" in runner.prompts[0]
     assert "from the Bounce Folder's name" in runner.prompts[0]
+
+
+BOUNCE = {
+    "bounce_folder": "/music/Jungle_104bpm_Amin_calm-rytmic_gitara-808",
+    "bpm": 104,
+    "music_key": "Amin",
+    "name_moods": ["calm", "rytmic"],
+    "name_instruments": ["gitara", "808"],
+}
+
+
+def test_a_bounce_folder_prompt_carries_the_lists_and_the_owners_words() -> None:
+    runner = FakeRunner(GOOD)
+    fill(runner, draft(**BOUNCE))
+
+    prompt = runner.prompts[0]
+    assert "BPM 104, key A minor" in prompt
+    assert "Melancholy" in prompt and "Acoustic guitar" in prompt  # the catalog
+    assert "calm, rytmic" in prompt and "gitara, 808" in prompt  # the owner's words
+    assert "beatstars_moods" in FILL_SCHEMA["properties"]
+
+
+def test_matched_moods_and_instruments_come_back_spelled_as_beatstars_spells_them() -> None:
+    answer = GOOD | {
+        "beatstars_moods": ["calm", "Rhythmic?", "Sad", " MELANCHOLY "],
+        "beatstars_instruments": ["acoustic guitar", "808", "Piano"],
+    }
+    filled = fill(FakeRunner(answer), draft(**BOUNCE))
+    # "Rhythmic?" and "808" are outside the lists and are dropped
+    assert filled.beatstars_moods == ["Calm", "Sad", "Melancholy"]
+    assert filled.beatstars_instruments == ["Acoustic guitar", "Piano"]
+
+
+def test_more_than_beatstars_takes_is_cut() -> None:
+    answer = GOOD | {"beatstars_moods": ["Sad", "Calm", "Dark", "Warm", "Bold", "Epic", "Lazy"]}
+    assert len(fill(FakeRunner(answer), draft(**BOUNCE)).beatstars_moods) == 5
+
+
+def test_a_beat_that_is_not_from_a_bounce_folder_gets_no_beatstars_values() -> None:
+    answer = GOOD | {"beatstars_moods": ["Sad"], "beatstars_instruments": ["Piano"]}
+    runner = FakeRunner(answer)
+    filled = fill(runner)
+    assert filled.beatstars_moods == [] and filled.beatstars_instruments == []
+    assert "does not go to BeatStars" in runner.prompts[0]
+
+
+def test_a_missing_beatstars_answer_is_empty_not_an_error() -> None:
+    filled = fill(FakeRunner(GOOD), draft(**BOUNCE))
+    assert filled.beatstars_moods == [] and filled.beatstars_instruments == []

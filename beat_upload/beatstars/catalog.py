@@ -371,3 +371,20 @@ GENRES: tuple[str, ...] = (
     "World",
     "Zhongguo feng",
 )
+
+
+def in_catalog(values: list[str] | tuple[str, ...], catalog: tuple[str, ...]) -> list[str]:
+    """``values`` as ``catalog`` spells them, in order, once each; what is not in it is
+    dropped. Case and spaces do not matter: ``"acoustic guitar"`` is ``"Acoustic guitar"``.
+    """
+    by_key = {_key(item): item for item in catalog}
+    found: list[str] = []
+    for value in values:
+        item = by_key.get(_key(value))
+        if item is not None and item not in found:
+            found.append(item)
+    return found
+
+
+def _key(value: str) -> str:
+    return "".join(value.lower().split())
