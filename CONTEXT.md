@@ -15,6 +15,20 @@ The legacy on-disk form of a Beat: a directory holding exactly one audio file, o
 a `config.yaml`. Accepted as an import source only; it is no longer where a Beat lives.
 _Avoid_: Folder, project folder
 
+**Bounce Folder**:
+The folder the owner exports a finished beat into: one untagged WAV, one tagged MP3, one cover
+image and optionally a `stems` folder. Its name (or the WAV's) carries the BPM, key, moods,
+instruments and whether foreign samples are used; never the beat's name, which comes from
+the title. A Draft made from it goes to YouTube and to BeatStars.
+_Avoid_: Beat Folder, source folder, export
+
+**BeatStars Track**:
+A Beat's page for sale on BeatStars, made from its Bounce Folder when the owner sends it.
+It goes public together with the video, or at the same scheduled time; a Beat sent as
+private or unlisted gets none until the owner puts it on BeatStars later. The video's
+description links to it.
+_Avoid_: Listing, store page, product
+
 **Library**:
 The full set of Beats known to the application — both the ones added here and the ones already
 published on the channel before it existed.
