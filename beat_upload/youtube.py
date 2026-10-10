@@ -99,6 +99,30 @@ def set_privacy(
         raise NetworkError(f"Could not reach YouTube: {e}") from e
 
 
+def update_description(video_id: str, metadata: YouTubeMetadata, credentials: Credentials) -> None:
+    """Re-send the snippet (title, description, tags, category) of an existing video.
+
+    ``videos.update(part="snippet")`` replaces the whole snippet, so all four fields go
+    again; 50 quota units. Needs the ``youtube`` scope.
+    """
+    youtube = _client(credentials)
+    body: dict[str, Any] = {
+        "id": video_id,
+        "snippet": {
+            "title": metadata.title,
+            "description": metadata.description,
+            "tags": metadata.tags,
+            "categoryId": str(metadata.category_id),
+        },
+    }
+    try:
+        youtube.videos().update(part="snippet", body=body).execute()
+    except HttpError as e:
+        raise UploadError(f"YouTube API error for {video_id}: {e}") from e
+    except TRANSPORT_ERRORS as e:
+        raise NetworkError(f"Could not reach YouTube: {e}") from e
+
+
 def rfc3339_utc(when: datetime) -> str:
     """``2026-10-01T18:00:00Z``, the form ``status.publishAt`` expects."""
     return when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -90,6 +90,22 @@ export function useSkipBeatStars() {
   );
 }
 
+/**
+ * "Put on BeatStars" on a Published or Scheduled Bounce Folder beat with no Track: queues the
+ * BEATSTARS Job, which ends by putting the link into the YouTube description.
+ */
+export function usePutOnBeatStars() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.POST("/api/beats/{beat_id}/beatstars", { params: { path: { beat_id: id } } })),
+    onSuccess: (beat) => {
+      if (beat.active_job) applyJobEvent(queryClient, beat.active_job);
+      void queryClient.invalidateQueries({ queryKey: beatsKey });
+    },
+  });
+}
+
 export function useDeleteBeat() {
   const queryClient = useQueryClient();
   return useMutation({

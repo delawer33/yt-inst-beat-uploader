@@ -34,6 +34,7 @@ class Fakes:
         self.studio_calls: list[dict[str, Any]] = []
         self.prepared: list[tuple[Path, str]] = []
         self.uploaded: list[Any] = []
+        self.updated: list[tuple[str, Any]] = []  # videos.update(snippet): (video id, metadata)
         self.fail_after_create: str | None = None  # a track id: Studio makes it, then fails
 
 
@@ -59,8 +60,12 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
 
     def fake_upload(video: Path, metadata: Any, creds: Any, on_progress: Any) -> str:
         fakes.uploaded.append(metadata)
-        return "yt1"
+        return f"yt{len(fakes.uploaded)}"
 
+    def fake_update(video_id: str, metadata: Any, creds: Any) -> None:
+        fakes.updated.append((video_id, metadata))
+
+    monkeypatch.setattr(beatstars, "update_description", fake_update)
     monkeypatch.setattr(beatstars, "prepare", fake_prepare)
     monkeypatch.setattr(beatstars, "drive_studio", fake_studio)
     monkeypatch.setattr(pipeline, "render_video", fake_render)
@@ -299,3 +304,118 @@ def test_skip_is_refused_unless_a_beatstars_job_failed_on_a_queued_beat(
     assert waiting.status_code == 409 and "failed" in waiting.json()["detail"]
     assert not beat_of(session, beat_id).beatstars_skipped
     assert client.post("/api/beats/nope/skip-beatstars").status_code == 404
+
+
+async def uploaded_beat(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, **patch: Any
+) -> str:
+    """A Bounce Folder beat sent, rendered and uploaded; BeatStars has not seen it."""
+    beat_id = make_beat(client, bounce, **patch)
+    client.post(f"/api/beats/{beat_id}/upload")
+    await run_next(app, session, JobKind.RENDER)
+    if JobKind.BEATSTARS in kinds_waiting(session):
+        await run_next(app, session, JobKind.BEATSTARS)
+    await run_next(app, session, JobKind.UPLOAD)
+    return beat_id
+
+
+def forget_track(session: Session, beat_id: str) -> None:
+    """Make the beat one that never got a Track (the upload went out without BeatStars)."""
+    beat = beat_of(session, beat_id)
+    beat.beatstars_id = beat.beatstars_url = None
+    BeatRepo(session).save(beat)
+
+
+async def test_put_on_beatstars_for_a_published_beat_updates_the_description_with_the_link(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    beat_id = await uploaded_beat(app, client, session, bounce)
+    forget_track(session, beat_id)
+    fakes.studio_calls.clear()
+    assert beat_of(session, beat_id).status == BeatStatus.PUBLISHED
+
+    response = client.post(f"/api/beats/{beat_id}/beatstars")
+    assert response.status_code == 200
+    assert kinds_waiting(session) == [JobKind.BEATSTARS]
+    await run_next(app, session, JobKind.BEATSTARS)
+
+    assert fakes.studio_calls[0]["release"] is None  # public: released now
+    beat = beat_of(session, beat_id)
+    assert (beat.beatstars_id, beat.beatstars_url) == ("TK1", URL)
+    assert beat.status == BeatStatus.PUBLISHED
+    video_id, metadata = fakes.updated[0]
+    assert video_id == "yt1"
+    assert metadata.description == f"Free beat.\n{URL}"
+    assert metadata.title == TITLE
+    assert kinds_waiting(session) == []  # no second Upload
+
+
+async def test_put_on_beatstars_for_a_scheduled_beat_releases_at_the_publish_time(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    when = (datetime.now(UTC) + timedelta(days=1)).replace(microsecond=0)
+    beat_id = await uploaded_beat(
+        app, client, session, bounce, privacy="private", publish_at=when.isoformat()
+    )
+    forget_track(session, beat_id)
+    fakes.studio_calls.clear()
+    assert beat_of(session, beat_id).status == BeatStatus.SCHEDULED
+
+    assert client.post(f"/api/beats/{beat_id}/beatstars").status_code == 200
+    await run_next(app, session, JobKind.BEATSTARS)
+    assert fakes.studio_calls[0]["release"] == when
+    assert fakes.updated[0][1].description == f"Free beat.\n{URL}"
+
+
+async def test_put_on_beatstars_after_upload_without_beatstars_clears_the_skip(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    beat_id = make_beat(client, bounce)
+    beat = beat_of(session, beat_id)
+    beat.beatstars_skipped = True  # "Upload without BeatStars" at send
+    BeatRepo(session).save(beat)
+    client.post(f"/api/beats/{beat_id}/upload")
+    await run_next(app, session, JobKind.RENDER)
+    await run_next(app, session, JobKind.UPLOAD)
+    assert fakes.studio_calls == []
+    assert fakes.uploaded[0].description == "Free beat.\nDM @delawer33 on Instagram"
+    assert beat_of(session, beat_id).status == BeatStatus.PUBLISHED
+
+    assert client.post(f"/api/beats/{beat_id}/beatstars").status_code == 200
+    assert beat_of(session, beat_id).beatstars_skipped is False
+    await run_next(app, session, JobKind.BEATSTARS)
+    beat = beat_of(session, beat_id)
+    assert beat.beatstars_id == "TK1"
+    assert fakes.updated[0][1].description == f"Free beat.\n{URL}"
+    assert client.get(f"/api/beats/{beat_id}").json()["beatstars"]["release"] == "with_video"
+
+
+async def test_put_on_beatstars_is_refused_without_a_bounce_folder_or_with_a_track_or_private(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    # already has a Track
+    with_track = await uploaded_beat(app, client, session, bounce)
+    assert beat_of(session, with_track).beatstars_url == URL
+    response = client.post(f"/api/beats/{with_track}/beatstars")
+    assert response.status_code == 409 and "already on BeatStars" in response.json()["detail"]
+
+    # private, no schedule
+    private = await uploaded_beat(app, client, session, bounce, privacy="private")
+    response = client.post(f"/api/beats/{private}/beatstars")
+    assert response.status_code == 409 and "Published or Scheduled" in response.json()["detail"]
+
+    # not from a Bounce Folder
+    session.add(
+        Beat(
+            id="plain",
+            title="x",
+            status=BeatStatus.PUBLISHED,
+            youtube_id="yt9",
+            privacy="public",
+        )
+    )
+    session.commit()
+    response = client.post("/api/beats/plain/beatstars")
+    assert response.status_code == 409 and "Bounce Folder" in response.json()["detail"]
+    assert fakes.updated == []
+    assert kinds_waiting(session) == []

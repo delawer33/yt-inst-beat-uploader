@@ -201,6 +201,16 @@ def metadata_of(beat: Beat) -> YouTubeMetadata:
     return YouTubeMetadata.from_mapping(data)
 
 
+def snippet_of(beat: Beat) -> YouTubeMetadata:
+    """The Metadata of a beat that is already on YouTube, for re-sending its snippet. Like
+    ``metadata_of`` but without the publish time: a time that has passed since the upload
+    must not stop the description from being updated."""
+    data = _mapping(beat)
+    data["description"] = with_beatstars_link(beat.description, beat.beatstars_url)
+    data["publish_at"] = None
+    return YouTubeMetadata.from_mapping(data)
+
+
 def check_no_placeholders(beat: Beat) -> None:
     """``BeatStateError`` when the title, description or tags still hold a Placeholder.
 

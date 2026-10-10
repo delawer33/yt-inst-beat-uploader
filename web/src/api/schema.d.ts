@@ -172,6 +172,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/beatstars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put On Beatstars
+         * @description "Put on BeatStars" for a Published or Scheduled Bounce Folder beat with no Track.
+         *
+         *     Queues the BEATSTARS Job: the Track is released now (Published) or at the publish time
+         *     (Scheduled), then the YouTube snippet is sent again so the marker in the description
+         *     becomes the link. Clears the "Upload without BeatStars" mark. Refused for a beat with no
+         *     Bounce Folder, one that already has a Track, and a private one with no schedule.
+         */
+        post: operations["put_on_beatstars_api_beats__beat_id__beatstars_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/beats/{beat_id}/cover": {
         parameters: {
             query?: never;
@@ -1064,6 +1089,37 @@ export interface operations {
         };
     };
     skip_beatstars_api_beats__beat_id__skip_beatstars_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_on_beatstars_api_beats__beat_id__beatstars_post: {
         parameters: {
             query?: never;
             header?: never;

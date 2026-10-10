@@ -10,6 +10,7 @@ import { DailyBars } from "@/features/stats/DailyBars";
 import { useBeatStats, type DayPoint } from "@/features/stats/queries";
 import { formatDate, formatDateTime, formatViews, serverDate, toDateTimeLocal } from "@/lib/format";
 import { defaultPublishAt } from "./metadata";
+import { usePutOnBeatStars } from "./queries";
 import { PrivacySelect, type PrivacyChoice } from "./PrivacySelect";
 
 /** A Beat that has left the owner's hands: Uploading, Uploaded, Scheduled or Published. */
@@ -18,6 +19,7 @@ export function PublishedBeatPage({ beat }: { beat: Beat }) {
   const stats = useBeatStats(beat.id);
   const retry = useRetryJob();
   const setPrivacy = useSetPrivacy();
+  const putOnBeatStars = usePutOnBeatStars();
 
   return (
     <PublishedBeatView
@@ -32,6 +34,9 @@ export function PublishedBeatPage({ beat }: { beat: Beat }) {
       onPrivacy={(change) => setPrivacy.mutate({ id: beat.id, ...change })}
       privacyPending={setPrivacy.isPending}
       privacyError={setPrivacy.error?.message ?? null}
+      onPutOnBeatStars={() => putOnBeatStars.mutate(beat.id)}
+      putPending={putOnBeatStars.isPending}
+      putError={putOnBeatStars.error?.message ?? null}
     />
   );
 }
@@ -48,6 +53,9 @@ type ViewProps = {
   onPrivacy: (change: PrivacyChange) => void;
   privacyPending?: boolean;
   privacyError?: string | null;
+  onPutOnBeatStars?: () => void;
+  putPending?: boolean;
+  putError?: string | null;
 };
 
 /**
@@ -71,6 +79,9 @@ export function PublishedBeatView({
   onPrivacy,
   privacyPending = false,
   privacyError = null,
+  onPutOnBeatStars = () => {},
+  putPending = false,
+  putError = null,
 }: ViewProps) {
   const title = beat.title || "Untitled";
   const job = beat.active_job;
@@ -127,6 +138,14 @@ export function PublishedBeatView({
 
       {job !== null && <CurrentJob job={job} />}
 
+      {canPutOnBeatStars(beat) && (
+        <PutOnBeatStars
+          onPut={onPutOnBeatStars}
+          disabled={putPending || job?.kind === "beatstars"}
+          error={putError}
+        />
+      )}
+
       {beat.youtube_id !== null &&
         (statsError !== null ? (
           <div className="note" role="alert">
@@ -147,6 +166,47 @@ export function PublishedBeatView({
           pending={privacyPending}
           error={privacyError}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Put on BeatStars" applies to a Published or Scheduled beat from a Bounce Folder (the API
+ * sends `beatstars` only for those) that has no Track yet.
+ */
+function canPutOnBeatStars(beat: Beat): boolean {
+  return (
+    beat.beatstars != null &&
+    beat.beatstars.url == null &&
+    (beat.status === "published" || beat.status === "scheduled")
+  );
+}
+
+function PutOnBeatStars({
+  onPut,
+  disabled,
+  error,
+}: {
+  onPut: () => void;
+  disabled: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="note" role="status">
+      <div className="note-title">Not on BeatStars</div>
+      <span className="text-soft">
+        Puts the beat on BeatStars, then adds the link to the YouTube description.
+      </span>
+      {error && (
+        <span role="alert" className="text-accent">
+          {error}
+        </span>
+      )}
+      <div className="job-actions">
+        <button type="button" className="btn btn-primary btn-sm" disabled={disabled} onClick={onPut}>
+          Put on BeatStars
+        </button>
       </div>
     </div>
   );

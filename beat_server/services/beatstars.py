@@ -10,6 +10,11 @@ A Beat sent private or unlisted without a time gets no Track (``beatstars_due``)
 leaves the Beat Queued and the error on the Job; retrying the Job continues the Studio draft
 whose id was saved.
 
+A Published or Scheduled Beat that has no Track (sent private then published, or sent
+without BeatStars) can be put on BeatStars later (``check_can_put_later``): the same Job,
+released now or at the publish time, after which the Beat's YouTube snippet is sent again so
+the marker in the description becomes the link (``videos.update``, 50 quota units).
+
 Studio is synchronous Playwright, so everything that touches it or ffmpeg runs in
 ``asyncio.to_thread``; the two seams below (``prepare`` and ``drive_studio``) are what tests
 replace.
@@ -25,6 +30,7 @@ from sqlalchemy.orm import Session
 from beat_server.db.models import Beat, BeatStatus, JobKind, JobStatus
 from beat_server.db.repo import BeatRepo, JobRepo
 from beat_server.jobs.worker import JobContext
+from beat_server.services.beats import snippet_of
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_upload.beatstars.catalog import INSTRUMENTS, MOODS
 from beat_upload.beatstars.naming import MAX_MOODS, TrackFileName, file_safe_name
@@ -45,7 +51,9 @@ from beat_upload.beatstars.track import (
 )
 from beat_upload.bounce_folder import read_bounce_folder
 from beat_upload.errors import BeatStarsError
+from beat_upload.youtube import update_description
 
+LATER = frozenset({BeatStatus.PUBLISHED, BeatStatus.SCHEDULED})
 PACKAGE_DIRNAME = "beatstars"
 FALLBACK_FILE_NAME = "beat"
 
@@ -92,8 +100,29 @@ def check_can_skip(session: Session, beat: Beat) -> None:
 
 
 def release_at(beat: Beat) -> datetime | None:
-    """When the Track goes public: the Beat's publish time (aware UTC), or ``None`` for now."""
-    return beat.publish_at.replace(tzinfo=UTC) if beat.publish_at else None
+    """When the Track goes public: the Beat's publish time (aware UTC), or ``None`` for now
+    (no time, or one that has passed: a Published Beat keeps the time it was scheduled for)."""
+    if beat.publish_at is None:
+        return None
+    when = beat.publish_at.replace(tzinfo=UTC)
+    return when if when > datetime.now(UTC) else None
+
+
+def check_can_put_later(beat: Beat) -> None:
+    """``BeatStateError`` unless "Put on BeatStars" applies: a Published or Scheduled Beat from
+    a Bounce Folder, on YouTube, with no Track yet. (A private Beat with no schedule is not
+    sold, so it is refused; so is one that already has a Track.)"""
+    if beat.bounce_folder is None:
+        raise BeatStateError(
+            f"Beat {beat.id} is not from a Bounce Folder; it has no BeatStars files."
+        )
+    if beat.beatstars_url is not None:
+        raise BeatStateError(f"Beat {beat.id} is already on BeatStars: {beat.beatstars_url}")
+    if beat.status not in LATER or not beat.youtube_id:
+        raise BeatStateError(
+            f"Beat {beat.id} is {beat.status}; only a Published or Scheduled beat can be put "
+            "on BeatStars later."
+        )
 
 
 def track_of(beat: Beat) -> BeatStarsTrack:
@@ -124,7 +153,7 @@ async def run_beatstars(ctx: JobContext) -> None:
     beat = repo.get(ctx.job.beat_id) if ctx.job.beat_id else None
     if beat is None:
         raise BeatNotFound(f"Beat {ctx.job.beat_id} does not exist.")
-    if beat.status != BeatStatus.QUEUED or beat.bounce_folder is None:
+    if beat.bounce_folder is None or beat.status not in {BeatStatus.QUEUED, *LATER}:
         raise BeatStateError(f"Beat {beat.id} is {beat.status}; only a sent Bounce Folder beat.")
 
     if beatstars_due(beat):
@@ -164,6 +193,12 @@ async def run_beatstars(ctx: JobContext) -> None:
     else:
         ctx.log("Nothing to put on BeatStars")
     ctx.session.refresh(beat)
+    if beat.youtube_id and beat.beatstars_url:
+        # Put on BeatStars later: the video is up, so its description gets the link now.
+        ctx.progress(0.95, "Adding the link to the YouTube description")
+        creds = ctx.credentials()  # AuthError -> the worker pauses the job; a rerun skips Studio
+        await asyncio.to_thread(update_description, beat.youtube_id, snippet_of(beat), creds)
+        ctx.progress(1.0, "YouTube description updated")
     queue_upload_if_ready(ctx, beat)
 
 

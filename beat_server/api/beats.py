@@ -37,6 +37,7 @@ from beat_server.services.beats import (
 )
 from beat_server.services.beatstars import (
     beatstars_due,
+    check_can_put_later,
     check_can_skip,
     check_ready_to_send,
     ready_for_upload,
@@ -46,6 +47,7 @@ from beat_server.services.fill import FillService
 from beat_server.services.sync import status_for
 from beat_upload.auth import get_valid_credentials
 from beat_upload.cover_style import CoverStyle
+from beat_upload.errors import BeatUploadError
 from beat_upload.workspace import Workspace
 from beat_upload.youtube import set_privacy
 
@@ -238,6 +240,35 @@ def skip_beatstars(
             queue.enqueue(JobKind.UPLOAD, beat.id)
     elif not jobs.has_pending(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)
+    return beat_out(session, beat)
+
+
+@router.post("/{beat_id}/beatstars", response_model=BeatOut)
+def put_on_beatstars(beat_id: str, session: SessionDep, queue: QueueDep) -> BeatOut:
+    """ "Put on BeatStars" for a Published or Scheduled Bounce Folder beat with no Track.
+
+    Queues the BEATSTARS Job: the Track is released now (Published) or at the publish time
+    (Scheduled), then the YouTube snippet is sent again so the marker in the description
+    becomes the link. Clears the "Upload without BeatStars" mark. Refused for a beat with no
+    Bounce Folder, one that already has a Track, and a private one with no schedule.
+    """
+    beat = load_beat(session, beat_id)
+    check_can_put_later(beat)
+    beat.beatstars_skipped = False
+    if not beatstars_due(beat):  # private or unlisted with no publish time
+        session.rollback()
+        raise BeatStateError(
+            f"Beat {beat_id} is not public and has no publish time; "
+            "make it public or schedule it first."
+        )
+    try:
+        check_ready_to_send(beat)  # a title BeatStars cannot read, a Bounce Folder that is gone
+    except BeatUploadError:
+        session.rollback()
+        raise
+    BeatRepo(session).save(beat)
+    if not JobRepo(session).has_pending(JobKind.BEATSTARS, beat.id):
+        queue.enqueue(JobKind.BEATSTARS, beat.id)
     return beat_out(session, beat)
 
 
