@@ -28,6 +28,26 @@ and Analytics APIs enabled. Connect the channel on the Settings page.
 
 The CLI does the same without the UI: `login`, `upload`, `videos`, `analytics`, `privacy`.
 
+## BeatStars
+
+BeatStars has no API, so the CLI fills the Studio form in a real browser (Playwright):
+
+```bash
+pip install -e '.[beatstars]' && playwright install chromium
+beat-upload beatstars prepare ~/bounces/Diavolo --youtube-id -3aBT57ZdEo
+beat-upload beatstars upload ~/bounces/Diavolo/beatstars   # --no-publish leaves a draft
+```
+
+The bounce folder holds `NAME_95bpm_Cmin_dark-intense_delawer.wav` (untagged master),
+`NAME_95bpm_Cmin_dark-intense_delawer_tagged.wav` or `.mp3`, a cover and optionally the
+beat's `config.yaml`. The parts are name, tempo, key, moods (optional, joined with `-`),
+`smp` when there are foreign samples, `delawer`. `prepare` cuts the leading silence of both
+bounces at the same bar, encodes a 320k tagged MP3, squares the cover and writes
+`beatstars.json` (title, description, 3 tags, genres, moods), built from the YouTube title in
+`config.yaml`. Edit the json, then `upload`. The first run opens Studio for you to sign in;
+the session stays in the workspace. The window has the class `beat-upload-beatstars`, so a
+window manager rule can keep it on another desktop.
+
 ## How it works
 
 One Python package with no web or database code renders the video with ffmpeg and talks

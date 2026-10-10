@@ -20,6 +20,7 @@ beat-upload upload test_data     # CLI upload of a Beat Folder, needs a valid to
 beat-upload videos --json        # all uploads with views/likes; also channel, video ID
 beat-upload analytics -d 28      # per-video views, watch time, AVD (Analytics API)
 beat-upload serve --open-browser # web UI + API on http://127.0.0.1:8765
+beat-upload beatstars prepare DIR && beat-upload beatstars upload DIR/beatstars  # needs .[beatstars]
 
 cd web
 npm run dev                      # Vite on :5173, proxies /api to :8765 (or preview "web-dev")
@@ -49,6 +50,7 @@ beat_upload/            core, no web and no DB (ADR 0002)
   youtube.py            upload_video(), set_privacy()
   stats.py, analytics.py   Data API / Analytics API reads; parse_* are pure
   auth.py, workspace.py    OAuth files and data dir of one channel owner (platformdirs)
+  beatstars/            Track Package (naming, track, package) + Playwright Studio form (studio)
 beat_server/            FastAPI app for `serve`
   api/                  routers + pydantic schemas (the OpenAPI the frontend is generated from)
   db/                   SQLAlchemy models, repos, alembic migrations (packaged)

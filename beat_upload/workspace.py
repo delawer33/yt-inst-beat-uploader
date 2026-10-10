@@ -38,5 +38,10 @@ class Workspace:
     def db_file(self) -> Path:
         return self.data_dir / "beat-upload.sqlite3"
 
+    @property
+    def beatstars_profile(self) -> Path:
+        """The browser profile that keeps the BeatStars Studio session."""
+        return self.data_dir / "beatstars-profile"
+
     def beat_dir(self, beat_id: str) -> Path:
         return self.data_dir / "beats" / beat_id

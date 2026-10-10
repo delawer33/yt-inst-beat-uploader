@@ -23,6 +23,8 @@ app = typer.Typer(
     help="Produce a YouTube video from a beat (audio + image) and upload it.",
     no_args_is_help=True,
 )
+beatstars_app = typer.Typer(help="Put a beat on BeatStars.", no_args_is_help=True)
+app.add_typer(beatstars_app, name="beatstars")
 
 
 @app.command()
@@ -231,6 +233,80 @@ def _ensure_video(beat: BeatFolder) -> None:
 def _fail(message: str) -> NoReturn:
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(1)
+
+
+@beatstars_app.command("prepare")
+def beatstars_prepare(
+    folder: Annotated[
+        Path,
+        typer.Argument(
+            help="Bounce folder: NAME_95bpm_Cmin[_moods][_smp]_delawer.wav, "
+            "..._delawer_tagged.wav|mp3, a cover image, optional config.yaml"
+        ),
+    ],
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Package folder (default: FOLDER/beatstars)")
+    ] = None,
+    youtube_id: Annotated[
+        str | None, typer.Option("--youtube-id", help="Link the YouTube video in the description")
+    ] = None,
+) -> None:
+    """Build a Track Package: trimmed master WAV, tagged MP3, square cover, beatstars.json."""
+    from beat_upload.beatstars.package import find_sources, prepare_package, track_from_folder
+
+    folder = folder.resolve()
+    try:
+        sources, facts = find_sources(folder)
+        track = track_from_folder(folder, facts, youtube_id)
+        package = prepare_package(sources, facts, track, out or folder / "beatstars")
+    except BeatUploadError as e:
+        _fail(str(e))
+    typer.echo(f"Package written to {package.folder}")
+    _print_json(track.to_dict())
+    typer.echo(
+        "Edit beatstars.json if needed, then: beat-upload beatstars upload " + str(package.folder)
+    )
+
+
+@beatstars_app.command("upload")
+def beatstars_upload(
+    folders: Annotated[list[Path], typer.Argument(help="One or more Track Package folders")],
+    draft: Annotated[
+        str | None,
+        typer.Option("--draft", help="Finish this existing draft (TK...) instead of a new track"),
+    ] = None,
+    pause: Annotated[int, typer.Option("--pause", help="Seconds between tracks")] = 30,
+    no_publish: Annotated[
+        bool, typer.Option("--no-publish", help="Fill the track but leave it a draft")
+    ] = False,
+) -> None:
+    """Create, fill and publish each package as a Public track in BeatStars Studio."""
+    import time
+
+    from beat_upload.beatstars.package import find_package
+    from beat_upload.beatstars.studio import check_public_page, publish_package, studio
+
+    if draft and len(folders) > 1:
+        _fail("--draft takes a single package folder")
+    try:
+        packages = [find_package(f.resolve()) for f in folders]
+        with studio(Workspace.default().beatstars_profile, typer.echo) as page:
+            failed = []
+            for i, package in enumerate(packages):
+                if i:
+                    time.sleep(pause)
+                typer.echo(f"Uploading {package.track.title}...")
+                try:  # one track's failure leaves a draft; the rest still go up
+                    track_id = publish_package(page, package, typer.echo, draft, not no_publish)
+                    if not no_publish:
+                        typer.echo(check_public_page(page, track_id, package.track.bpm))
+                except BeatUploadError as e:
+                    typer.echo(f"Failed {package.folder.name}: {e}", err=True)
+                    failed.append(package.folder.name)
+    except BeatUploadError as e:
+        _fail(str(e))
+    if failed:
+        _fail(f"{len(failed)} of {len(packages)} not published: {', '.join(failed)}")
 
 
 @app.command("install-service")

@@ -50,3 +50,7 @@ class UploadError(BeatUploadError):
 
 class AnalyticsError(BeatUploadError):
     """The YouTube Analytics API rejected the request."""
+
+
+class BeatStarsError(BeatUploadError):
+    """A Track Package is incomplete or malformed, or the BeatStars Studio form refused it."""
