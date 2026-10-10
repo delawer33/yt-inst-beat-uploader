@@ -45,6 +45,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/from-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Beat From Folder
+         * @description A new DRAFT read in place from a Bounce Folder on this machine (ADR 0007).
+         *
+         *     A folder without its WAV, MP3 or cover, or with no BPM and key in a name -> 422 naming
+         *     what is wrong, and no row. The RENDER is queued here like for a dropped pair.
+         */
+        post: operations["create_beat_from_folder_api_beats_from_folder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/beats/{beat_id}": {
         parameters: {
             query?: never;
@@ -476,6 +499,7 @@ export interface components {
             active_job: components["schemas"]["JobOut"] | null;
             /** Cover Url */
             cover_url: string | null;
+            beatstars: components["schemas"]["BeatStarsPreview"] | null;
             /** Synced At */
             synced_at: string | null;
             /**
@@ -507,6 +531,35 @@ export interface components {
             publish_at?: string | null;
         };
         /**
+         * BeatStarsPreview
+         * @description What will go to BeatStars for a Beat made from a Bounce Folder, read-only in the UI.
+         */
+        BeatStarsPreview: {
+            /** Title */
+            title: string;
+            /** Tags */
+            tags: string[];
+            /** Genres */
+            genres: string[];
+            /** Moods */
+            moods: string[];
+            /** Instruments */
+            instruments: string[];
+            /** Samples */
+            samples: boolean;
+            /**
+             * Release
+             * @enum {string}
+             */
+            release: "with_video" | "skipped_private" | "skipped_by_owner";
+            /** Error */
+            error: string | null;
+            /** Track Id */
+            track_id: string | null;
+            /** Url */
+            url: string | null;
+        };
+        /**
          * BeatStatus
          * @enum {string}
          */
@@ -523,6 +576,14 @@ export interface components {
              * @description one .png/.jpg/.jpeg/.gif/.bmp
              */
             image: string;
+        };
+        /**
+         * BounceIn
+         * @description ``POST /api/beats/from-folder``: the absolute path of a Bounce Folder on this machine.
+         */
+        BounceIn: {
+            /** Path */
+            path: string;
         };
         /** ChannelOut */
         ChannelOut: {
@@ -590,7 +651,7 @@ export interface components {
          * JobKind
          * @enum {string}
          */
-        JobKind: "render" | "upload" | "sync" | "stats";
+        JobKind: "render" | "upload" | "sync" | "stats" | "beatstars";
         /** JobOut */
         JobOut: {
             /** Id */
@@ -751,6 +812,39 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_create_beat_api_beats_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_beat_from_folder_api_beats_from_folder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceIn"];
             };
         };
         responses: {

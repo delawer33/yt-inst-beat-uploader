@@ -8,13 +8,14 @@ immediately and the UPLOAD is queued now if the video is already there, otherwis
 RENDER when it finishes.
 """
 
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from beat_server.api.schemas import BeatOut, BeatPatch, FillIn, FillOut, PrivacyIn
+from beat_server.api.schemas import BeatOut, BeatPatch, BounceIn, FillIn, FillOut, PrivacyIn
 from beat_server.db.models import Beat, BeatStatus, JobKind
 from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
 from beat_server.deps import get_session, get_workspace
@@ -25,6 +26,7 @@ from beat_server.services.beats import (
     apply_patch,
     check_no_placeholders,
     create_draft,
+    create_draft_from_folder,
     default_metadata,
     delete_draft,
     metadata_of,
@@ -101,6 +103,22 @@ def create_beat(
     """
     template = default_metadata(SettingsRepo(session))
     beat = create_draft(ws, BeatRepo(session), audio, image, template)
+    job = queue.enqueue(JobKind.RENDER, beat.id)
+    return BeatOut.from_beat(beat, job)
+
+
+@router.post("/from-folder", response_model=BeatOut, status_code=201)
+def create_beat_from_folder(
+    body: BounceIn, session: SessionDep, ws: WorkspaceDep, queue: QueueDep
+) -> BeatOut:
+    """A new DRAFT read in place from a Bounce Folder on this machine (ADR 0007).
+
+    A folder without its WAV, MP3 or cover, or with no BPM and key in a name -> 422 naming
+    what is wrong, and no row. The RENDER is queued here like for a dropped pair.
+    """
+    path = Path(body.path.strip().strip("\"'")).expanduser()
+    template = default_metadata(SettingsRepo(session))
+    beat = create_draft_from_folder(ws, BeatRepo(session), path, template)
     job = queue.enqueue(JobKind.RENDER, beat.id)
     return BeatOut.from_beat(beat, job)
 

@@ -18,6 +18,7 @@ const CONNECTION: Record<AuthStatus, string> = {
 const KIND: Record<Job["kind"], string> = {
   render: "Rendering",
   upload: "Uploading",
+  beatstars: "Putting on BeatStars",
   sync: "Syncing",
   stats: "Pulling stats",
 };

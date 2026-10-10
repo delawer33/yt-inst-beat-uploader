@@ -43,6 +43,7 @@ needs the other.
 beat_upload/            core, no web and no DB (ADR 0002)
   cli.py                Typer commands only; catches BeatUploadError and prints it
   beat_folder.py        the one audio + one image rule; every beat-folder constant
+  bounce_folder.py      the Bounce Folder reader: files by kind, BPM/key/moods/instruments from the name
   config.py             config.yaml -> YouTubeMetadata; every YouTube limit
   video.py              render_cover() one styled frame, render_video() loops it
   cover_style.py        the seven Cover Styles as ffmpeg filters (gradient map + ink)
@@ -69,7 +70,7 @@ test_data/, dev/        gitignored / untracked: real beat folder, banners, trans
 Web flow (ADR 0004):
 
 ```
-drop audio + cover -> Draft, Render Job starts at once
+paste a Bounce Folder path -> Draft, Render Job starts at once (files read in place, ADR 0007)
 -> owner edits Metadata on the Beat page while it renders
 -> "Save & upload when rendered" -> Queued -> Upload -> Uploaded / Scheduled / Published
 ```

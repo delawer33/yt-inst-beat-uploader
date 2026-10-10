@@ -17,7 +17,7 @@ and Analytics APIs enabled. Connect the channel on the Settings page.
 
 ## What it does
 
-- Drop an mp3 and a png: a Draft appears and the render starts while you write the metadata.
+- Paste the path of a Bounce Folder (WAV, tagged MP3, cover, stems; BPM, key and moods in its name): a Draft appears and the render starts while you write the metadata. Nothing is copied.
 - Title, description and tags come prefilled from your templates, with a YouTube-style preview.
 - "Save & upload when rendered" queues the upload; it runs by itself once the video is ready.
 - Publish now, or schedule a time and YouTube makes it public then, even with the laptop closed.

@@ -16,6 +16,7 @@ from beat_server.db.models import Beat, BeatStatus
 from beat_server.services.beats import KEY_DESCRIPTION_TEMPLATE, KEY_TAGS_TEMPLATE
 from beat_server.services.errors import BeatStateError, FillError
 from beat_upload.audio_name import audio_name_facts
+from beat_upload.beatstars.naming import spelled_key
 from beat_upload.config import MAX_TAGS_LENGTH, YouTubeMetadata
 from beat_upload.errors import ConfigError
 from beat_upload.placeholders import placeholders_in
@@ -112,11 +113,16 @@ class FillService:
 def build_prompt(
     beat: Beat, title: str, description: str, tags: list[str], templates: dict[str, Any]
 ) -> str:
-    facts = audio_name_facts(beat.source_name) if beat.source_name else None
-    if facts is not None:
-        bpm_key = f"BPM {facts.bpm}, key {facts.spelled_key}"
+    audio_facts = audio_name_facts(beat.source_name) if beat.source_name else None
+    if beat.bpm is not None and beat.music_key is not None:  # from the Bounce Folder's name
+        bpm_key = f"BPM {beat.bpm}, key {spelled_key(beat.music_key)}"
+        origin = "the Bounce Folder's name"
+    elif audio_facts is not None:
+        bpm_key = f"BPM {audio_facts.bpm}, key {audio_facts.spelled_key}"
+        origin = "the file name"
     else:
         bpm_key = "not known"
+        origin = "the file name"
     source = PurePath(beat.source_name).name if beat.source_name else "not known"
     tags_template = "\n".join(str(t) for t in templates.get(KEY_TAGS_TEMPLATE, []))
     return f"""\
@@ -129,7 +135,7 @@ Title:
 {title}
 
 Audio file name: {source}
-BPM and key from the file name: {bpm_key}
+BPM and key from {origin}: {bpm_key}
 
 Description Template:
 ```
