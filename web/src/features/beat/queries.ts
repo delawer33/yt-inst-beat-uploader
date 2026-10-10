@@ -25,6 +25,13 @@ export async function createBeat(audio: File, image: File): Promise<Beat> {
   return body as Beat;
 }
 
+/** New beat from a Bounce Folder path on this machine (ADR 0007); the Render starts at once. */
+export function useCreateBeatFromFolder() {
+  return useBeatMutation((path: string) =>
+    unwrap(api.POST("/api/beats/from-folder", { body: { path } })),
+  );
+}
+
 export function useCreateBeat() {
   return useBeatMutation(({ audio, image }: { audio: File; image: File }) =>
     createBeat(audio, image),

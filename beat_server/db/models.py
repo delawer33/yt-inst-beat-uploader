@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, Date, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from beat_upload.cover_style import DEFAULT_COVER_STYLE, CoverStyle
@@ -24,6 +24,7 @@ class JobKind(StrEnum):
     UPLOAD = "upload"
     SYNC = "sync"
     STATS = "stats"
+    BEATSTARS = "beatstars"
 
 
 class JobStatus(StrEnum):
@@ -72,6 +73,21 @@ class Beat(Base):
         nullable=False,
     )
     video_style: Mapped[CoverStyle | None] = mapped_column(String(32), nullable=True)
+    # Set for a Draft made from a Bounce Folder (ADR 0007): the absolute folder path. Then
+    # ``audio_path`` / ``image_path`` are absolute too and point into it; nothing is copied.
+    bounce_folder: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    bpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    music_key: Mapped[str | None] = mapped_column(String(8), nullable=True)  # "Amin"
+    # Moods and instruments as the owner wrote them in the Bounce Folder's name.
+    name_moods: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    name_instruments: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    samples: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # The same, matched to BeatStars' own lists (by Fill from title).
+    beatstars_moods: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    beatstars_instruments: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    beatstars_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # "TK26393000"
+    beatstars_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    beatstars_skipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     publish_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # naive UTC
     views: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -25,6 +25,7 @@ const draft: Beat = {
   rendered: false,
   active_job: null,
   cover_url: "/api/beats/b1/cover",
+  beatstars: null,
   synced_at: null,
   created_at: "2026-09-24T10:00:00",
   updated_at: "2026-09-24T10:00:00",

@@ -19,9 +19,10 @@ from beat_server.db.models import Beat, BeatStatus, new_id
 from beat_server.db.repo import BeatRepo, SettingsRepo
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_upload.beat_folder import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS
+from beat_upload.bounce_folder import read_bounce_folder
 from beat_upload.config import MAX_TITLE_LENGTH, PrivacyStatus, YouTubeMetadata
 from beat_upload.cover_style import CoverStyle
-from beat_upload.errors import BeatFolderError
+from beat_upload.errors import BeatFolderError, BounceFolderError
 from beat_upload.placeholders import fields_with_placeholder
 from beat_upload.video import cover_fingerprint, render_cover
 from beat_upload.workspace import Workspace
@@ -132,6 +133,44 @@ def create_draft(
         image_path=image_name,
         source_name=Path(audio.filename).name if audio.filename else None,
     )
+    return repo.add(beat)
+
+
+def create_draft_from_folder(
+    ws: Workspace, repo: BeatRepo, folder: Path, template: dict[str, Any]
+) -> Beat:
+    """A DRAFT read from a Bounce Folder in place (ADR 0007): the tagged MP3 is the audio and
+    the cover the image, both kept as absolute paths into the folder; nothing is copied.
+
+    ``{name}`` in the Templates becomes empty: the title is written by the owner. Raises
+    ``BounceFolderError`` (no row is added) when the folder does not hold what it should.
+    """
+    if not folder.is_absolute():
+        raise BounceFolderError(f"Give the full path of the Bounce Folder, not {folder}.")
+    bounce = read_bounce_folder(folder)
+    beat_id = new_id()
+    title = render_template(str(template.get(KEY_TITLE_TEMPLATE, DEFAULT_TITLE_TEMPLATE)), "")
+    description = render_template(
+        str(template.get(KEY_DESCRIPTION_TEMPLATE, DEFAULT_DESCRIPTION_TEMPLATE)), ""
+    )
+    facts = bounce.facts
+    beat = Beat(
+        id=beat_id,
+        status=BeatStatus.DRAFT,
+        title=title.strip()[:MAX_TITLE_LENGTH],
+        description=description,
+        tags=[str(t) for t in template.get(KEY_TAGS_TEMPLATE, DEFAULT_TAGS_TEMPLATE)],
+        privacy=PrivacyStatus.PRIVATE.value,
+        audio_path=str(bounce.tagged),
+        image_path=str(bounce.cover),
+        bounce_folder=str(bounce.folder),
+        bpm=facts.bpm,
+        music_key=facts.key,
+        name_moods=list(facts.moods),
+        name_instruments=list(facts.instruments),
+        samples=facts.samples,
+    )
+    ws.beat_dir(beat_id).mkdir(parents=True, exist_ok=False)  # the video is rendered here
     return repo.add(beat)
 
 

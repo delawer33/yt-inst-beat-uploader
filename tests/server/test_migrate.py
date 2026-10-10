@@ -100,3 +100,10 @@ def test_0005_adds_source_name_and_keeps_old_rows(tmp_path: Path) -> None:
 
     command.downgrade(alembic_config(db), "0004")
     assert "source_name" not in {c["name"] for c in inspect(engine).get_columns("beats")}
+
+
+def test_migrated_beats_table_has_every_model_column(tmp_path: Path) -> None:
+    db = tmp_path / "beat.sqlite3"
+    upgrade_to_head(db)
+    columns = {c["name"] for c in inspect(make_engine(db)).get_columns("beats")}
+    assert {c.name for c in Base.metadata.tables["beats"].columns} == columns
