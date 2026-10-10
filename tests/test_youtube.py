@@ -238,3 +238,26 @@ def test_set_privacy_with_publish_at_sends_private_and_the_utc_time(
         "privacyStatus": "private",
         "publishAt": "2026-10-01T18:00:00Z",
     }
+
+
+def test_update_description_resends_the_whole_snippet(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = Recorder()
+    monkeypatch.setattr(youtube.googleapiclient.discovery, "build", lambda *a, **k: fake)
+    metadata = YouTubeMetadata(title="T", description="d\nhttps://b/1", tags=["a", "b"])
+
+    youtube.update_description("v1", metadata, "creds")  # type: ignore[arg-type]
+
+    assert fake.calls == [
+        {
+            "part": "snippet",
+            "body": {
+                "id": "v1",
+                "snippet": {
+                    "title": "T",
+                    "description": "d\nhttps://b/1",
+                    "tags": ["a", "b"],
+                    "categoryId": "10",
+                },
+            },
+        }
+    ]

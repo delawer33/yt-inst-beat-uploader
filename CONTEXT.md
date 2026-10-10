@@ -25,8 +25,10 @@ _Avoid_: Beat Folder, source folder, export
 **BeatStars Track**:
 A Beat's page for sale on BeatStars, made from its Bounce Folder when the owner sends it.
 It goes public together with the video, or at the same scheduled time; a Beat sent as
-private or unlisted gets none until the owner puts it on BeatStars later. The video's
-description links to it. The Draft page shows what will go to it (title, tags and genres
+private or unlisted gets none until the owner puts it on BeatStars later ("Put on
+BeatStars" on the Published or Scheduled Beat's page: the same Job, released now or at the
+publish time, then the YouTube description is sent again with the link; it also works after
+"Upload without BeatStars"). The video's description links to it. The Draft page shows what will go to it (title, tags and genres
 made from the YouTube title, moods, instruments, samples, release) and says so when the
 title cannot be read yet.
 _Avoid_: Listing, store page, product

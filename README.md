@@ -60,6 +60,11 @@ the Render, the Upload waits for both, and the Track is released when the video 
 at the scheduled time). A private or unlisted send skips BeatStars. If Studio fails, the
 beat stays Queued with the error on the Job; Retry continues the same Studio draft.
 
+A beat that went to YouTube without a Track (sent private and published since, or sent
+without BeatStars) has "Put on BeatStars" on its page once it is Published or Scheduled. It
+runs the same Job, released now or at the publish time, and then updates the YouTube
+description so the marker becomes the link (`videos.update`, 50 quota units).
+
 One edit to your description Template, once: put the marker where the link should go, with
 the text for beats without a Track after the `|`:
 

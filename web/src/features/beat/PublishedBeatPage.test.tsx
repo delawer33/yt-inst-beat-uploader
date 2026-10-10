@@ -318,3 +318,58 @@ test("a beat that is not on YouTube yet cannot change its visibility", () => {
   expect(screen.getByText("Set on YouTube after upload.")).toBeInTheDocument();
   expect(screen.queryByTestId("bar")).not.toBeInTheDocument();
 });
+
+const trackless = {
+  title: "Naughty | Yeat Type Beat",
+  tags: [],
+  genres: [],
+  moods: [],
+  instruments: [],
+  samples: false,
+  release: "skipped_private" as const,
+  error: null,
+  track_id: null,
+  url: null,
+};
+
+test("a Published Bounce Folder beat without a Track offers Put on BeatStars", () => {
+  const onPutOnBeatStars = vi.fn();
+  renderPage({ ...published, beatstars: trackless }, { onPutOnBeatStars });
+
+  fireEvent.click(screen.getByRole("button", { name: "Put on BeatStars" }));
+  expect(onPutOnBeatStars).toHaveBeenCalledTimes(1);
+});
+
+test("a Scheduled Bounce Folder beat without a Track offers it too", () => {
+  renderPage({ ...published, status: "scheduled", beatstars: trackless });
+  expect(screen.getByRole("button", { name: "Put on BeatStars" })).toBeEnabled();
+});
+
+test("no button once the beat has a Track", () => {
+  const withTrack = { ...trackless, track_id: "TK1", url: "https://www.beatstars.com/beat/n-1" };
+  renderPage({ ...published, beatstars: withTrack });
+  expect(screen.queryByRole("button", { name: "Put on BeatStars" })).not.toBeInTheDocument();
+});
+
+test("no button for a beat with no Bounce Folder", () => {
+  renderPage();
+  expect(screen.queryByRole("button", { name: "Put on BeatStars" })).not.toBeInTheDocument();
+});
+
+test("no button for a private upload without a schedule", () => {
+  renderPage({ ...published, status: "uploaded", beatstars: trackless });
+  expect(screen.queryByRole("button", { name: "Put on BeatStars" })).not.toBeInTheDocument();
+});
+
+test("the button waits while the BEATSTARS Job runs, and shows the refusal", () => {
+  renderPage(
+    {
+      ...published,
+      beatstars: trackless,
+      active_job: { ...renderJob, kind: "beatstars", status: "running" },
+    },
+    { putError: "Beat b1 is already on BeatStars" },
+  );
+  expect(screen.getByRole("button", { name: "Put on BeatStars" })).toBeDisabled();
+  expect(screen.getByRole("alert")).toHaveTextContent("already on BeatStars");
+});
