@@ -111,7 +111,8 @@ export interface paths {
         put?: never;
         /**
          * Fill Beat
-         * @description Fill from title: description and tags for the form, written from the form's title and
+         * @description Fill from title: description and tags (and, for a Bounce Folder beat, BeatStars moods
+         *     and instruments) for the form, written from the form's title and
          *     the owner's Templates. Writes nothing. Not a Draft -> 409, a title with a Placeholder ->
          *     422, the runner failed or answered badly -> 400 with what to fix.
          */
@@ -529,6 +530,10 @@ export interface components {
             cover_style?: components["schemas"]["CoverStyle"] | null;
             /** Publish At */
             publish_at?: string | null;
+            /** Beatstars Moods */
+            beatstars_moods?: string[] | null;
+            /** Beatstars Instruments */
+            beatstars_instruments?: string[] | null;
         };
         /**
          * BeatStarsPreview
@@ -634,6 +639,10 @@ export interface components {
             description: string;
             /** Tags */
             tags: string[];
+            /** Beatstars Moods */
+            beatstars_moods: string[];
+            /** Beatstars Instruments */
+            beatstars_instruments: string[];
         };
         /** GoogleClientIn */
         GoogleClientIn: {

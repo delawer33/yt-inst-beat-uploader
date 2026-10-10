@@ -6,8 +6,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from beat_server.db.models import Beat, BeatStatus, Job, JobKind, JobStatus
+from beat_server.services.beatstars_preview import track_of
 from beat_upload.config import PrivacyStatus
 from beat_upload.cover_style import CoverStyle
+from beat_upload.errors import BeatStarsError
 from beat_upload.youtube import video_url
 
 
@@ -56,15 +58,24 @@ class BeatStarsPreview(BaseModel):
             release = "with_video"
         else:
             release = "skipped_private"
+        try:
+            track = track_of(beat)
+        except BeatStarsError as e:  # the title does not read yet: say so, do not fail
+            title, tags, genres, error = "", [], [], str(e)
+            moods = list(beat.beatstars_moods)
+            instruments = list(beat.beatstars_instruments)
+        else:
+            title, tags, genres, error = track.title, track.tags, track.genres, None
+            moods, instruments = track.moods, track.instruments
         return cls(
-            title=beat.title,
-            tags=list(beat.tags),
-            genres=[],
-            moods=list(beat.beatstars_moods),
-            instruments=list(beat.beatstars_instruments),
+            title=title,
+            tags=tags,
+            genres=genres,
+            moods=moods,
+            instruments=instruments,
             samples=beat.samples,
             release=release,
-            error=None,
+            error=error,
             track_id=beat.beatstars_id,
             url=beat.beatstars_url,
         )
@@ -170,6 +181,10 @@ class BeatPatch(BaseModel):
     # Scheduled publish time; ``null`` clears it (check ``model_fields_set`` to tell the two
     # apart from "not sent"). A naive value counts as local time, like in config.yaml.
     publish_at: datetime | None = None
+    # BeatStars moods and instruments of a Beat from a Bounce Folder, as the BeatStars lists
+    # spell them; a value outside the lists is a 422.
+    beatstars_moods: list[str] | None = None
+    beatstars_instruments: list[str] | None = None
 
 
 class PrivacyIn(BaseModel):
@@ -194,3 +209,6 @@ class FillOut(BaseModel):
 
     description: str
     tags: list[str]
+    # Matched to the BeatStars lists; empty for a Beat that is not from a Bounce Folder.
+    beatstars_moods: list[str]
+    beatstars_instruments: list[str]

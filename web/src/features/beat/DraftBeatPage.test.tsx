@@ -439,3 +439,88 @@ test("a Draft rendered in its Cover Style shows no such note", () => {
   renderView({ ...draft, rendered: true, video_style: "purple_yellow_5tone" });
   expect(screen.queryByText("Rendered before Cover Styles")).not.toBeInTheDocument();
 });
+
+// --- BeatStars block (a Beat from a Bounce Folder) ------------------------------------------
+
+const bounce: Beat = {
+  ...draft,
+  title: '[FREE] Yeat Type Beat 2026 - "Naughty" | Melodic Guitar Trap',
+  beatstars: {
+    title: "Naughty | Yeat Type Beat",
+    tags: ["yeat type beat", "melodic guitar trap", "delawer type beat"],
+    genres: ["Trap", "Hip Hop"],
+    moods: ["Calm", "Sad", "Melancholy"],
+    instruments: ["Guitar"],
+    samples: true,
+    release: "with_video",
+    error: null,
+    track_id: null,
+    url: null,
+  },
+};
+
+test("a Beat from a Bounce Folder shows what will go to BeatStars", () => {
+  renderView(bounce);
+  const block = screen.getByRole("region", { name: "BeatStars" });
+  expect(block).toHaveTextContent("Naughty | Yeat Type Beat");
+  expect(block).toHaveTextContent("delawer type beat");
+  expect(block).toHaveTextContent("Hip Hop");
+  expect(block).toHaveTextContent("Melancholy");
+  expect(block).toHaveTextContent("Guitar");
+  expect(block).toHaveTextContent("Loops and samples");
+  expect(block).toHaveTextContent("With the video");
+});
+
+test("a private send says BeatStars is skipped", () => {
+  renderView({ ...bounce, beatstars: { ...bounce.beatstars!, release: "skipped_private" } });
+  expect(screen.getByRole("region", { name: "BeatStars" })).toHaveTextContent(/Not sent to BeatStars/);
+});
+
+test("a title that cannot be read yet says so instead of showing a track", () => {
+  renderView({
+    ...bounce,
+    beatstars: {
+      ...bounce.beatstars!,
+      title: "",
+      tags: [],
+      genres: [],
+      error: 'Not a [FREE] A Type Beat 2026 - "NAME" | Genre title: Untitled',
+    },
+  });
+  const block = screen.getByRole("region", { name: "BeatStars" });
+  expect(block).toHaveTextContent("Not ready for BeatStars");
+  expect(block).toHaveTextContent("Untitled");
+  expect(block).not.toHaveTextContent("Moods");
+});
+
+test("a Beat that is not from a Bounce Folder has no BeatStars block", () => {
+  renderView();
+  expect(screen.queryByRole("region", { name: "BeatStars" })).not.toBeInTheDocument();
+});
+
+test("Fill from title writes the matched moods and instruments into the block and saves them", () => {
+  vi.useFakeTimers();
+  const { onFill, onSave } = renderView(bounce);
+  fireEvent.click(fillButton());
+  const apply = onFill.mock.calls[0][1];
+  act(() =>
+    apply({
+      description: "d",
+      tags: ["yeat type beat"],
+      beatstars_moods: ["Calm", "Dark", "Sad"],
+      beatstars_instruments: ["Acoustic guitar", "Piano"],
+    }),
+  );
+  const block = screen.getByRole("region", { name: "BeatStars" });
+  expect(block).toHaveTextContent("Dark");
+  expect(block).toHaveTextContent("Acoustic guitar");
+
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledWith({
+    description: "d",
+    tags: ["yeat type beat"],
+    beatstars_moods: ["Calm", "Dark", "Sad"],
+    beatstars_instruments: ["Acoustic guitar", "Piano"],
+  });
+  vi.useRealTimers();
+});

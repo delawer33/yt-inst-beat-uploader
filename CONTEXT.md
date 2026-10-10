@@ -26,7 +26,9 @@ _Avoid_: Beat Folder, source folder, export
 A Beat's page for sale on BeatStars, made from its Bounce Folder when the owner sends it.
 It goes public together with the video, or at the same scheduled time; a Beat sent as
 private or unlisted gets none until the owner puts it on BeatStars later. The video's
-description links to it.
+description links to it. The Draft page shows what will go to it (title, tags and genres
+made from the YouTube title, moods, instruments, samples, release) and says so when the
+title cannot be read yet.
 _Avoid_: Listing, store page, product
 
 **Library**:
@@ -96,6 +98,10 @@ title gives the artists and substyle, the audio file name gives BPM and key, and
 keywords are added for the recommendations. What the owner already wrote in place of a
 Placeholder stays. "Artist" is whatever stands before "Type Beat" in the title, a name or a
 style; a title names none, one or two, and the result follows.
+For a Beat from a Bounce Folder the same call also matches the moods and instruments the
+owner wrote in the folder's name (misspelled or in Russian) to the BeatStars lists: moods
+first, topped up to three from the substyle; instruments only the owner's. A word outside
+the lists is dropped.
 _Avoid_: Autofill, generate, regenerate
 
 **Cover Style**:

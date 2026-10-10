@@ -153,7 +153,8 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep, queue: QueueD
 
 @router.post("/{beat_id}/fill", response_model=FillOut)
 def fill_beat(beat_id: str, body: FillIn, session: SessionDep, fill: FillDep) -> FillOut:
-    """Fill from title: description and tags for the form, written from the form's title and
+    """Fill from title: description and tags (and, for a Bounce Folder beat, BeatStars moods
+    and instruments) for the form, written from the form's title and
     the owner's Templates. Writes nothing. Not a Draft -> 409, a title with a Placeholder ->
     422, the runner failed or answered badly -> 400 with what to fix.
     """
@@ -165,7 +166,12 @@ def fill_beat(beat_id: str, body: FillIn, session: SessionDep, fill: FillDep) ->
         tags=body.tags,
         templates=default_metadata(SettingsRepo(session)),
     )
-    return FillOut(description=filled.description, tags=filled.tags)
+    return FillOut(
+        description=filled.description,
+        tags=filled.tags,
+        beatstars_moods=filled.beatstars_moods,
+        beatstars_instruments=filled.beatstars_instruments,
+    )
 
 
 @router.post("/{beat_id}/upload", response_model=BeatOut)
