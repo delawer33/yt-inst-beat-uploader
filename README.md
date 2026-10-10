@@ -43,8 +43,12 @@ The bounce folder holds `NAME_95bpm_Cmin_dark-intense_delawer.wav` (untagged mas
 beat's `config.yaml`. The parts are name, tempo, key, moods (optional, joined with `-`),
 `smp` when there are foreign samples, `delawer`. `prepare` cuts the leading silence of both
 bounces at the same bar, encodes a 320k tagged MP3, squares the cover and writes
-`beatstars.json` (title, description, 3 tags, genres, moods), built from the YouTube title in
-`config.yaml`. Edit the json, then `upload`. The first run opens Studio for you to sign in;
+`beatstars.json` (title, description, 3 tags, genres, moods, instruments), built from the
+YouTube title in `config.yaml`. Moods, instruments and genres must be spelled as Studio lists
+them (`beat_upload/beatstars/catalog.py`). Edit the json, then `upload`. `--release-at
+2026-10-12T15:00` (local time) schedules the track instead of publishing it now. Studio
+creates the track at the first file; the command prints its `TK` id at once, and a failure
+afterwards says `finish it with --draft TK...`. The first run opens Studio for you to sign in;
 the session stays in the workspace. The window has the class `beat-upload-beatstars`, so a
 window manager rule can keep it on another desktop.
 

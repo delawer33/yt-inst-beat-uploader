@@ -7,9 +7,11 @@ Nothing here types a password.
 The form, as of October 2026: "Create Track" opens an Uppy dialog; the first file creates
 the track and lands on ``content/tracks/edit/TK<id>``, one page with every section. Fields
 carry ``data-qa`` hooks (``input_title``, ``select_key``, ``input_tag``, ``input_genre``,
-``input_mood``); each file slot has an "Add" button that opens the same Uppy dialog. Changes
-save as they are made; "Publish track" makes it Public. Monetization is inherited from
-Track Preferences and is never touched, nor is the paid "Boost Track".
+``input_mood``, ``input_instruments``); each file slot has an "Add" button that opens the
+same Uppy dialog. Changes save as they are made; "Publish track" makes it Public, or
+Scheduled when the Release Date (``release-date-input``, a calendar in the browser's local
+time) lies in the future. Monetization is inherited from Track Preferences and is never
+touched, nor is the paid "Boost Track".
 """
 
 import base64
@@ -17,6 +19,7 @@ import re
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +43,14 @@ SAVE_QUIET = 5  # seconds with nothing saving before a change counts as saved
 # The window's class (Wayland app id), so a window manager rule can keep it off screen.
 WINDOW_CLASS = "beat-upload-beatstars"
 VIEWPORT = {"width": 1600, "height": 1000}  # narrower and the sidebar covers the form
+
+# A release date this close counts as "now": the picker takes minutes, and a date in the
+# past cannot be picked.
+RELEASE_NOW_WINDOW = timedelta(minutes=2)
+_MONTHS = (
+    "January", "February", "March", "April", "May", "June", "July", "August", "September",
+    "October", "November", "December",
+)  # fmt: skip
 
 _TRACK_ID = re.compile(r"/tracks/edit/(TK\d+)")
 _MS = 1000
@@ -84,25 +95,46 @@ def publish_package(
     on_status: StatusFn,
     draft: str | None = None,
     publish: bool = True,
+    release_at: datetime | None = None,
+    on_created: Callable[[str], None] = lambda _: None,
 ) -> str:
     """Create (or finish ``draft``), fill and publish one track; returns its ``TK`` id.
-    With ``publish`` False the filled track stays a draft for the owner to look over."""
+    With ``publish`` False the filled track stays a draft for the owner to look over.
+    ``release_at`` (aware) is when it goes public; ``None`` or a moment that has passed is
+    now. ``on_created`` gets the id the moment Studio has made the track, before anything
+    else can fail; any later failure names the id and how to finish the draft."""
     if draft is None:
-        track_id = _create_track(page, package.master)
+        track_id = _create_track(page, package.master, on_created)
     else:
         track_id = draft
-        page.goto(edit_url(track_id))
-        page.wait_for_selector("[data-qa=input_title]")
-    on_status(f"{track_id}: master uploaded")
+        on_created(track_id)
     try:
-        _fill_and_publish(page, package, track_id, on_status, publish)
+        if draft is not None:
+            page.goto(edit_url(track_id))
+            page.wait_for_selector("[data-qa=input_title]")
+        on_status(f"{track_id}: master uploaded")
+        _fill_and_publish(page, package, track_id, on_status, publish, release_at)
     except BeatStarsError as e:
         raise BeatStarsError(f"{track_id}: {e}; finish it with --draft {track_id}") from e
+    except _playwright_error() as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        raise BeatStarsError(f"{track_id}: {first}; finish it with --draft {track_id}") from e
     return track_id
 
 
+def _playwright_error() -> type[Exception]:
+    from playwright.sync_api import Error
+
+    return Error
+
+
 def _fill_and_publish(
-    page: "Page", package: TrackPackage, track_id: str, on_status: StatusFn, publish: bool
+    page: "Page",
+    package: TrackPackage,
+    track_id: str,
+    on_status: StatusFn,
+    publish: bool,
+    release_at: datetime | None,
 ) -> None:
     track = package.track
     page.wait_for_timeout(SETTLE * _MS)  # a file added before the form settles never attaches
@@ -122,9 +154,15 @@ def _fill_and_publish(
     _set_chips(page, "input_tag", track.tags, typed=True)
     _set_chips(page, "input_genre", track.genres)
     _set_chips(page, "input_mood", track.moods)
+    _set_chips(page, "input_instruments", track.instruments)
     samples = page.locator("mat-checkbox", has_text="3rd party loops").locator("input")
     if samples.is_checked() != track.samples:
         samples.click()
+    scheduled = release_at is not None and release_at - datetime.now(release_at.tzinfo) > (
+        RELEASE_NOW_WINDOW
+    )
+    if scheduled:
+        _set_release(page, release_at)
     _wait_saved(page)
     _check_fields(page, package)
     if not publish:
@@ -133,10 +171,53 @@ def _fill_and_publish(
 
     page.locator("[data-cy=publish_btn-button]").click()
     page.wait_for_url(TRACKS_URL + "*", timeout=60 * _MS)
-    toast = page.get_by_text("successfully published")
-    toast.wait_for(timeout=30 * _MS)
+    toast = page.get_by_text(re.compile(r"successfully (published|scheduled)"))
+    toast.first.wait_for(timeout=30 * _MS)
     page.keyboard.press("Escape")  # the "share your content" dialog
-    on_status(f"{track_id}: published")
+    on_status(
+        f"{track_id}: {'scheduled for ' + release_at.isoformat() if scheduled else 'published'}"
+    )
+
+
+def _release_label(local: datetime) -> str:
+    """How the Release Date field shows ``local``: 'October 11, 2026 at 1:30 PM'."""
+    hour12 = local.hour % 12 or 12
+    meridiem = "AM" if local.hour < 12 else "PM"
+    date = f"{_MONTHS[local.month - 1]} {local.day}, {local.year}"
+    return f"{date} at {hour12}:{local.minute:02d} {meridiem}"
+
+
+def _set_release(page: "Page", release_at: datetime) -> None:
+    """Pick ``release_at`` in the Release Date calendar. The calendar works in the browser's
+    local time zone, so the moment is converted to it; a day is clicked, then hour and
+    minute are typed, then the tick confirms."""
+    local = release_at.astimezone()
+    field = page.locator("[data-cy=release-date-input]")
+    field.scroll_into_view_if_needed()
+    field.click(force=True)  # a placeholder span covers the input
+    popup = page.locator(".mtx-datetimepicker-popup")
+    popup.wait_for()
+    day = f"{_MONTHS[local.month - 1]} {local.day}, {local.year}"
+    cell = popup.locator(f'button.mtx-calendar-body-cell[aria-label="{day}"]')
+    for _ in range(36):  # Studio allows dates up to 2037
+        if cell.count():
+            break
+        popup.get_by_role("button", name="Next month").click()
+        page.wait_for_timeout(300)
+    if cell.count() == 0:
+        raise BeatStarsError(f"The release date {day} is not in the calendar")
+    if cell.get_attribute("aria-disabled") == "true":
+        raise BeatStarsError(f"Studio does not take {day} as a release date")
+    cell.click()
+    for label, value in (("Hour", local.hour), ("Minute", local.minute)):
+        box = popup.locator(f"input[aria-label={label}]")
+        box.fill(f"{value:02d}")
+        box.press("Tab")
+    popup.locator("button:has(i.vb-icon-check-m-regular-solid)").click()
+    popup.wait_for(state="detached")
+    shown = page.locator(".wrapper-input .readonly-placeholder").inner_text().strip()
+    if shown != _release_label(local):
+        raise BeatStarsError(f"Release date shows {shown!r}, wanted {_release_label(local)!r}")
 
 
 def check_public_page(page: "Page", track_id: str, bpm: int) -> str:
@@ -202,7 +283,7 @@ def _signed_in(page: "Page") -> bool:
     return page.url.startswith(STUDIO_URL) and page.get_by_text("Create Track").count() > 0
 
 
-def _create_track(page: "Page", master: Path) -> str:
+def _create_track(page: "Page", master: Path, on_created: Callable[[str], None]) -> str:
     page.goto(TRACKS_URL)
     page.get_by_role("button", name="Create Track").first.click()
     before = _listed_track_ids(page)
@@ -225,8 +306,14 @@ def _create_track(page: "Page", master: Path) -> str:
             new = [t for t in _listed_track_ids(page, reload=True) if t not in before]
             if new:
                 page.goto(edit_url(new[0]))
-    page.wait_for_selector("[data-qa=input_title]")
-    return match[1]
+    track_id = match[1]
+    on_created(track_id)
+    try:
+        page.wait_for_selector("[data-qa=input_title]")
+    except _playwright_error() as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        raise BeatStarsError(f"{track_id}: {first}; finish it with --draft {track_id}") from e
+    return track_id
 
 
 def _listed_track_ids(page: "Page", reload: bool = False) -> list[str]:
@@ -348,6 +435,7 @@ def _check_fields(page: "Page", package: TrackPackage) -> None:
         "tags": _chips(page.locator("[data-qa=input_tag]")),
         "genres": _chips(page.locator("[data-qa=input_genre]")),
         "moods": _chips(page.locator("[data-qa=input_mood]")),
+        "instruments": _chips(page.locator("[data-qa=input_instruments]")),
     }
     want = {
         "title": track.title,
@@ -356,6 +444,7 @@ def _check_fields(page: "Page", package: TrackPackage) -> None:
         "tags": track.tags,
         "genres": track.genres,
         "moods": track.moods,
+        "instruments": track.instruments,
     }
     wrong = [
         f"{k}: {got[k]!r} != {want[k]!r}"

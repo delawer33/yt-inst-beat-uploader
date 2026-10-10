@@ -8,15 +8,18 @@ one from a YouTube title of the form ``[FREE] A Type Beat x B Type Beat 2026 - "
 - tags: ``<artist> type beat`` per artist, then the genre in lower case, then
   ``delawer type beat`` when there was only one artist;
 - genres ``Trap`` + ``Hip Hop``, plus ``R&B`` or ``Drill`` when the genre says so;
+- instruments only when given (``track_for_beat``); the description of a Beat's track carries
+  no video link;
 - moods from the genre (``moods_for_genre``) unless the file name gave some.
 """
 
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from beat_upload.beatstars.catalog import INSTRUMENTS
 from beat_upload.beatstars.naming import MAX_MOODS, PRODUCER, spelled_key
 from beat_upload.errors import BeatStarsError
 
@@ -27,6 +30,7 @@ MAX_DESCRIPTION_LENGTH = 500
 MAX_TAGS = 3
 MAX_TAG_LENGTH = 25  # the Studio tag field's maxlength
 MAX_GENRES = 3
+MAX_INSTRUMENTS = 10
 DEFAULT_GENRES = ("Trap", "Hip Hop")
 FREE_USE_LINE = 'Free for non-profit with credit "prod. delawer". License for release above.'
 
@@ -62,6 +66,7 @@ class BeatStarsTrack:
     tags: list[str] = field(default_factory=list)
     genres: list[str] = field(default_factory=lambda: list(DEFAULT_GENRES))
     moods: list[str] = field(default_factory=list)  # as BeatStars lists them: "Dark"
+    instruments: list[str] = field(default_factory=list)  # from catalog.INSTRUMENTS
     samples: bool = False  # "Loops and Samples"
     youtube_id: str | None = None
 
@@ -80,6 +85,11 @@ class BeatStarsTrack:
             raise BeatStarsError(f"1 to {MAX_GENRES} genres: {self.genres}")
         if len(self.moods) > MAX_MOODS:
             raise BeatStarsError(f"at most {MAX_MOODS} moods: {self.moods}")
+        if len(self.instruments) > MAX_INSTRUMENTS:
+            raise BeatStarsError(f"at most {MAX_INSTRUMENTS} instruments: {self.instruments}")
+        unknown = [i for i in self.instruments if i not in INSTRUMENTS]
+        if unknown:
+            raise BeatStarsError(f"not in the BeatStars instrument list: {unknown}")
         if not 20 <= self.bpm <= 300:
             raise BeatStarsError(f"bpm out of range: {self.bpm}")
 
@@ -147,6 +157,23 @@ def track_from_youtube(
         moods=list(moods) if moods else moods_for_genre(parsed.genre),
         samples=samples,
         youtube_id=youtube_id,
+    )
+
+
+def track_for_beat(
+    youtube_title: str,
+    bpm: int,
+    key: str,
+    moods: list[str],
+    instruments: list[str],
+    samples: bool = False,
+) -> BeatStarsTrack:
+    """A Beat's BeatStars Track: title, tags and genres as ``track_from_youtube``, and a
+    description without the video: the track is made before the video is, and the video's
+    description links to the track, not the other way round."""
+    return replace(
+        track_from_youtube(youtube_title, bpm, key, None, moods, samples),
+        instruments=list(instruments),
     )
 
 

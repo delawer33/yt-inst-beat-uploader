@@ -162,3 +162,153 @@ def test_find_package_wants_one_master_one_preview_and_a_cover(tmp_path) -> None
     assert package.master.name == "Diavolo_95bpm_Cmin_delawer.wav"
     assert package.preview.name == "Diavolo_95bpm_Cmin_delawer_tagged.mp3"
     assert package.stems is None
+
+
+# --- catalog, instruments, release date, resumable drafts, stems zip -------------------------
+
+
+def test_the_catalog_lists_are_unique_and_spelled_as_studio_spells_them() -> None:
+    from beat_upload.beatstars import catalog
+
+    for values in (catalog.MOODS, catalog.INSTRUMENTS, catalog.GENRES):
+        assert len(values) == len(set(values))
+    assert "Dark" in catalog.MOODS and "Melancholy" in catalog.MOODS
+    assert "Electric guitar" in catalog.INSTRUMENTS  # capital E, lower g, as Studio has it
+    assert "Rage / Rage Beats" in catalog.GENRES
+    # every mood the genre guesses can pick is in Studio's list
+    from beat_upload.beatstars.track import _GENRE_MOODS, DEFAULT_MOODS
+
+    guessed = {m for _, moods in _GENRE_MOODS for m in moods} | set(DEFAULT_MOODS)
+    assert guessed <= set(catalog.MOODS)
+
+
+def test_instruments_are_limited_to_ten_from_the_catalog() -> None:
+    BeatStarsTrack(title="T", bpm=95, key="Cmin", instruments=["Guitar", "Bass"])
+    with pytest.raises(BeatStarsError, match="instrument list"):
+        BeatStarsTrack(title="T", bpm=95, key="Cmin", instruments=["808"])
+    with pytest.raises(BeatStarsError, match="at most 10"):
+        BeatStarsTrack(title="T", bpm=95, key="Cmin", instruments=["Guitar"] * 11)
+
+
+def test_a_beats_track_has_instruments_and_no_youtube_link() -> None:
+    from beat_upload.beatstars.track import track_for_beat
+
+    track = track_for_beat(
+        '[FREE] Yeat Type Beat 2026 - "Naughty" | Hard Trap', 95, "Cmin", ["Dark"], ["Guitar"]
+    )
+    assert track.instruments == ["Guitar"] and track.moods == ["Dark"]
+    assert track.title == "Naughty | Yeat Type Beat"
+    assert "youtu" not in track.description and track.youtube_id is None
+    assert read_track_roundtrip(track).instruments == ["Guitar"]
+
+
+def read_track_roundtrip(track: BeatStarsTrack) -> BeatStarsTrack:
+    return BeatStarsTrack.from_dict(track.to_dict())
+
+
+def test_stems_are_zipped_flat_and_stored(tmp_path) -> None:
+    import zipfile
+
+    from beat_upload.beatstars.package import zip_stems
+
+    stems = tmp_path / "stems"
+    (stems / "sub").mkdir(parents=True)
+    (stems / "kick.wav").write_bytes(b"k" * 5000)
+    (stems / "sub" / "bass.wav").write_bytes(b"b" * 5000)
+    target = zip_stems(stems, tmp_path / "stems.zip")
+    with zipfile.ZipFile(target) as archive:
+        assert sorted(archive.namelist()) == ["bass.wav", "kick.wav"]
+        assert {i.compress_type for i in archive.infolist()} == {zipfile.ZIP_STORED}
+        assert archive.read("kick.wav") == b"k" * 5000
+
+
+def test_stems_with_a_doubled_name_or_none_are_refused(tmp_path) -> None:
+    from beat_upload.beatstars.package import zip_stems
+
+    stems = tmp_path / "stems"
+    (stems / "a").mkdir(parents=True)
+    with pytest.raises(BeatStarsError, match="No files"):
+        zip_stems(stems, tmp_path / "s.zip")
+    (stems / "a" / "x.wav").write_bytes(b"1")
+    (stems / "x.wav").write_bytes(b"2")
+    with pytest.raises(BeatStarsError, match="x.wav"):
+        zip_stems(stems, tmp_path / "s.zip")
+
+
+def test_sources_from_a_bounce_folder_zip_the_stems_and_use_the_rest_in_place(tmp_path) -> None:
+    from beat_upload.beatstars.package import sources_from_bounce
+
+    (tmp_path / "stems").mkdir()
+    (tmp_path / "stems" / "kick.wav").write_bytes(b"k")
+    master, tagged, cover = (tmp_path / n for n in ("m.wav", "t.mp3", "c.png"))
+    work = tmp_path / "work"
+    sources = sources_from_bounce(master, tagged, cover, tmp_path / "stems", work)
+    assert (sources.master, sources.tagged, sources.cover) == (master, tagged, cover)
+    assert sources.stems is not None and sources.stems.parent == work and sources.stems.is_file()
+    assert sources_from_bounce(master, tagged, cover, None, work).stems is None
+
+
+def test_the_release_date_field_label_is_spelled_like_studio() -> None:
+    from datetime import datetime
+
+    from beat_upload.beatstars.studio import _release_label
+
+    assert _release_label(datetime(2026, 10, 11, 13, 30)) == "October 11, 2026 at 1:30 PM"
+    assert _release_label(datetime(2026, 1, 2, 0, 5)) == "January 2, 2026 at 12:05 AM"
+    assert _release_label(datetime(2026, 1, 2, 12, 0)) == "January 2, 2026 at 12:00 PM"
+
+
+def test_a_failure_after_the_track_exists_names_its_id_and_the_id_was_reported(
+    monkeypatch, tmp_path
+) -> None:
+    from beat_upload.beatstars import studio
+    from beat_upload.beatstars.package import TrackPackage
+
+    track = BeatStarsTrack(title="T", bpm=95, key="Cmin")
+    package = TrackPackage(
+        tmp_path, tmp_path / "m.wav", tmp_path / "p.mp3", tmp_path / "c.jpg", track
+    )
+
+    def broken_fill(*args) -> None:
+        raise BeatStarsError("the cover did not take")
+
+    def create(page, master, on_created) -> str:
+        on_created("TK1")
+        return "TK1"
+
+    monkeypatch.setattr(studio, "_create_track", create)
+    monkeypatch.setattr(studio, "_fill_and_publish", broken_fill)
+    created: list[str] = []
+    with pytest.raises(BeatStarsError, match=r"TK1.*--draft TK1"):
+        studio.publish_package(None, package, lambda _: None, on_created=created.append)
+    assert created == ["TK1"]
+
+
+def test_a_draft_is_reopened_and_reported_again(monkeypatch, tmp_path) -> None:
+    from beat_upload.beatstars import studio
+    from beat_upload.beatstars.package import TrackPackage
+
+    class Page:
+        def __init__(self) -> None:
+            self.visited: list[str] = []
+
+        def goto(self, url: str) -> None:
+            self.visited.append(url)
+
+        def wait_for_selector(self, selector: str) -> None:
+            pass
+
+    track = BeatStarsTrack(title="T", bpm=95, key="Cmin")
+    package = TrackPackage(
+        tmp_path, tmp_path / "m.wav", tmp_path / "p.mp3", tmp_path / "c.jpg", track
+    )
+    release = []
+    monkeypatch.setattr(studio, "_fill_and_publish", lambda *a: release.append(a[-1]))
+    page, created = Page(), []
+    from datetime import UTC, datetime
+
+    at = datetime(2030, 1, 1, tzinfo=UTC)
+    studio.publish_package(
+        page, package, lambda _: None, draft="TK9", release_at=at, on_created=created.append
+    )
+    assert page.visited == [studio.edit_url("TK9")] and created == ["TK9"] and release == [at]

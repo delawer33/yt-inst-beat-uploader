@@ -14,6 +14,7 @@ are bounces of the same project and may differ only in how much silence comes fi
 import re
 import shutil
 import subprocess
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,6 +69,34 @@ class TrackSources:
     tagged: Path
     cover: Path
     stems: Path | None = None
+
+
+def zip_stems(stems: Path, target: Path) -> Path:
+    """Zip every file under the ``stems`` directory into ``target``, names flat, stored and
+    not deflated (WAV stems barely compress and a deflate pass over half a gigabyte is slow)."""
+    if not stems.is_dir():
+        raise BeatStarsError(f"Not a directory: {stems}")
+    files = sorted(f for f in stems.rglob("*") if f.is_file())
+    if not files:
+        raise BeatStarsError(f"No files in {stems}")
+    names = [f.name for f in files]
+    doubled = sorted({n for n in names if names.count(n) > 1})
+    if doubled:
+        raise BeatStarsError(f"Two stems share a name, the zip is flat: {', '.join(doubled)}")
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_STORED, allowZip64=True) as archive:
+        for f in files:
+            archive.write(f, f.name)
+    return target
+
+
+def sources_from_bounce(
+    master: Path, tagged: Path, cover: Path, stems_dir: Path | None, work_dir: Path
+) -> TrackSources:
+    """The parts of a Bounce Folder as ``TrackSources``: the ``stems`` directory becomes a
+    zip in ``work_dir``, the rest is used where it lies."""
+    work_dir.mkdir(parents=True, exist_ok=True)
+    stems = zip_stems(stems_dir, work_dir / "stems.zip") if stems_dir is not None else None
+    return TrackSources(master=master, tagged=tagged, cover=cover, stems=stems)
 
 
 def leading_silence(ffmpeg_log: str) -> float:
