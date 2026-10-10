@@ -272,7 +272,11 @@ def test_a_failure_after_the_track_exists_names_its_id_and_the_id_was_reported(
     def broken_fill(*args) -> None:
         raise BeatStarsError("the cover did not take")
 
-    monkeypatch.setattr(studio, "_create_track", lambda page, master: "TK1")
+    def create(page, master, on_created) -> str:
+        on_created("TK1")
+        return "TK1"
+
+    monkeypatch.setattr(studio, "_create_track", create)
     monkeypatch.setattr(studio, "_fill_and_publish", broken_fill)
     created: list[str] = []
     with pytest.raises(BeatStarsError, match=r"TK1.*--draft TK1"):

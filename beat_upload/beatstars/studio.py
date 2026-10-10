@@ -104,10 +104,10 @@ def publish_package(
     now. ``on_created`` gets the id the moment Studio has made the track, before anything
     else can fail; any later failure names the id and how to finish the draft."""
     if draft is None:
-        track_id = _create_track(page, package.master)
+        track_id = _create_track(page, package.master, on_created)
     else:
         track_id = draft
-    on_created(track_id)
+        on_created(track_id)
     try:
         if draft is not None:
             page.goto(edit_url(track_id))
@@ -283,7 +283,7 @@ def _signed_in(page: "Page") -> bool:
     return page.url.startswith(STUDIO_URL) and page.get_by_text("Create Track").count() > 0
 
 
-def _create_track(page: "Page", master: Path) -> str:
+def _create_track(page: "Page", master: Path, on_created: Callable[[str], None]) -> str:
     page.goto(TRACKS_URL)
     page.get_by_role("button", name="Create Track").first.click()
     before = _listed_track_ids(page)
@@ -306,8 +306,14 @@ def _create_track(page: "Page", master: Path) -> str:
             new = [t for t in _listed_track_ids(page, reload=True) if t not in before]
             if new:
                 page.goto(edit_url(new[0]))
-    page.wait_for_selector("[data-qa=input_title]")
-    return match[1]
+    track_id = match[1]
+    on_created(track_id)
+    try:
+        page.wait_for_selector("[data-qa=input_title]")
+    except _playwright_error() as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        raise BeatStarsError(f"{track_id}: {first}; finish it with --draft {track_id}") from e
+    return track_id
 
 
 def _listed_track_ids(page: "Page", reload: bool = False) -> list[str]:
