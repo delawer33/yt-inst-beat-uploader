@@ -74,6 +74,13 @@ def test_the_prompt_carries_title_templates_current_text_and_file_facts() -> Non
     assert runner.schemas == [FILL_SCHEMA]
 
 
+def test_the_prompt_tells_the_model_to_leave_the_beatstars_marker_alone() -> None:
+    runner = FakeRunner(GOOD)
+    fill(runner, description="Free.\n{beatstars|DM me}")
+    prompt = runner.prompts[0]
+    assert "`{beatstars|...}` marker" in prompt and "exactly as written" in prompt
+
+
 def test_without_a_file_name_bpm_and_key_are_left_to_the_owner() -> None:
     runner = FakeRunner(GOOD)
     fill(runner, draft(source_name=None))

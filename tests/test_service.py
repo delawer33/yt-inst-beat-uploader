@@ -15,6 +15,7 @@ def test_unit_text_has_required_directives() -> None:
     assert "Restart=on-failure" in text
     assert "RestartSec=5" in text
     assert "WantedBy=default.target" in text
+    assert "PassEnvironment=WAYLAND_DISPLAY DISPLAY" in text  # Studio needs a display
 
 
 def test_unit_text_custom_description() -> None:

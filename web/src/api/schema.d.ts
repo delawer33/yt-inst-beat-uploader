@@ -137,8 +137,10 @@ export interface paths {
          * @description Send the beat: "Save & upload when rendered". The beat becomes QUEUED at once.
          *
          *     The UPLOAD is queued here when the video is already Rendered, and by the RENDER that is
-         *     still running otherwise. A beat whose render failed (no video, no render pending) gets a
-         *     fresh RENDER, so sending is always enough on its own.
+         *     still running otherwise. A public or scheduled Bounce Folder beat also gets a BEATSTARS
+         *     Job; the UPLOAD waits for it, and whichever of the two finishes last queues it. A beat
+         *     whose render failed (no video, no render pending) gets a fresh RENDER, so sending is
+         *     always enough on its own.
          */
         post: operations["upload_beat_api_beats__beat_id__upload_post"];
         delete?: never;

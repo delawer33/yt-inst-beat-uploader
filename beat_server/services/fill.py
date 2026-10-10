@@ -42,7 +42,8 @@ Rules, in this order:
 1. The shape and wording come from the Templates. Keep every line, emoji, link and sentence of
    the description Template; only the [[...]] Placeholders change. `{{name}}` in a Template
    stood for the audio file's name; the title may have renamed the beat since, so write the
-   name the title gives it (the quoted name).
+   name the title gives it (the quoted name). A `{{beatstars|...}}` marker in the description
+   stays exactly as written, braces and all: the server swaps it for the link later.
 2. Fill the Placeholders from the title. "Artist" is whatever stands before "Type Beat" in the
    title; the substyle is what follows the last "|". Where the Template repeats the title, write
    the title exactly as given.

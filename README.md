@@ -52,6 +52,27 @@ afterwards says `finish it with --draft TK...`. The first run opens Studio for y
 the session stays in the workspace. The window has the class `beat-upload-beatstars`, so a
 window manager rule can keep it on another desktop.
 
+### From the web app
+
+A Draft made from a Bounce Folder that is sent public, or scheduled, goes onto BeatStars
+first and onto YouTube after: "Save & upload when rendered" queues a BeatStars Job next to
+the Render, the Upload waits for both, and the Track is released when the video is (now, or
+at the scheduled time). A private or unlisted send skips BeatStars. If Studio fails, the
+beat stays Queued with the error on the Job; Retry continues the same Studio draft.
+
+One edit to your description Template, once: put the marker where the link should go, with
+the text for beats without a Track after the `|`:
+
+```
+{beatstars|DM @delawer33 on Instagram}
+```
+
+At upload it becomes the Track's URL, or that text when the beat has none. Fill from title
+leaves it alone. The Studio window is a real browser, so the service needs your display: run
+`systemctl --user import-environment WAYLAND_DISPLAY` from your compositor's autostart (the
+unit from `install-service` passes it on), then restart the service. The window opens on the
+workspace your window manager rule gives the class `beat-upload-beatstars`.
+
 ## How it works
 
 One Python package with no web or database code renders the video with ffmpeg and talks

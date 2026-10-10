@@ -7,9 +7,10 @@ and one that finishes with a style the owner has since changed never leads to an
 
 The RENDER starts when the Beat is created, before the owner has decided anything (ADR 0004),
 so it never touches the Beat's status: that says what the owner did. It only records the
-rendered file and, if the owner has already sent the Beat (QUEUED), enqueues the UPLOAD
-behind itself. A Render that finishes on a Draft leaves it a Rendered Draft and stops there;
-the send action enqueues the UPLOAD itself once it sees the video.
+rendered file and, if the owner has already sent the Beat (QUEUED) and nothing is left to put
+on BeatStars first (``services/beatstars.py``), enqueues the UPLOAD behind itself. A Render
+that finishes on a Draft leaves it a Rendered Draft and stops there; the send action enqueues
+the UPLOAD itself once it sees the video.
 
 ffmpeg and the Data API run in ``asyncio.to_thread``; only ``ctx.progress`` is called from
 there, never ``ctx.session``.
@@ -37,6 +38,7 @@ from beat_server.db.models import Beat, BeatStatus, JobKind, utcnow
 from beat_server.db.repo import BeatRepo, JobRepo
 from beat_server.jobs.worker import JobContext, has_retries_left
 from beat_server.services.beats import metadata_of
+from beat_server.services.beatstars import queue_upload_if_ready
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_server.services.sync import status_for
 from beat_upload.beat_folder import VIDEO_FILENAME
@@ -100,8 +102,8 @@ async def run_render(ctx: JobContext) -> None:
     if not beat.video_is_current:
         if not jobs.has_waiting(JobKind.RENDER, beat.id):
             ctx.enqueue(JobKind.RENDER, beat.id)
-    elif beat.status == BeatStatus.QUEUED and not jobs.has_pending(JobKind.UPLOAD, beat.id):
-        ctx.enqueue(JobKind.UPLOAD, beat.id)
+    else:
+        queue_upload_if_ready(ctx, beat)  # not while the BEATSTARS job still has the beat
 
 
 async def run_upload(ctx: JobContext) -> None:

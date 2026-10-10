@@ -223,6 +223,32 @@ test("the head carries the crumb, the status tag and the YouTube link", () => {
   expect(link).toHaveAttribute("target", "_blank");
 });
 
+test("the head links the BeatStars Track once it exists", () => {
+  renderPage({ ...published, beatstars: {
+  title: "Naughty | Yeat Type Beat",
+  tags: [],
+  genres: [],
+  moods: [],
+  instruments: [],
+  samples: false,
+  release: "with_video" as const,
+  error: null,
+  track_id: "TK1",
+  url: "https://www.beatstars.com/beat/naughty-1",
+} });
+
+  expect(screen.getByRole("link", { name: /BeatStars/ })).toHaveAttribute(
+    "href",
+    "https://www.beatstars.com/beat/naughty-1",
+  );
+  expect(screen.getByRole("link", { name: /youtu\.be\/yt1/ })).toBeInTheDocument();
+});
+
+test("a beat without a Track shows no BeatStars link", () => {
+  renderPage();
+  expect(screen.queryByRole("link", { name: /BeatStars/ })).not.toBeInTheDocument();
+});
+
 test("the metadata is read-only: no title or description field, just the words and tags", () => {
   renderPage();
 

@@ -71,19 +71,23 @@ Render is done.
 _Avoid_: Encoded, prepared
 
 **Queued**:
-A Beat the owner has sent, waiting for its Upload. Still Queued while its Render finishes.
+A Beat the owner has sent, waiting for its Upload. Still Queued while its Render finishes and,
+for a public or scheduled Bounce Folder beat, while its BeatStars Track is made; it stays Queued
+when that fails.
 Metadata stays editable until the Upload starts.
 _Avoid_: Sent, submitted
 
 **Job**:
-One unit of background work on a Beat (render, upload, publish, stats refresh) with a status
+One unit of background work on a Beat (render, BeatStars, upload, publish, stats refresh) with a status
 and a log. What the UI shows progress for. A Job says what is happening to a Beat right now;
 the Beat's status says what the owner has done with it.
 _Avoid_: Task, operation
 
 **Template**:
 The title, description and tags every new Beat starts from, kept in Settings. `{name}` in a
-Template is the audio file's name; a Template may also carry Placeholders.
+Template is the audio file's name; a Template may also carry Placeholders. The description
+Template may carry `{beatstars|<fallback>}`: at Upload it becomes the link to the Beat's
+BeatStars Track, or the fallback text when the Beat has none. Fill from title leaves it alone.
 _Avoid_: Preset, default, boilerplate
 
 **Placeholder**:

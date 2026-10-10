@@ -92,6 +92,30 @@ test("an unchanged form never saves", () => {
   vi.useRealTimers();
 });
 
+test("a Queued beat's head links its BeatStars Track once Studio made it", () => {
+  renderView({ ...draft, status: "queued", beatstars: {
+  title: "Naughty | Yeat Type Beat",
+  tags: [],
+  genres: [],
+  moods: [],
+  instruments: [],
+  samples: false,
+  release: "with_video" as const,
+  error: null,
+  track_id: "TK1",
+  url: "https://www.beatstars.com/beat/naughty-1",
+} });
+  expect(screen.getByRole("link", { name: /BeatStars/ })).toHaveAttribute(
+    "href",
+    "https://www.beatstars.com/beat/naughty-1",
+  );
+});
+
+test("a Draft without a Track has no BeatStars link", () => {
+  renderView();
+  expect(screen.queryByRole("link", { name: /BeatStars/ })).not.toBeInTheDocument();
+});
+
 test("the head shows when the last save landed", () => {
   const at = new Date("2026-09-24T14:03:00");
   renderView(draft, { savedAt: at });

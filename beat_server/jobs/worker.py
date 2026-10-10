@@ -82,6 +82,11 @@ class JobContext:
         log.info("job %s (%s): %s", self.job.id, self.job.kind, line)
         self._update(message=line)
 
+    def new_session(self) -> Session:
+        """A session of its own, for a write that must land while a ``to_thread`` worker runs
+        (the handler's ``session`` stays on the loop thread). The caller closes it."""
+        return self._session_factory()
+
     def credentials(self) -> Credentials:
         """Raises ``AuthError``; the worker then pauses the job until reconnect.
 
