@@ -103,6 +103,7 @@ export function sortBeats(beats: Beat[], sort: Sort): Beat[] {
 const KIND_LABEL: Record<Job["kind"], string> = {
   render: "Rendering",
   upload: "Uploading",
+  beatstars: "Putting on BeatStars",
   sync: "Syncing",
   stats: "Pulling stats",
 };

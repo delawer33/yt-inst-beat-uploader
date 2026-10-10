@@ -123,3 +123,11 @@ def test_only_a_draft_is_filled() -> None:
     with pytest.raises(BeatStateError):
         fill(runner, draft(status=BeatStatus.QUEUED))
     assert runner.prompts == []
+
+
+def test_bpm_and_key_come_from_the_bounce_folder_facts() -> None:
+    runner = FakeRunner(GOOD)
+    beat = draft(source_name=None, bpm=104, music_key="F#min")
+    fill(runner, beat)
+    assert "BPM 104, key F# minor" in runner.prompts[0]
+    assert "from the Bounce Folder's name" in runner.prompts[0]

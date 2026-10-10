@@ -27,6 +27,7 @@ export const AUTOSAVE_MS = 800;
 const JOB_LABEL: Record<Job["kind"], string> = {
   render: "Render",
   upload: "Upload",
+  beatstars: "BeatStars",
   sync: "Sync",
   stats: "Stats",
 };

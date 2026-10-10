@@ -1,6 +1,7 @@
 """Pydantic models of the HTTP API. The frontend types are generated from these (OpenAPI)."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -28,6 +29,51 @@ class JobOut(BaseModel):
 
 
 THUMBNAIL_URL = "https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg"
+
+
+class BeatStarsPreview(BaseModel):
+    """What will go to BeatStars for a Beat made from a Bounce Folder, read-only in the UI."""
+
+    title: str
+    tags: list[str]
+    genres: list[str]
+    moods: list[str]
+    instruments: list[str]
+    samples: bool
+    # with_video: public together with the video (or at its scheduled time);
+    # skipped_private: sent private or unlisted without a time, none until put on later;
+    # skipped_by_owner: "Upload without BeatStars".
+    release: Literal["with_video", "skipped_private", "skipped_by_owner"]
+    error: str | None
+    track_id: str | None
+    url: str | None
+
+    @classmethod
+    def from_beat(cls, beat: Beat) -> "BeatStarsPreview":
+        if beat.beatstars_skipped:
+            release = "skipped_by_owner"
+        elif beat.privacy == "public" or beat.publish_at is not None:
+            release = "with_video"
+        else:
+            release = "skipped_private"
+        return cls(
+            title=beat.title,
+            tags=list(beat.tags),
+            genres=[],
+            moods=list(beat.beatstars_moods),
+            instruments=list(beat.beatstars_instruments),
+            samples=beat.samples,
+            release=release,
+            error=None,
+            track_id=beat.beatstars_id,
+            url=beat.beatstars_url,
+        )
+
+
+class BounceIn(BaseModel):
+    """``POST /api/beats/from-folder``: the absolute path of a Bounce Folder on this machine."""
+
+    path: str
 
 
 class BeatOut(BaseModel):
@@ -63,6 +109,8 @@ class BeatOut(BaseModel):
     # filter looks at. ``None`` when no job of its is queued, running or paused.
     active_job: JobOut | None
     cover_url: str | None
+    # ``None`` for a Beat that does not come from a Bounce Folder.
+    beatstars: BeatStarsPreview | None
     synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -93,6 +141,7 @@ class BeatOut(BaseModel):
             rendered=beat.video_is_current,
             active_job=JobOut.model_validate(active_job) if active_job else None,
             cover_url=cover_url_for(beat),
+            beatstars=BeatStarsPreview.from_beat(beat) if beat.bounce_folder else None,
             synced_at=beat.synced_at,
             created_at=beat.created_at,
             updated_at=beat.updated_at,

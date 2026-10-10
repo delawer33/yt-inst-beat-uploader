@@ -1,52 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
-import { useCreateBeat } from "@/features/beat/queries";
-import { FileSlot } from "./FileSlot";
-import { EMPTY, receive, type Selection } from "./files";
+import { useCreateBeatFromFolder } from "@/features/beat/queries";
 
 /**
- * New beat: two drop zones and nothing else. One takes the audio, the other the cover, so
- * the files can come from different folders (dropping both onto either zone works too).
- * As soon as both are there the Draft is created — no Create button — and its page opens,
- * where the Render is already running (ADR 0004).
+ * New beat: one field for the path of a Bounce Folder. Create reads the folder in place
+ * (nothing is copied, ADR 0007) and opens the Draft, where the Render is already running
+ * (ADR 0004). The two-file drop is gone from this page; its components and the API stay.
  */
 export function NewBeatPage() {
   const navigate = useNavigate();
-  const create = useCreateBeat();
-  const [selection, setSelection] = useState<Selection>(EMPTY);
+  const create = useCreateBeatFromFolder();
+  const [path, setPath] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const started = useRef(false);
-  const { mutate } = create;
 
-  useEffect(() => {
-    const { audio, image } = selection;
-    if (audio === null || image === null || started.current) return;
-    started.current = true;
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (path.trim() === "") return;
     setError(null);
-    mutate(
-      { audio, image },
-      {
-        onSuccess: (beat) => navigate(`/beats/${beat.id}`),
-        onError: (e) => {
-          started.current = false;
-          setError(e.message);
-        },
-      },
-    );
-  }, [selection, mutate, navigate]);
-
-  function onFiles(files: File[]) {
-    if (files.length === 0) return;
-    const result = receive(selection, files);
-    if ("error" in result) {
-      setError(result.error);
-      return;
-    }
-    setError(null);
-    setSelection(result.selection);
+    create.mutate(path.trim(), {
+      onSuccess: (beat) => navigate(`/beats/${beat.id}`),
+      onError: (e) => setError(e.message),
+    });
   }
 
-  const waiting = selection.audio === null ? "the audio" : selection.image === null ? "the cover" : null;
   return (
     <div className="flex flex-col gap-6">
       <div className="crumb">
@@ -57,32 +33,44 @@ export function NewBeatPage() {
         <span>New beat</span>
         {create.isPending && (
           <span className="end text-muted" role="status">
-            Uploading the files…
+            Reading the folder…
           </span>
         )}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <FileSlot
-          kind="audio"
-          file={selection.audio}
-          onFiles={onFiles}
-          disabled={create.isPending}
-        />
-        <FileSlot
-          kind="image"
-          file={selection.image}
-          onFiles={onFiles}
-          disabled={create.isPending}
-        />
-      </div>
+      <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+        <div className="field">
+          <label htmlFor="bounce-path">Bounce Folder path</label>
+          <input
+            id="bounce-path"
+            className="input"
+            type="text"
+            value={path}
+            placeholder="/home/you/bounces/Jungle_104bpm_Amin_calm-dark"
+            spellCheck={false}
+            autoFocus
+            disabled={create.isPending}
+            onChange={(e) => setPath(e.target.value)}
+          />
+        </div>
+        <p className="text-muted">
+          The WAV, the tagged MP3, the cover and the stems are read from there; nothing is
+          copied.
+        </p>
+        <div>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={create.isPending || path.trim() === ""}
+          >
+            Create
+          </button>
+        </div>
+      </form>
       {error && (
         <div className="note" role="alert">
           <span className="note-title">That will not do</span>
           <span className="text-soft">{error}</span>
         </div>
-      )}
-      {waiting && !create.isPending && (
-        <p className="text-muted">The Draft is created as soon as {waiting} is here.</p>
       )}
     </div>
   );

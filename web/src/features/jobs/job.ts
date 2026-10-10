@@ -5,6 +5,7 @@ import { serverDate } from "@/lib/format";
 export const JOB_LABEL: Record<Job["kind"], string> = {
   render: "Render",
   upload: "Upload",
+  beatstars: "BeatStars",
   sync: "Sync",
   stats: "Stats refresh",
 };
