@@ -58,7 +58,8 @@ A Draft made from a Bounce Folder that is sent public, or scheduled, goes onto B
 first and onto YouTube after: "Save & upload when rendered" queues a BeatStars Job next to
 the Render, the Upload waits for both, and the Track is released when the video is (now, or
 at the scheduled time). A private or unlisted send skips BeatStars. If Studio fails, the
-beat stays Queued with the error on the Job; Retry continues the same Studio draft.
+beat stays Queued with the error on the Job; Retry continues the same Studio draft, or "Upload without BeatStars" sends the video with
+the fallback line in the description.
 
 One edit to your description Template, once: put the marker where the link should go, with
 the text for beats without a Track after the `|`:
