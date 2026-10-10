@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 
@@ -279,8 +279,15 @@ def beatstars_upload(
     no_publish: Annotated[
         bool, typer.Option("--no-publish", help="Fill the track but leave it a draft")
     ] = False,
+    release_at: Annotated[
+        datetime | None,
+        typer.Option(
+            "--release-at",
+            help="Schedule the release (local time, e.g. 2026-10-12T15:00); default is now",
+        ),
+    ] = None,
 ) -> None:
-    """Create, fill and publish each package as a Public track in BeatStars Studio."""
+    """Create, fill and publish each package in BeatStars Studio: Public now, or Scheduled."""
     import time
 
     from beat_upload.beatstars.package import find_package
@@ -297,8 +304,16 @@ def beatstars_upload(
                     time.sleep(pause)
                 typer.echo(f"Uploading {package.track.title}...")
                 try:  # one track's failure leaves a draft; the rest still go up
-                    track_id = publish_package(page, package, typer.echo, draft, not no_publish)
-                    if not no_publish:
+                    track_id = publish_package(
+                        page,
+                        package,
+                        typer.echo,
+                        draft,
+                        not no_publish,
+                        release_at.astimezone() if release_at else None,
+                        lambda tid: typer.echo(f"Studio made track {tid}"),
+                    )
+                    if not no_publish and release_at is None:
                         typer.echo(check_public_page(page, track_id, package.track.bpm))
                 except BeatUploadError as e:
                     typer.echo(f"Failed {package.folder.name}: {e}", err=True)
