@@ -105,7 +105,7 @@ test("a Queued beat's head links its BeatStars Track once Studio made it", () =>
   track_id: "TK1",
   url: "https://www.beatstars.com/beat/naughty-1",
 } });
-  expect(screen.getByRole("link", { name: /BeatStars/ })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: /^BeatStars/ })).toHaveAttribute(
     "href",
     "https://www.beatstars.com/beat/naughty-1",
   );
