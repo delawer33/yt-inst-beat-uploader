@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { formatDate, formatViews } from "@/lib/format";
 import type { Beat } from "./queries";
+import { InstagramMark } from "./InstagramMark";
 import { STATUS_LABEL, STATUS_TAG } from "./status";
 
 /**
@@ -36,6 +37,7 @@ export function BeatTable({ beats }: { beats: Beat[] }) {
                 </td>
                 <td>
                   <Link to={`/beats/${beat.id}`}>{title}</Link>
+                  {beat.instagram_posted && <> <InstagramMark /></>}
                 </td>
                 <td>
                   <span className={`tag ${STATUS_TAG[beat.status]}`} data-status={beat.status}>

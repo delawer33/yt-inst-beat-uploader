@@ -138,6 +138,12 @@ the publish time. Written once per Beat when the owner first asks for it, kept, 
 again only on request. The owner marks it posted; nothing is sent to Instagram.
 _Avoid_: Caption, Instagram data, post text
 
+**Posted on Instagram**:
+The owner's own mark on a Beat, a switch in the Instagram panel, saying the Reel is on
+Instagram. Stored with the Beat; the Library shows a small "IG" on posted Beats. Nothing is
+checked against Instagram.
+_Avoid_: Published (that is YouTube)
+
 **Artist Handle**:
 The Instagram account of an artist a title names, as the owner wrote it down once; remembered
 for every later Beat with that artist. A style named in place of an artist ("Guitar Type

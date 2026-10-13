@@ -295,7 +295,11 @@ export interface paths {
         /** Get Instagram */
         get: operations["get_instagram_api_beats__beat_id__instagram_get"];
         put?: never;
-        post?: never;
+        /**
+         * Write Instagram
+         * @description Write the Instagram Post, or write it again (the old one is replaced).
+         */
+        post: operations["write_instagram_api_beats__beat_id__instagram_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -316,6 +320,26 @@ export interface paths {
          * @description Open the file manager with ``reel.mp4`` selected. No Reel on disk yet -> 409.
          */
         post: operations["show_reel_in_folder_api_beats__beat_id__reel_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/instagram/posted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Posted
+         * @description The "Posted on Instagram" switch: the owner posts by hand and records it here.
+         */
+        put: operations["set_posted_api_beats__beat_id__instagram_posted_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -612,6 +636,8 @@ export interface components {
             beatstars: components["schemas"]["BeatStarsPreview"] | null;
             /** Beatstars Url */
             beatstars_url: string | null;
+            /** Instagram Posted */
+            instagram_posted: boolean;
             /** Synced At */
             synced_at: string | null;
             /**
@@ -770,6 +796,29 @@ export interface components {
         /** InstagramOut */
         InstagramOut: {
             reel: components["schemas"]["ReelOut"];
+            post: components["schemas"]["InstagramPostOut"] | null;
+            /** Publish Time */
+            publish_time: string | null;
+            /** Beatstars Url */
+            beatstars_url: string | null;
+            /** Posted */
+            posted: boolean;
+        };
+        /**
+         * InstagramPostOut
+         * @description The Instagram Post, in the order Instagram asks for it. ``caption`` is assembled.
+         */
+        InstagramPostOut: {
+            /** Hook */
+            hook: string;
+            /** Caption */
+            caption: string;
+            /** Hashtags */
+            hashtags: string[];
+            /** Audio Name */
+            audio_name: string;
+            /** Alt Text */
+            alt_text: string;
         };
         /**
          * JobKind
@@ -817,6 +866,11 @@ export interface components {
             watch_minutes: number;
             /** Per Day */
             per_day: components["schemas"]["DayPoint"][];
+        };
+        /** PostedIn */
+        PostedIn: {
+            /** Posted */
+            posted: boolean;
         };
         /**
          * PrivacyIn
@@ -1393,6 +1447,37 @@ export interface operations {
             };
         };
     };
+    write_instagram_api_beats__beat_id__instagram_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     show_reel_in_folder_api_beats__beat_id__reel_show_post: {
         parameters: {
             query?: never;
@@ -1410,6 +1495,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_posted_api_beats__beat_id__instagram_posted_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
             };
             /** @description Validation Error */
             422: {

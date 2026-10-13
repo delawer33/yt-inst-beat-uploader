@@ -29,6 +29,7 @@ const beat: Beat = {
   cover_url: null,
   beatstars: null,
   beatstars_url: null,
+  instagram_posted: false,
   synced_at: null,
   created_at: "2026-10-13T10:00:00",
   updated_at: "2026-10-13T10:00:00",
@@ -42,11 +43,36 @@ const reel = (over: Partial<Instagram["reel"]>): Instagram["reel"] => ({
   ...over,
 });
 
-const view = (r: Instagram["reel"] | null, props = {}) => (
+const POST: NonNullable<Instagram["post"]> = {
+  hook: "this guitar x reggaeton beat is crazy",
+  caption: '"Dance With Me" - guitar type beat\n\n#typebeat #prodbydelawer',
+  hashtags: ["typebeat", "prodbydelawer"],
+  audio_name: "Dance With Me (prod. delawer)",
+  alt_text: 'Cover art for "Dance With Me"',
+};
+
+const panel = (r: Instagram["reel"], over: Partial<Instagram> = {}): Instagram => ({
+  reel: r,
+  post: null,
+  publish_time: null,
+  beatstars_url: null,
+  posted: false,
+  ...over,
+});
+
+const view = (r: Instagram["reel"] | null, props = {}, over: Partial<Instagram> = {}) => (
   <MemoryRouter>
-    <InstagramPanelView reel={r} onShow={vi.fn()} onClose={vi.fn()} {...props} />
+    <InstagramPanelView
+      panel={r === null ? null : panel(r, over)}
+      onShow={vi.fn()}
+      onClose={vi.fn()}
+      {...props}
+    />
   </MemoryRouter>
 );
+
+const written = (over: Partial<Instagram> = {}) =>
+  view(reel({}), {}, { post: POST, ...over });
 
 test("the Instagram button is hidden for a beat without audio and cover", () => {
   render(<InstagramButton beat={{ ...beat, has_files: false }} />);
@@ -86,4 +112,86 @@ test("a server error from Show in folder is shown", () => {
 test("a beat with nothing to make a Reel from says so", () => {
   render(view(reel({ state: "unavailable" })));
   expect(screen.getByText(/no audio and cover/)).toBeInTheDocument();
+});
+
+test("before the post is written the panel offers to write it, and says nothing is copyable", () => {
+  const onWrite = vi.fn();
+  render(view(reel({}), { onWrite }));
+  expect(screen.queryByRole("button", { name: /^Copy/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Write the post/ }));
+  expect(onWrite).toHaveBeenCalledTimes(1);
+});
+
+test("a title with a Placeholder shows the server's refusal", () => {
+  render(view(reel({}), { writeError: "Title still has [[Artist2]]; fix the title first." }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Title still has [[Artist2]]");
+});
+
+test("the fields come in Instagram's order, each with a copy button", () => {
+  render(
+    written({
+      publish_time: "2026-10-15T15:00:00",
+      beatstars_url: "https://www.beatstars.com/TK1",
+    }),
+  );
+  const labels = screen.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
+  expect(labels).toEqual([
+    "On-screen text",
+    "Caption",
+    "Audio name",
+    "Alt text",
+    "Publish time",
+    "Trial reel",
+    "BeatStars link",
+  ]);
+  expect(screen.getByText(POST.hook)).toBeInTheDocument();
+  expect(screen.getByText(/Shown to non-followers first/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Copy Caption" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Copy Trial reel" })).not.toBeInTheDocument();
+});
+
+test("a copy button puts the field's text on the clipboard", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  render(written());
+  fireEvent.click(screen.getByRole("button", { name: "Copy Caption" }));
+  expect(writeText).toHaveBeenCalledWith(POST.caption);
+  expect(await screen.findByRole("button", { name: "Copy Caption" })).toHaveTextContent("Copied");
+});
+
+test("without a publish time and a BeatStars link those rows are empty or missing", () => {
+  render(written());
+  expect(screen.getByText("Not set")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Copy Publish time" })).toBeDisabled();
+  expect(screen.queryByRole("group", { name: "BeatStars link" })).not.toBeInTheDocument();
+});
+
+test("Write again asks for a new post", () => {
+  const onWrite = vi.fn();
+  render(
+    <MemoryRouter>
+      <InstagramPanelView
+        panel={panel(reel({}), { post: POST })}
+        onShow={vi.fn()}
+        onWrite={onWrite}
+        onClose={vi.fn()}
+      />
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Write again" }));
+  expect(onWrite).toHaveBeenCalledTimes(1);
+});
+
+test("the Posted on Instagram switch reports its change", () => {
+  const onPosted = vi.fn();
+  render(view(reel({}), { onPosted }));
+  const box = screen.getByRole("checkbox", { name: "Posted on Instagram" });
+  expect(box).not.toBeChecked();
+  fireEvent.click(box);
+  expect(onPosted).toHaveBeenCalledWith(true);
+});
+
+test("a posted beat shows the switch on", () => {
+  render(view(reel({}), {}, { posted: true }));
+  expect(screen.getByRole("checkbox", { name: "Posted on Instagram" })).toBeChecked();
 });

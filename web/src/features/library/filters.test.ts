@@ -50,6 +50,7 @@ const beat = (over: Partial<Beat> & { id: string }): Beat => ({
   cover_url: null,
   beatstars: null,
   beatstars_url: null,
+  instagram_posted: false,
   synced_at: null,
   created_at: "2026-09-01T10:00:00",
   updated_at: "2026-09-01T10:00:00",
