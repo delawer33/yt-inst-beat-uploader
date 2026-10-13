@@ -22,8 +22,25 @@ def test_moods_only() -> None:
 
 def test_instruments_and_samples() -> None:
     assert parse_bounce_name("104bpm_Amin_calm_guitar-808_smp") == BounceFacts(
-        bpm=104, key="Amin", moods=("calm",), instruments=("guitar", "808"), samples=True
+        bpm=104,
+        key="Amin",
+        moods=("calm",),
+        instruments=("guitar", "808"),
+        samples=True,
+        sample_source="Splice",
     )
+
+
+def test_where_the_samples_come_from() -> None:
+    for name in (
+        "140bpm_Cmin_dreamy_synth_smp-looperman",
+        "140bpm_Cmin_dreamy_synth_smp_looperman",
+    ):
+        facts = parse_bounce_name(name)
+        assert facts is not None
+        assert facts.sample_source == "Looperman" and facts.instruments == ("synth",)
+    no_samples = parse_bounce_name("140bpm_Cmin_dreamy")
+    assert no_samples is not None and no_samples.sample_source is None
 
 
 def test_bpm_and_key_only() -> None:

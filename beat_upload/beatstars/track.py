@@ -57,6 +57,9 @@ _GENRE_MOODS = (
 DEFAULT_MOODS = ("Energetic", "Confident", "Bold")
 
 
+DEFAULT_SAMPLE_NAME = "Royalty-free loop"
+
+
 @dataclass(frozen=True)
 class BeatStarsTrack:
     title: str
@@ -69,6 +72,9 @@ class BeatStarsTrack:
     instruments: list[str] = field(default_factory=list)  # from catalog.INSTRUMENTS
     samples: bool = False  # "Loops and Samples"
     youtube_id: str | None = None
+    # The "Sample or Loop" row Studio requires once ``samples`` is ticked.
+    sample_name: str = DEFAULT_SAMPLE_NAME
+    sample_source: str = "Splice"
 
     def __post_init__(self) -> None:
         if not self.title.strip():

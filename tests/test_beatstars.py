@@ -292,7 +292,7 @@ def test_a_draft_is_reopened_and_reported_again(monkeypatch, tmp_path) -> None:
         def __init__(self) -> None:
             self.visited: list[str] = []
 
-        def goto(self, url: str) -> None:
+        def goto(self, url: str, wait_until: str = "load") -> None:
             self.visited.append(url)
 
         def wait_for_selector(self, selector: str) -> None:

@@ -42,7 +42,7 @@ class Fakes:
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
     fakes = Fakes()
 
-    def fake_prepare(bounce: Path, track: Any, name: str, out_dir: Path) -> Any:
+    def fake_prepare(bounce: Path, track: Any, name: str, out_dir: Path, style: Any) -> Any:
         fakes.prepared.append((bounce, name))
         return track
 
@@ -419,3 +419,18 @@ async def test_put_on_beatstars_is_refused_without_a_bounce_folder_or_with_a_tra
     assert response.status_code == 409 and "Bounce Folder" in response.json()["detail"]
     assert fakes.updated == []
     assert kinds_waiting(session) == []
+
+
+def test_a_service_started_before_the_desktop_takes_the_display_from_the_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in ("WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP"):
+        monkeypatch.delenv(key, raising=False)
+    shown = "HOME=/h\nWAYLAND_DISPLAY=wayland-1\nDISPLAY=:0\n"
+    monkeypatch.setattr(
+        beatstars.subprocess,
+        "run",
+        lambda *a, **k: beatstars.subprocess.CompletedProcess(a, 0, stdout=shown),
+    )
+    beatstars._take_display_from_session()
+    assert beatstars.os.environ["WAYLAND_DISPLAY"] == "wayland-1"

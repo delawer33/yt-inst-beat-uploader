@@ -6,7 +6,9 @@ folder's name, or else the WAV's, carries the facts::
     Jungle_104bpm_Amin_calm-rhytmic-mysterious_guitar-808_smp
 
 Everything before ``<n>bpm`` is dropped, then comes the key, then up to two groups joined
-with ``-`` (the moods, then the instruments), then ``smp`` when foreign samples are used.
+with ``-`` (the moods, then the instruments), then ``smp`` when foreign samples are used,
+optionally with where they come from: ``smp-looperman`` or ``smp_looperman`` (Splice when
+not given).
 Nothing here copies or changes a file.
 """
 
@@ -19,6 +21,9 @@ from beat_upload.errors import BounceFolderError
 
 STEMS_DIRNAME = "stems"
 SAMPLES_MARK = "smp"
+DEFAULT_SAMPLE_SOURCE = "Splice"
+# How a source written in the name is spelled on BeatStars; others are title-cased.
+SAMPLE_SOURCES = {"splice": "Splice", "looperman": "Looperman"}
 
 _BPM = re.compile(r"(?P<bpm>\d{2,3})bpm")
 _KEY = re.compile(r"[A-G][#b]?(?:min|maj)")
@@ -32,6 +37,7 @@ class BounceFacts:
     moods: tuple[str, ...] = ()  # as the owner wrote them
     instruments: tuple[str, ...] = ()
     samples: bool = False
+    sample_source: str | None = None  # where the samples come from, when ``samples``
 
 
 @dataclass(frozen=True)
@@ -55,10 +61,8 @@ def parse_bounce_name(name: str) -> BounceFacts | None:
         bpm = _BPM.fullmatch(part)
         if bpm is None or _KEY.fullmatch(parts[i + 1]) is None:
             continue
-        rest = parts[i + 2 :]
-        samples = bool(rest) and rest[-1] == SAMPLES_MARK
-        if samples:
-            rest = rest[:-1]
+        rest, source = _split_samples(parts[i + 2 :])
+        samples = source is not None
         groups = [tuple(g.split("-")) for g in rest if _GROUP.fullmatch(g)][:2]
         groups += [()] * (2 - len(groups))
         return BounceFacts(
@@ -67,8 +71,25 @@ def parse_bounce_name(name: str) -> BounceFacts | None:
             moods=groups[0],
             instruments=groups[1],
             samples=samples,
+            sample_source=source,
         )
     return None
+
+
+def _split_samples(rest: list[str]) -> tuple[list[str], str | None]:
+    """``rest`` without its samples mark, and the samples' source (``None``: no samples).
+    ``smp``, ``smp-looperman`` and ``smp_looperman`` are all understood."""
+    if rest and rest[-1] == SAMPLES_MARK:
+        return rest[:-1], DEFAULT_SAMPLE_SOURCE
+    if rest and rest[-1].startswith(SAMPLES_MARK + "-"):
+        return rest[:-1], _source(rest[-1][len(SAMPLES_MARK) + 1 :])
+    if len(rest) >= 2 and rest[-2] == SAMPLES_MARK:
+        return rest[:-2], _source(rest[-1])
+    return rest, None
+
+
+def _source(word: str) -> str:
+    return SAMPLE_SOURCES.get(word.lower(), word.replace("-", " ").title())
 
 
 def read_bounce_folder(folder: Path) -> BounceFolder:

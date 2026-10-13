@@ -167,6 +167,37 @@ def render_cover(
     return output
 
 
+def render_square_cover(image: Path, output: Path, style: CoverStyle, side: int) -> Path:
+    """``image`` centre-cropped to a ``side``-pixel square, painted in ``style`` with the Label:
+    the video's look for a store's square artwork (BeatStars)."""
+    ensure_ffmpeg()
+    label_width, margin = label.placement(side)
+    with tempfile.TemporaryDirectory(prefix="label-", dir=output.parent) as tmp:
+        label_png = Path(tmp) / "label.png"
+        label.render_label(label_width).save(label_png)
+        graph = (
+            f"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale={side}:{side}:flags=lanczos,"
+            f"format=rgb24[fit];"
+            f"{cover_style_graph(style, 'fit', 'styled', (side, side))};"
+            f"[styled][1:v]overlay=x=W-w-{margin}:y={margin}:format=rgb[cover]"
+        )
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", str(image),
+            "-i", str(label_png),
+            "-filter_complex", graph,
+            "-map", "[cover]",
+            "-frames:v", "1",
+            "-update", "1",
+            "-q:v", "2",
+            str(output),
+        ]  # fmt: skip
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise VideoError(f"ffmpeg failed on the square cover:\n{result.stderr.strip()}")
+    return output
+
+
 def render_video(
     audio: Path,
     image: Path,

@@ -21,7 +21,10 @@ replace.
 """
 
 import asyncio
+import os
+import subprocess
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,7 +37,12 @@ from beat_server.services.beats import snippet_of
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_upload.beatstars.catalog import INSTRUMENTS, MOODS
 from beat_upload.beatstars.naming import MAX_MOODS, TrackFileName, file_safe_name
-from beat_upload.beatstars.package import TrackPackage, prepare_package, sources_from_bounce
+from beat_upload.beatstars.package import (
+    COVER_MAX_SIDE,
+    TrackPackage,
+    prepare_package,
+    sources_from_bounce,
+)
 from beat_upload.beatstars.studio import (
     RELEASE_NOW_WINDOW,
     check_public_page,
@@ -50,9 +58,14 @@ from beat_upload.beatstars.track import (
     track_for_beat,
 )
 from beat_upload.bounce_folder import read_bounce_folder
+from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import BeatStarsError
+from beat_upload.video import render_square_cover
 from beat_upload.youtube import update_description
 
+# The cover as the video shows it (Cover Style + Label), before the package squares it.
+STYLED_COVER_FILENAME = "styled-cover.jpg"
+DISPLAY_VARS = ("WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP")
 LATER = frozenset({BeatStatus.PUBLISHED, BeatStatus.SCHEDULED})
 PACKAGE_DIRNAME = "beatstars"
 FALLBACK_FILE_NAME = "beat"
@@ -162,7 +175,12 @@ async def run_beatstars(ctx: JobContext) -> None:
         package_dir = ctx.workspace.beat_dir(beat.id) / PACKAGE_DIRNAME
         ctx.progress(0.0, "Preparing the Track Package")
         package = await asyncio.to_thread(
-            prepare, Path(bounce), track, parse_youtube_title(beat.title).name, package_dir
+            prepare,
+            Path(bounce),
+            track,
+            parse_youtube_title(beat.title).name,
+            package_dir,
+            CoverStyle(beat.video_style or beat.cover_style),
         )
 
         beat_id = beat.id
@@ -202,17 +220,26 @@ async def run_beatstars(ctx: JobContext) -> None:
     queue_upload_if_ready(ctx, beat)
 
 
-def prepare(bounce: Path, track: BeatStarsTrack, name: str, out_dir: Path) -> TrackPackage:
+def prepare(
+    bounce: Path, track: BeatStarsTrack, name: str, out_dir: Path, style: CoverStyle
+) -> TrackPackage:
     """The Track Package of the Bounce Folder in ``out_dir``: trimmed master, tagged MP3,
-    square cover, stems zip, files named after the beat's ``name``. Blocking (ffmpeg)."""
+    square cover painted in the video's ``style`` with the Label, stems zip, files named
+    after the beat's ``name``. Blocking (ffmpeg)."""
     folder = read_bounce_folder(bounce)
+    if folder.facts.sample_source:
+        track = replace(track, sample_source=folder.facts.sample_source)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    styled = render_square_cover(
+        folder.cover, out_dir / STYLED_COVER_FILENAME, style, COVER_MAX_SIDE
+    )
     facts = TrackFileName(
         name=file_safe_name(name) or FALLBACK_FILE_NAME,
         bpm=track.bpm,
         key=track.key,
         samples=track.samples,
     )
-    sources = sources_from_bounce(folder.master, folder.tagged, folder.cover, folder.stems, out_dir)
+    sources = sources_from_bounce(folder.master, folder.tagged, styled, folder.stems, out_dir)
     return prepare_package(sources, facts, track, out_dir)
 
 
@@ -230,6 +257,7 @@ def drive_studio(
     A Track released now is looked up on its public page; if that check fails the Track is
     still public, so the plain URL is used and the problem goes to the job's log.
     """
+    _take_display_from_session()
     with studio(profile, on_status) as page:
         track_id = publish_package(page, package, on_status, draft, True, release, on_created)
         scheduled = release is not None and release - datetime.now(UTC) > RELEASE_NOW_WINDOW
@@ -240,6 +268,33 @@ def drive_studio(
         except BeatStarsError as e:
             on_status(f"{track_id} is public, but its page check failed: {e}")
             return track_id, public_url(track_id)
+
+
+def _take_display_from_session() -> None:
+    """Copy WAYLAND_DISPLAY / DISPLAY from the systemd user manager into this process when
+    it has neither: a service started at boot, before the compositor imported them, would
+    otherwise launch a browser that dies with "Missing X server or $DISPLAY"."""
+    if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"):
+        return
+    try:
+        shown = subprocess.run(
+            ["systemctl", "--user", "show-environment"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        shown = ""
+    for line in shown.splitlines():
+        key, _, value = line.partition("=")
+        if key in DISPLAY_VARS and value:
+            os.environ[key] = value
+    if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
+        raise BeatStarsError(
+            "No display for the Studio window: log in to the desktop, then retry "
+            "(the service takes WAYLAND_DISPLAY from your session)."
+        )
 
 
 def _default_moods(beat: Beat, genre: str) -> list[str]:
