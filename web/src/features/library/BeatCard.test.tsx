@@ -28,6 +28,7 @@ const beat: Beat = {
   cover_url: "https://i.ytimg.com/vi/abc123/hqdefault.jpg",
   beatstars: null,
   beatstars_url: null,
+  instagram_posted: false,
   synced_at: "2026-09-22T10:00:00",
   created_at: "2026-09-22T10:00:00",
   updated_at: "2026-09-22T10:00:00",

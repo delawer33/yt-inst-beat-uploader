@@ -3,8 +3,9 @@
 import uuid
 from datetime import UTC, date, datetime
 from enum import StrEnum
+from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, String, Text, false
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from beat_upload.cover_style import DEFAULT_COVER_STYLE, CoverStyle
@@ -77,6 +78,12 @@ class Beat(Base):
     # The Reel (vertical video for Instagram) beside the video, and the Cover Style it has.
     reel_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     reel_style: Mapped[CoverStyle | None] = mapped_column(String(32), nullable=True)
+    # The Instagram Post the model wrote (hook, caption_body, hashtags, audio_name, alt_text),
+    # None until the owner first opens the panel; and whether the owner posted it by hand.
+    instagram_post: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    instagram_posted: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     # Set for a Draft made from a Bounce Folder (ADR 0007): the absolute folder path. Then
     # ``audio_path`` / ``image_path`` are absolute too and point into it; nothing is copied.
     bounce_folder: Mapped[str | None] = mapped_column(String(1024), nullable=True)

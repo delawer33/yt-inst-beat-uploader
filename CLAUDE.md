@@ -58,7 +58,7 @@ beat_server/            FastAPI app for `serve`
   db/                   SQLAlchemy models, repos, alembic migrations (packaged)
   jobs/                 queue, worker, scheduler, SSE event bus
   services/             sync, pipeline (render -> upload; reel), reel (panel state, Show in folder),
-                        beatstars (Studio job), stats
+                        instagram (the Instagram Post via the claude runner), beatstars (Studio job), stats
 web/src/                React 19 + TS, TanStack Query, react-router
   api/                  generated schema.d.ts + openapi-fetch client; never hand-write types
   components/           AppShell (sidebar, banner), shared pieces
