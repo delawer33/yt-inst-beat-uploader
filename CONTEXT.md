@@ -80,7 +80,7 @@ Metadata stays editable until the Upload starts.
 _Avoid_: Sent, submitted
 
 **Job**:
-One unit of background work on a Beat (render, BeatStars, upload, publish, stats refresh) with a status
+One unit of background work on a Beat (render, Reel, BeatStars, upload, publish, stats refresh) with a status
 and a log. What the UI shows progress for. A Job says what is happening to a Beat right now;
 the Beat's status says what the owner has done with it.
 _Avoid_: Task, operation

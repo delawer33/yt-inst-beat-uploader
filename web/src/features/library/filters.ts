@@ -104,6 +104,7 @@ const KIND_LABEL: Record<Job["kind"], string> = {
   render: "Rendering",
   upload: "Uploading",
   beatstars: "Putting on BeatStars",
+  reel: "Rendering the Reel",
   sync: "Syncing",
   stats: "Pulling stats",
 };

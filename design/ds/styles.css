@@ -350,6 +350,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* ══ Panel (beat side panel) ════════════════════════════════════════════ */
 .panel { border-left: var(--rule); background: var(--color-bg); display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-lg); }
 .panel.overlay { position: absolute; top: 0; right: 0; bottom: 0; width: var(--panel-w); }
+.panel.fixed { position: fixed; top: 0; right: 0; bottom: 0; width: min(var(--panel-w), 100vw); z-index: 20; }
 .panel-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-bottom: var(--rule-soft); }
 .panel-head .meta { font-size: var(--text-label); color: var(--color-text-55); }
 .panel-head .btn-ghost { margin-left: auto; font-size: var(--text-small); }

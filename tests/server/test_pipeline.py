@@ -762,7 +762,8 @@ def test_post_beats_queues_a_render_and_no_upload(client: TestClient, session: S
     assert body["status"] == "draft" and body["rendered"] is False
     assert body["active_job"]["kind"] == "render"
     assert body["active_job"]["status"] == "queued"
-    assert [j.kind for j in JobRepo(session).for_beat(body["id"])] == [JobKind.RENDER]
+    kinds = [j.kind for j in JobRepo(session).for_beat(body["id"])]
+    assert sorted(kinds) == [JobKind.REEL, JobKind.RENDER]  # the Reel is queued, not an upload
     assert client.get("/api/beats").json()[0]["active_job"]["id"] == body["active_job"]["id"]
 
 
@@ -883,9 +884,11 @@ async def test_changing_the_style_of_a_rendered_draft_renders_again(
     # A second change while that Render waits adds no Render: it reads the style when it starts.
     client.patch(f"/api/beats/{draft.id}", json={"cover_style": "dio_green"})
     job = JobRepo(session).next_queued()
-    assert job is not None
+    assert job is not None and job.kind == JobKind.RENDER
     await make_worker(app).run_one(job)
-    assert JobRepo(session).next_queued() is None
+    # ... and no second Reel either; the one waiting is all there is left.
+    follow_up = JobRepo(session).next_queued()
+    assert follow_up is not None and follow_up.kind == JobKind.REEL
 
     assert styles == [CoverStyle.PURPLE_YELLOW_5TONE, CoverStyle.DIO_GREEN]
     video = workspace.beat_dir(draft.id) / "video.mp4"
@@ -1042,11 +1045,12 @@ async def test_switching_back_while_a_render_runs_keeps_the_video_that_matches(
     monkeypatch.setattr(pipeline, "render_video", render_while_owner_switches_back)
     client.patch(f"/api/beats/{draft.id}", json={"cover_style": "stone_ocean"})
     job = JobRepo(session).next_queued()
-    assert job is not None
+    assert job is not None and job.kind == JobKind.RENDER
     await make_worker(app).run_one(job)
 
     assert video.read_bytes() == b"mp4 golden_wind"
     assert not (video.parent / "video.part.mp4").exists()
     body = client.get(f"/api/beats/{draft.id}").json()
     assert body["rendered"] is True and body["video_style"] == "golden_wind"
-    assert JobRepo(session).next_queued() is None
+    waiting = JobRepo(session).next_queued()
+    assert waiting is not None and waiting.kind == JobKind.REEL  # only the Reel is left

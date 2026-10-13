@@ -26,6 +26,9 @@ from beat_upload.errors import VideoError
 
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
+REEL_WIDTH = 1080
+REEL_HEIGHT = 1920
+REEL_LIFT = 120  # the cover sits this far above the centre, clear of Instagram's caption
 
 ProgressFn = Callable[[float], None]  # fraction 0..1
 
@@ -196,6 +199,81 @@ def render_square_cover(image: Path, output: Path, style: CoverStyle, side: int)
     if result.returncode != 0:
         raise VideoError(f"ffmpeg failed on the square cover:\n{result.stderr.strip()}")
     return output
+
+
+def reel_fit(width: int, height: int) -> tuple[int, int]:
+    """Pure. The cover's size in the Reel: 1080 wide, or, when that would be taller than the
+    1920 frame, scaled to fit the frame height instead. Aspect kept, both even."""
+    scale = min(REEL_WIDTH / width, REEL_HEIGHT / height)
+    w = min(REEL_WIDTH, max(2, round(width * scale / 2) * 2))
+    h = min(REEL_HEIGHT, max(2, round(height * scale / 2) * 2))
+    return w, h
+
+
+def reel_graph(style: CoverStyle, size: tuple[int, int]) -> str:
+    """Pure. Filter graph from ``[0:v]`` (the cover) and ``[1:v]`` (the Label) to ``[out]``,
+    the 1080x1920 Reel frame.
+
+    The cover is painted in ``style`` and stamped as in ``cover_graph``. Behind it goes a copy
+    of the painted cover (no Label) scaled to fill the frame, blurred and darkened; the cover
+    is laid over it ``REEL_LIFT`` px above the centre.
+    """
+    w, h = size
+    _, margin = label.placement(w)
+    return (
+        f"[0:v]scale={w}:{h}:flags=lanczos,format=rgb24[fit];"
+        f"{cover_style_graph(style, 'fit', 'styled', size)};"
+        "[styled]split[a][b];"
+        f"[a]scale={REEL_WIDTH}:{REEL_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={REEL_WIDTH}:{REEL_HEIGHT},gblur=sigma=40,eq=brightness=-0.25[bg];"
+        f"[b][1:v]overlay=x=W-w-{margin}:y={margin}:format=rgb[marked];"
+        f"[bg][marked]overlay=x=(W-w)/2:y=(H-h)/2-{REEL_LIFT}[out]"
+    )
+
+
+def render_reel_cover(image: Path, output: Path, style: CoverStyle = DEFAULT_COVER_STYLE) -> Path:
+    """One 1080x1920 frame of the Reel (``reel_graph``) as a PNG or JPEG."""
+    ensure_ffmpeg()
+    size = reel_fit(*image_size(image))
+    label_width, _ = label.placement(size[0])
+    if label_width < MIN_LABEL_WIDTH:
+        w, h = size
+        raise VideoError(
+            f"The cover {image.name} is too narrow for the Label ({w}x{h} in the frame); "
+            "use a cover no taller than four times its width."
+        )
+    with tempfile.TemporaryDirectory(prefix="label-", dir=output.parent) as tmp:
+        label_png = Path(tmp) / "label.png"
+        label.render_label(label_width).save(label_png)
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", str(image),
+            "-i", str(label_png),
+            "-filter_complex", reel_graph(style, size),
+            "-map", "[out]",
+            "-frames:v", "1",
+            "-update", "1",
+            str(output),
+        ]  # fmt: skip
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise VideoError(f"ffmpeg failed on the Reel cover:\n{result.stderr.strip()}")
+    return output
+
+
+def render_reel(
+    audio: Path,
+    image: Path,
+    output: Path,
+    on_progress: ProgressFn | None = None,
+    style: CoverStyle = DEFAULT_COVER_STYLE,
+) -> Path:
+    """The Reel frame (``render_reel_cover``) looped for the whole of ``audio``, encoded like
+    ``render_video``."""
+    ensure_ffmpeg()
+    with tempfile.TemporaryDirectory(prefix="reel-", dir=output.parent) as tmp:
+        cover = render_reel_cover(image, Path(tmp) / "cover.png", style)
+        return _loop(audio, cover, output, on_progress)
 
 
 def render_video(
