@@ -80,6 +80,7 @@ const beat = (over: Partial<Beat> & { id: string }): Beat => ({
   cover_url: null,
   beatstars: null,
   beatstars_url: null,
+  instagram_posted: false,
   synced_at: null,
   created_at: "2026-09-01T10:00:00",
   updated_at: "2026-09-01T10:00:00",
@@ -260,4 +261,20 @@ test("a drag that carries no files leaves the drop target dark", () => {
 
   fireEvent.dragEnter(window, { dataTransfer: { types: ["Files"], files: [] } });
   expect(document.querySelector(".drop.active")).not.toBeNull();
+});
+
+test("a posted Beat wears the IG mark in the grid and in the list", () => {
+  mocks.beats = [
+    beat({ id: "p1", status: "published", instagram_posted: true }),
+    beat({ id: "p2", status: "published" }),
+  ];
+  renderPage();
+  const card = screen.getByRole("link", { name: "Beat p1" }).closest(".beat-card");
+  expect(within(card as HTMLElement).getByLabelText("Posted on Instagram")).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Posted on Instagram")).toHaveLength(1);
+
+  fireEvent.click(screen.getByRole("radio", { name: "List view" }));
+  const row = screen.getByRole("link", { name: "Beat p1" }).closest("tr");
+  expect(within(row as HTMLElement).getByLabelText("Posted on Instagram")).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Posted on Instagram")).toHaveLength(1);
 });

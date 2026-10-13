@@ -35,8 +35,8 @@ export interface paths {
          * Create Beat
          * @description A new DRAFT from an audio file and a cover image (multipart form).
          *
-         *     The RENDER is queued here and comes back as ``active_job``; no UPLOAD is created, that
-         *     waits for the owner to send the beat.
+         *     The RENDER is queued here and comes back as ``active_job``, with a REEL behind it; no
+         *     UPLOAD is created, that waits for the owner to send the beat.
          */
         post: operations["create_beat_api_beats_post"];
         delete?: never;
@@ -285,6 +285,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/instagram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Instagram */
+        get: operations["get_instagram_api_beats__beat_id__instagram_get"];
+        put?: never;
+        /**
+         * Write Instagram
+         * @description Write the Instagram Post, or write it again (the old one is replaced).
+         */
+        post: operations["write_instagram_api_beats__beat_id__instagram_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/reel/show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Show Reel In Folder
+         * @description Open the file manager with ``reel.mp4`` selected. No Reel on disk yet -> 409.
+         */
+        post: operations["show_reel_in_folder_api_beats__beat_id__reel_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/instagram/artist-handle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Artist Handle
+         * @description Answer the panel's question about one artist: save the handle (or "a style") in the
+         *     Artist Handles Setting and read the panel again.
+         */
+        put: operations["put_artist_handle_api_beats__beat_id__instagram_artist_handle_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/instagram/posted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Posted
+         * @description The "Posted on Instagram" switch: the owner posts by hand and records it here.
+         */
+        put: operations["set_posted_api_beats__beat_id__instagram_posted_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -521,6 +603,16 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ArtistHandleIn
+         * @description One answer to "who is this?": a handle (with or without ``@``) or ``null`` = a style.
+         */
+        ArtistHandleIn: {
+            /** Artist */
+            artist: string;
+            /** Handle */
+            handle: string | null;
+        };
+        /**
          * AuthStatus
          * @enum {string}
          */
@@ -575,6 +667,8 @@ export interface components {
             beatstars: components["schemas"]["BeatStarsPreview"] | null;
             /** Beatstars Url */
             beatstars_url: string | null;
+            /** Instagram Posted */
+            instagram_posted: boolean;
             /** Synced At */
             synced_at: string | null;
             /**
@@ -730,11 +824,42 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** InstagramOut */
+        InstagramOut: {
+            reel: components["schemas"]["ReelOut"];
+            /** Unknown Artists */
+            unknown_artists: string[];
+            /** Tag People */
+            tag_people: string[];
+            post: components["schemas"]["InstagramPostOut"] | null;
+            /** Publish Time */
+            publish_time: string | null;
+            /** Beatstars Url */
+            beatstars_url: string | null;
+            /** Posted */
+            posted: boolean;
+        };
+        /**
+         * InstagramPostOut
+         * @description The Instagram Post, in the order Instagram asks for it. ``caption`` is assembled.
+         */
+        InstagramPostOut: {
+            /** Hook */
+            hook: string;
+            /** Caption */
+            caption: string;
+            /** Hashtags */
+            hashtags: string[];
+            /** Audio Name */
+            audio_name: string;
+            /** Alt Text */
+            alt_text: string;
+        };
         /**
          * JobKind
          * @enum {string}
          */
-        JobKind: "render" | "upload" | "sync" | "stats" | "beatstars";
+        JobKind: "render" | "upload" | "sync" | "stats" | "beatstars" | "reel";
         /** JobOut */
         JobOut: {
             /** Id */
@@ -777,6 +902,11 @@ export interface components {
             /** Per Day */
             per_day: components["schemas"]["DayPoint"][];
         };
+        /** PostedIn */
+        PostedIn: {
+            /** Posted */
+            posted: boolean;
+        };
         /**
          * PrivacyIn
          * @description ``POST /api/beats/{id}/privacy``. With ``publish_at`` the beat becomes Scheduled
@@ -793,6 +923,24 @@ export interface components {
          * @enum {string}
          */
         PrivacyStatus: "private" | "public" | "unlisted";
+        /**
+         * ReelOut
+         * @description The Reel of a Beat. ``rendering`` carries the REEL job's progress; ``failed`` its error;
+         *     ``unavailable`` means the Beat has no audio and cover on disk.
+         */
+        ReelOut: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "rendering" | "failed" | "unavailable";
+            /** Progress */
+            progress: number | null;
+            /** Message */
+            message: string | null;
+            /** Error */
+            error: string | null;
+        };
         /** SettingsIn */
         SettingsIn: {
             /** Stats Hour */
@@ -803,6 +951,10 @@ export interface components {
             description_template?: string | null;
             /** Tags Template */
             tags_template?: string[] | null;
+            /** Artist Handles */
+            artist_handles?: {
+                [key: string]: string | null;
+            } | null;
         };
         /** SettingsOut */
         SettingsOut: {
@@ -820,6 +972,10 @@ export interface components {
             description_template: string;
             /** Tags Template */
             tags_template: string[];
+            /** Artist Handles */
+            artist_handles: {
+                [key: string]: string | null;
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -1290,6 +1446,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_instagram_api_beats__beat_id__instagram_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_instagram_api_beats__beat_id__instagram_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_reel_in_folder_api_beats__beat_id__reel_show_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_artist_handle_api_beats__beat_id__instagram_artist_handle_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtistHandleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_posted_api_beats__beat_id__instagram_posted_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
                 };
             };
             /** @description Validation Error */

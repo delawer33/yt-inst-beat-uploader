@@ -135,3 +135,26 @@ test("a job event patches the jobs cache without a refetch", () => {
   });
   expect(fetches.count).toBe(0);
 });
+
+test("a running Reel job moves the open panel's progress without a refetch", () => {
+  const client = new QueryClient();
+  const panel = { reel: { state: "rendering", progress: 0, message: null, error: null } };
+  client.setQueryData(["instagram", "b1"], panel);
+
+  applyJobEvent(
+    client,
+    job({ id: "r1", beat_id: "b1", kind: "reel", status: "running", progress: 0.4 }),
+  );
+
+  expect(client.getQueryData<typeof panel>(["instagram", "b1"])?.reel.progress).toBe(0.4);
+  expect(client.isFetching()).toBe(0);
+});
+
+test("a finished Reel job re-reads the panel", () => {
+  const client = new QueryClient();
+  client.setQueryData(["instagram", "b1"], { reel: { state: "rendering" } });
+
+  applyJobEvent(client, job({ id: "r1", beat_id: "b1", kind: "reel", status: "done" }));
+
+  expect(client.getQueryState(["instagram", "b1"])?.isInvalidated).toBe(true);
+});

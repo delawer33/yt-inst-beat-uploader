@@ -103,7 +103,10 @@ async def run_next(app: FastAPI, session: Session, kind: JobKind) -> None:
 
 def kinds_waiting(session: Session) -> list[JobKind]:
     session.expire_all()
-    return [j.kind for j in JobRepo(session).with_status(JobStatus.QUEUED)]
+    # The Reel is for Instagram and runs behind everything else: not what these tests are about.
+    return [
+        j.kind for j in JobRepo(session).with_status(JobStatus.QUEUED) if j.kind != JobKind.REEL
+    ]
 
 
 def beat_of(session: Session, beat_id: str) -> Beat:

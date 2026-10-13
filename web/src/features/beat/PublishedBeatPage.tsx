@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import type { Job } from "@/api/events";
+import { InstagramButton } from "@/features/instagram/InstagramButton";
 import { JobHistory } from "@/features/jobs/JobHistory";
 import { JOB_LABEL } from "@/features/jobs/job";
 import { useJobs, useRetryJob } from "@/features/jobs/queries";
@@ -120,7 +121,8 @@ export function PublishedBeatView({
         >
           {STATUS_LABEL[beat.status]}
         </span>
-        <span className="end flex gap-4">
+        <span className="end flex items-center gap-4">
+          <InstagramButton beat={beat} />
           {beat.beatstars?.url != null && (
             <a
               className="num"

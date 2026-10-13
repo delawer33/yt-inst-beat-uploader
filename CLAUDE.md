@@ -45,7 +45,8 @@ beat_upload/            core, no web and no DB (ADR 0002)
   beat_folder.py        the one audio + one image rule; every beat-folder constant
   bounce_folder.py      the Bounce Folder reader: files by kind, BPM/key/moods/instruments from the name
   config.py             config.yaml -> YouTubeMetadata; every YouTube limit
-  video.py              render_cover() one styled frame, render_video() loops it
+  video.py              render_cover() one styled frame, render_video() loops it; the 1080x1920 Reel
+                        (reel_graph, render_reel) the same way
   cover_style.py        the seven Cover Styles as ffmpeg filters (gradient map + ink)
   label.py              the Label, drawn with Pillow; League Gothic ships in fonts/
   youtube.py            upload_video(), set_privacy()
@@ -56,7 +57,8 @@ beat_server/            FastAPI app for `serve`
   api/                  routers + pydantic schemas (the OpenAPI the frontend is generated from)
   db/                   SQLAlchemy models, repos, alembic migrations (packaged)
   jobs/                 queue, worker, scheduler, SSE event bus
-  services/             sync, pipeline (render -> upload), beatstars (Studio job), stats
+  services/             sync, pipeline (render -> upload; reel), reel (panel state, Show in folder),
+                        instagram (the Instagram Post via the claude runner), beatstars (Studio job), stats
 web/src/                React 19 + TS, TanStack Query, react-router
   api/                  generated schema.d.ts + openapi-fetch client; never hand-write types
   components/           AppShell (sidebar, banner), shared pieces

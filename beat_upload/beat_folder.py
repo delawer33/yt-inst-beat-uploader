@@ -14,6 +14,7 @@ IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp"})
 
 CONFIG_FILENAME = "config.yaml"
 VIDEO_FILENAME = "video.mp4"
+REEL_FILENAME = "reel.mp4"
 
 
 @dataclass(frozen=True)

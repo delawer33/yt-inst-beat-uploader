@@ -55,6 +55,29 @@ export function applyJobEvent(queryClient: QueryClient, job: Job): void {
   if (job.kind === "stats" && job.status === "done") {
     void queryClient.invalidateQueries({ queryKey: ["stats"] });
   }
+  if (job.kind === "reel" && job.beat_id !== null) applyReelEvent(queryClient, job);
+}
+
+/** Cache key of the Instagram panel of a Beat; a REEL job event keeps it in step. */
+export const instagramKey = (beatId: string) => ["instagram", beatId] as const;
+
+type PanelCache = { reel: { state: string; progress: number | null; message: string | null } };
+
+/**
+ * A REEL job's progress is patched into the open panel without a refetch (it ticks every
+ * second or so); any other change (queued, done, failed, paused) re-reads the panel.
+ */
+function applyReelEvent(queryClient: QueryClient, job: Job): void {
+  const key = instagramKey(job.beat_id!);
+  if (job.status !== "running") {
+    void queryClient.invalidateQueries({ queryKey: key });
+    return;
+  }
+  queryClient.setQueryData<PanelCache>(key, (old) =>
+    old && old.reel.state === "rendering"
+      ? { ...old, reel: { ...old.reel, progress: job.progress, message: job.message } }
+      : old,
+  );
 }
 
 /** The stream (re)opened. After an outage, whatever we missed is refetched. */

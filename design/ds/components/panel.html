@@ -46,6 +46,49 @@ code { font-size: .92em; }
     <div class="action-bar"><button class="btn btn-primary btn-grow btn-flush">Save &amp; upload when rendered <span class="trail">→</span></button><button class="btn btn-secondary">Save draft</button></div>
   </section>
 </div>
+<div class="demo-head">Instagram panel (<code>.panel.fixed</code>): the Reel, rendering then ready</div>
+<div class="frame" style="height:420px;display:grid;grid-template-columns:1fr 1fr">
+  <section class="panel">
+    <div class="panel-head"><h5>Instagram</h5><button class="btn btn-icon btn-sm" style="margin-left:auto" aria-label="Close">✕</button></div>
+    <div class="panel-body">
+      <section class="stack" aria-label="Reel">
+        <div class="section-head"><span class="label">Reel</span><span class="tag tag-accent">Rendering</span></div>
+        <div class="job"><div class="job-line"><span class="job-title"><span class="dot-live pulse">● </span>Rendering the Reel</span><span class="time num">62%</span></div><div class="progress thin striped"><i style="width:62%"></i></div></div>
+      </section>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h5>Instagram</h5><button class="btn btn-icon btn-sm" style="margin-left:auto" aria-label="Close">✕</button></div>
+    <div class="panel-body">
+      <section class="stack" aria-label="Reel">
+        <div class="section-head"><span class="label">Reel</span><span class="tag tag-neutral">Ready</span></div>
+        <p class="text-soft">1080×1920, the whole beat. Cut your 30 seconds in Instagram.</p>
+        <button class="btn btn-secondary btn-flush">Show in folder <span class="trail">→</span></button>
+      </section>
+    </div>
+  </section>
+</div>
+<div class="demo-head">Instagram panel: the Instagram Post, each field with a copy button</div>
+<div class="frame" style="height:560px;display:grid;grid-template-columns:1fr 1fr">
+  <section class="panel">
+    <div class="panel-head"><h5>Instagram</h5><button class="btn btn-icon btn-sm" style="margin-left:auto" aria-label="Close">✕</button></div>
+    <div class="panel-body">
+      <section class="stack" aria-label="Instagram Post">
+        <div class="section-head"><span class="label">Instagram Post</span><button class="btn btn-ghost btn-sm">Write again</button></div>
+        <div class="copy-row"><span class="label">On-screen text</span><span class="value">this guitar x reggaeton beat is crazy 🎸</span><button class="btn btn-secondary btn-sm">Copy</button></div>
+        <div class="copy-row"><span class="label">Caption</span><span class="value">"Dance With Me" — guitar x reggaeton type beat 🎸 90 BPM · A minor
+
+#typebeat #guitartypebeat #prodbydelawer</span><button class="btn btn-secondary btn-sm">Copy</button></div>
+        <div class="copy-row"><span class="label">Audio name</span><span class="value">Dance With Me (prod. delawer)</span><button class="btn btn-secondary btn-sm">Copy</button></div>
+        <div class="copy-row"><span class="label">Publish time</span><span class="value empty">Not set</span><button class="btn btn-secondary btn-sm" disabled>Copy</button></div>
+        <div class="copy-row"><span class="label">Trial reel</span><span class="value">on</span><span class="hint">Shown to non-followers first; add to profile if it does well.</span></div>
+        <label class="radio"><input type="checkbox" checked><span class="dot"></span>Posted on Instagram</label>
+      </section>
+    </div>
+  </section>
+</div>
+<p class="note-text"><code>.panel.fixed</code> is the same panel pinned to the right edge of the window, 440px (full width on a narrow screen), above the page.</p>
+
 <p class="note-text">The panel is 440px, slides in from the right (<code>.enter-panel</code>), and dims everything behind it. Failed state swaps the tag for <code>.tag-failed</code> and inserts a <code>.note</code> block with the error and actions above the form.</p>
 
 </main>

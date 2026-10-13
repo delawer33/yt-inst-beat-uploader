@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { Job } from "@/api/events";
+import { InstagramButton } from "@/features/instagram/InstagramButton";
 import { useJobs, useRetryJob } from "@/features/jobs/queries";
 import { useBeats, type Beat, type Privacy } from "@/features/library/queries";
 import { useAuthStatus } from "@/features/settings/authQueries";
@@ -35,6 +36,7 @@ const JOB_LABEL: Record<Job["kind"], string> = {
   render: "Render",
   upload: "Upload",
   beatstars: "BeatStars",
+  reel: "Reel",
   sync: "Sync",
   stats: "Stats",
 };
@@ -355,7 +357,8 @@ export function DraftBeatView({
         <span className={clsx("tag", beat.status === "queued" ? "tag-accent" : "tag-outline")}>
           {beat.status === "queued" ? "Queued" : "Draft"}
         </span>
-        <span className="end flex gap-4">
+        <span className="end flex items-center gap-4">
+          <InstagramButton beat={beat} />
           {beat.beatstars?.url != null && (
             <a className="num" href={beat.beatstars.url} target="_blank" rel="noreferrer">
               BeatStars ↗
