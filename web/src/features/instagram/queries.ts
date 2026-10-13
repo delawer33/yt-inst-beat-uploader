@@ -4,6 +4,7 @@ import { instagramKey } from "@/api/events";
 import type { components } from "@/api/schema";
 import { describe, unwrap } from "@/api/unwrap";
 import { beatKey, beatsKey } from "@/features/library/queries";
+import { settingsKey } from "@/features/settings/queries";
 
 export type Instagram = components["schemas"]["InstagramOut"];
 
@@ -15,7 +16,11 @@ export function useInstagram(beatId: string) {
   return useQuery({
     queryKey: instagramKey(beatId),
     queryFn: () =>
-      unwrap(api.GET("/api/beats/{beat_id}/instagram", { params: { path: { beat_id: beatId } } })),
+      unwrap(
+        api.GET("/api/beats/{beat_id}/instagram", {
+          params: { path: { beat_id: beatId } },
+        }),
+      ),
   });
 }
 
@@ -36,7 +41,11 @@ export function useWriteInstagram(beatId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      unwrap(api.POST("/api/beats/{beat_id}/instagram", { params: { path: { beat_id: beatId } } })),
+      unwrap(
+        api.POST("/api/beats/{beat_id}/instagram", {
+          params: { path: { beat_id: beatId } },
+        }),
+      ),
     onSuccess: (panel) => queryClient.setQueryData(instagramKey(beatId), panel),
   });
 }
@@ -56,6 +65,27 @@ export function useSetPosted(beatId: string) {
       queryClient.setQueryData(instagramKey(beatId), panel);
       void queryClient.invalidateQueries({ queryKey: beatKey(beatId) });
       void queryClient.invalidateQueries({ queryKey: beatsKey, exact: true });
+    },
+  });
+}
+
+/**
+ * Answer the panel's question about one artist: a handle, or `null` for a style. The Artist
+ * Handles Setting is updated and the panel comes back re-read.
+ */
+export function useSetArtistHandle(beatId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (answer: { artist: string; handle: string | null }) =>
+      unwrap(
+        api.PUT("/api/beats/{beat_id}/instagram/artist-handle", {
+          params: { path: { beat_id: beatId } },
+          body: answer,
+        }),
+      ),
+    onSuccess: (panel) => {
+      queryClient.setQueryData(instagramKey(beatId), panel);
+      void queryClient.invalidateQueries({ queryKey: settingsKey });
     },
   });
 }

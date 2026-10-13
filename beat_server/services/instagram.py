@@ -77,8 +77,9 @@ class InstagramPost:
     audio_name: str
     alt_text: str
 
-    def caption(self) -> str:
-        return assemble_caption(self.caption_body, self.hashtags)
+    def caption(self, tags: list[str] | None = None) -> str:
+        """The caption with the artists' ``@handle`` line (``tags``) after the body."""
+        return assemble_caption(self.caption_body, self.hashtags, tags)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -100,12 +101,14 @@ class InstagramPost:
         )
 
 
-def assemble_caption(body: str, hashtags: list[str]) -> str:
-    """The caption as pasted into Instagram: the body, a blank line, the hashtags.
+def assemble_caption(body: str, hashtags: list[str], tags: list[str] | None = None) -> str:
+    """The caption as pasted into Instagram: the body, the line of ``@handle`` tags (from the
+    Artist Handles, never the model's), a blank line, the hashtags.
 
     ``ConfigError`` when it is longer than Instagram's 2200 characters.
     """
-    parts = [body.strip(), " ".join(f"#{tag}" for tag in hashtags)]
+    text = "\n".join(part for part in (body.strip(), " ".join(tags or [])) if part)
+    parts = [text, " ".join(f"#{tag}" for tag in hashtags)]
     caption = "\n\n".join(part for part in parts if part)
     if len(caption) > MAX_CAPTION_LENGTH:
         raise ConfigError(
@@ -123,11 +126,12 @@ class InstagramService:
     def __init__(self, runner: Runner) -> None:
         self._run = runner
 
-    def write(self, session: Session, beat: Beat) -> InstagramPost:
+    def write(self, session: Session, beat: Beat, tags: list[str] | None = None) -> InstagramPost:
         """Write the Instagram Post of ``beat`` (again, replacing the one it has) and save it.
 
         ``ConfigError`` for a title with a Placeholder or one that does not read,
-        ``FillError`` when the runner fails or the answer breaks a rule.
+        ``FillError`` when the runner fails or the answer breaks a rule. ``tags`` are the
+        ``@handle`` tags the caption will carry, so the 2200 limit is checked with them.
         """
         left = placeholders_in(beat.title)
         if left:
@@ -137,7 +141,7 @@ class InstagramService:
         except BeatStarsError as e:
             raise ConfigError(str(e)) from None
         answer = self._run(build_prompt(beat), INSTAGRAM_SCHEMA)
-        post = parse_answer(answer)
+        post = parse_answer(answer, tags)
         beat.instagram_post = post.to_json()
         BeatRepo(session).save(beat)
         return post
@@ -180,7 +184,7 @@ def _facts(beat: Beat) -> str:
     )
 
 
-def parse_answer(answer: dict[str, Any]) -> InstagramPost:
+def parse_answer(answer: dict[str, Any], tags: list[str] | None = None) -> InstagramPost:
     """Validate the model's answer; ``FillError`` names the rule it broke."""
     texts = {}
     for key in ("hook", "caption_body", "audio_name", "alt_text"):
@@ -210,7 +214,7 @@ def parse_answer(answer: dict[str, Any]) -> InstagramPost:
         raise FillError("The Instagram Post has an @ in it; the model must not tag. Try again.")
     post = InstagramPost(hashtags=hashtags, **texts)
     try:
-        post.caption()
+        post.caption(tags)
     except ConfigError as e:
         raise FillError(f"{e} Try again.") from None
     return post

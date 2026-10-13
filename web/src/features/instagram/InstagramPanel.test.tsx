@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { Beat } from "@/features/library/queries";
 import { InstagramButton } from "./InstagramButton";
@@ -53,6 +53,8 @@ const POST: NonNullable<Instagram["post"]> = {
 
 const panel = (r: Instagram["reel"], over: Partial<Instagram> = {}): Instagram => ({
   reel: r,
+  unknown_artists: [],
+  tag_people: [],
   post: null,
   publish_time: null,
   beatstars_url: null,
@@ -71,8 +73,7 @@ const view = (r: Instagram["reel"] | null, props = {}, over: Partial<Instagram> 
   </MemoryRouter>
 );
 
-const written = (over: Partial<Instagram> = {}) =>
-  view(reel({}), {}, { post: POST, ...over });
+const written = (over: Partial<Instagram> = {}) => view(reel({}), {}, { post: POST, ...over });
 
 test("the Instagram button is hidden for a beat without audio and cover", () => {
   render(<InstagramButton beat={{ ...beat, has_files: false }} />);
@@ -105,7 +106,11 @@ test("a failed Reel shows the reason", () => {
 });
 
 test("a server error from Show in folder is shown", () => {
-  render(view(reel({ state: "ready" }), { showError: "Beat b1 has no Reel on disk yet." }));
+  render(
+    view(reel({ state: "ready" }), {
+      showError: "Beat b1 has no Reel on disk yet.",
+    }),
+  );
   expect(screen.getByText("Beat b1 has no Reel on disk yet.")).toBeInTheDocument();
 });
 
@@ -123,7 +128,11 @@ test("before the post is written the panel offers to write it, and says nothing 
 });
 
 test("a title with a Placeholder shows the server's refusal", () => {
-  render(view(reel({}), { writeError: "Title still has [[Artist2]]; fix the title first." }));
+  render(
+    view(reel({}), {
+      writeError: "Title still has [[Artist2]]; fix the title first.",
+    }),
+  );
   expect(screen.getByRole("alert")).toHaveTextContent("Title still has [[Artist2]]");
 });
 
@@ -138,6 +147,7 @@ test("the fields come in Instagram's order, each with a copy button", () => {
   expect(labels).toEqual([
     "On-screen text",
     "Caption",
+    "Tag people",
     "Audio name",
     "Alt text",
     "Publish time",
@@ -152,7 +162,10 @@ test("the fields come in Instagram's order, each with a copy button", () => {
 
 test("a copy button puts the field's text on the clipboard", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  });
   render(written());
   fireEvent.click(screen.getByRole("button", { name: "Copy Caption" }));
   expect(writeText).toHaveBeenCalledWith(POST.caption);
@@ -194,4 +207,53 @@ test("the Posted on Instagram switch reports its change", () => {
 test("a posted beat shows the switch on", () => {
   render(view(reel({}), {}, { posted: true }));
   expect(screen.getByRole("checkbox", { name: "Posted on Instagram" })).toBeChecked();
+});
+
+test("an artist the handles do not know is asked for at the top, and saving sends the handle", () => {
+  const onHandle = vi.fn();
+  render(view(reel({}), { onHandle }, { unknown_artists: ["Travis Scott", "Guitar"] }));
+  const group = screen.getByRole("region", { name: "Artist Handles" });
+  expect(group.compareDocumentPosition(screen.getByRole("region", { name: "Reel" }))).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "Instagram handle of Travis Scott" }), {
+    target: { value: "@travisscott" },
+  });
+  fireEvent.click(within(screen.getByRole("form", { name: "Travis Scott" })).getByText("Save"));
+  expect(onHandle).toHaveBeenCalledWith("Travis Scott", "@travisscott");
+});
+
+test("the style option marks a name as no artist", () => {
+  const onHandle = vi.fn();
+  render(view(reel({}), { onHandle }, { unknown_artists: ["Guitar"] }));
+  fireEvent.click(screen.getByRole("button", { name: "Guitar is a style, not an artist" }));
+  expect(onHandle).toHaveBeenCalledWith("Guitar", null);
+});
+
+test("Save needs a handle", () => {
+  render(view(reel({}), {}, { unknown_artists: ["Guitar"] }));
+  expect(within(screen.getByRole("form", { name: "Guitar" })).getByText("Save")).toBeDisabled();
+});
+
+test("with every artist known there is no question", () => {
+  render(view(reel({})));
+  expect(screen.queryByRole("region", { name: "Artist Handles" })).not.toBeInTheDocument();
+});
+
+test("Tag people shows the handles and copies them", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  });
+  render(written({ tag_people: ["@travisscott", "@dontoliver"] }));
+  expect(screen.getByText("@travisscott, @dontoliver")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Copy Tag people" }));
+  expect(writeText).toHaveBeenCalledWith("@travisscott, @dontoliver");
+});
+
+test("Tag people is empty, not copyable, when no artist has a handle", () => {
+  render(written());
+  expect(screen.getByText("No artist to tag")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Copy Tag people" })).toBeDisabled();
 });

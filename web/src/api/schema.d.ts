@@ -326,6 +326,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/instagram/artist-handle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Artist Handle
+         * @description Answer the panel's question about one artist: save the handle (or "a style") in the
+         *     Artist Handles Setting and read the panel again.
+         */
+        put: operations["put_artist_handle_api_beats__beat_id__instagram_artist_handle_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/beats/{beat_id}/instagram/posted": {
         parameters: {
             query?: never;
@@ -582,6 +603,16 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ArtistHandleIn
+         * @description One answer to "who is this?": a handle (with or without ``@``) or ``null`` = a style.
+         */
+        ArtistHandleIn: {
+            /** Artist */
+            artist: string;
+            /** Handle */
+            handle: string | null;
+        };
+        /**
          * AuthStatus
          * @enum {string}
          */
@@ -796,6 +827,10 @@ export interface components {
         /** InstagramOut */
         InstagramOut: {
             reel: components["schemas"]["ReelOut"];
+            /** Unknown Artists */
+            unknown_artists: string[];
+            /** Tag People */
+            tag_people: string[];
             post: components["schemas"]["InstagramPostOut"] | null;
             /** Publish Time */
             publish_time: string | null;
@@ -916,6 +951,10 @@ export interface components {
             description_template?: string | null;
             /** Tags Template */
             tags_template?: string[] | null;
+            /** Artist Handles */
+            artist_handles?: {
+                [key: string]: string | null;
+            } | null;
         };
         /** SettingsOut */
         SettingsOut: {
@@ -933,6 +972,10 @@ export interface components {
             description_template: string;
             /** Tags Template */
             tags_template: string[];
+            /** Artist Handles */
+            artist_handles: {
+                [key: string]: string | null;
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -1495,6 +1538,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_artist_handle_api_beats__beat_id__instagram_artist_handle_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtistHandleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
             };
             /** @description Validation Error */
             422: {

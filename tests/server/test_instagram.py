@@ -12,8 +12,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from beat_server.db.models import Beat, BeatStatus
-from beat_server.db.repo import BeatRepo
+from beat_server.db.repo import BeatRepo, SettingsRepo
 from beat_server.services.errors import FillError
+from beat_server.services.handles import set_handle, tag_handles, unknown_artists
 from beat_server.services.instagram import (
     INSTAGRAM_SCHEMA,
     MAX_CAPTION_LENGTH,
@@ -264,3 +265,111 @@ def test_publish_time_of_a_published_beat_is_when_it_went_out_and_empty_for_a_dr
     make_beat(session, id="dr", youtube_id=None)
     assert client.get("/api/beats/pub/instagram").json()["publish_time"].startswith("2026-09-01")
     assert client.get("/api/beats/dr/instagram").json()["publish_time"] is None
+
+
+# --- Artist Handles ------------------------------------------------------------------------
+
+DUO = '[FREE] Travis Scott x Don Toliver Type Beat 2026 - "Lasso" | Dark Trap'
+
+
+def test_handles_are_inserted_from_the_map_after_the_body() -> None:
+    caption = assemble_caption("Body", ["a"], ["@travisscott", "@dontoliver"])
+    assert caption == "Body\n@travisscott @dontoliver\n\n#a"
+
+
+def test_tag_handles_leave_out_styles_and_unknown_artists() -> None:
+    handles = {"travis scott": "travisscott", "guitar": None}
+    artists = ["Travis Scott", "Guitar", "Don Toliver"]
+    assert tag_handles(handles, artists) == ["@travisscott"]
+    assert unknown_artists(handles, artists) == ["Don Toliver"]
+
+
+def test_artist_names_match_case_insensitively() -> None:
+    assert tag_handles({"travis scott": "travisscott"}, ["TRAVIS  scott"]) == ["@travisscott"]
+
+
+def test_the_length_limit_holds_with_the_handle_line() -> None:
+    body = "x" * (MAX_CAPTION_LENGTH - len("\n\n#a") - 5)
+    assert len(assemble_caption(body, ["a"])) <= MAX_CAPTION_LENGTH
+    with pytest.raises(ConfigError, match="2200"):
+        assemble_caption(body, ["a"], ["@travisscott"])
+
+
+def test_set_handle_strips_the_at_and_rejects_nonsense(session: Session) -> None:
+    settings = SettingsRepo(session)
+    assert set_handle(settings, "Travis Scott", "@travisscott") == {"travis scott": "travisscott"}
+    assert set_handle(settings, "Guitar", None) == {"travis scott": "travisscott", "guitar": None}
+    with pytest.raises(ConfigError, match="not an Instagram handle"):
+        set_handle(settings, "Don Toliver", "don toliver!")
+
+
+def test_the_panel_lists_unknown_artists_and_no_tags(
+    client: TestClient, session: Session, fake: FakeRunner
+) -> None:
+    make_beat(session, title=DUO)
+    body = client.get("/api/beats/b1/instagram").json()
+    assert body["unknown_artists"] == ["Travis Scott", "Don Toliver"]
+    assert body["tag_people"] == []
+
+
+def test_answering_saves_the_setting_and_rereads_the_panel(
+    client: TestClient, session: Session, fake: FakeRunner
+) -> None:
+    make_beat(session, title='[FREE] Guitar x Travis Scott Type Beat 2026 - "Lasso" | Trap')
+    client.put("/api/beats/b1/instagram/artist-handle", json={"artist": "Guitar", "handle": None})
+    body = client.put(
+        "/api/beats/b1/instagram/artist-handle",
+        json={"artist": "Travis Scott", "handle": "@travisscott"},
+    ).json()
+
+    assert body["unknown_artists"] == []
+    assert body["tag_people"] == ["@travisscott"]
+    assert client.get("/api/settings").json()["artist_handles"] == {
+        "guitar": None,
+        "travis scott": "travisscott",
+    }
+
+
+def test_a_bad_handle_is_422(client: TestClient, session: Session, fake: FakeRunner) -> None:
+    make_beat(session, title=DUO)
+    response = client.put(
+        "/api/beats/b1/instagram/artist-handle", json={"artist": "Travis Scott", "handle": "a b"}
+    )
+    assert response.status_code == 422
+
+
+def test_the_caption_has_the_handle_line_and_a_changed_handle_shows_without_writing_again(
+    client: TestClient, session: Session, fake: FakeRunner
+) -> None:
+    make_beat(session, title=DUO)
+    for artist, handle in [("Travis Scott", "travis"), ("Don Toliver", "don")]:
+        client.put(
+            "/api/beats/b1/instagram/artist-handle", json={"artist": artist, "handle": handle}
+        )
+    written = client.post("/api/beats/b1/instagram").json()
+    assert "\n@travis @don\n\n#" in written["post"]["caption"]
+    assert written["tag_people"] == ["@travis", "@don"]
+
+    client.put(
+        "/api/settings", json={"stats_hour": 4, "artist_handles": {"travis scott": "travis.s"}}
+    )
+    read = client.get("/api/beats/b1/instagram").json()
+
+    assert "\n@travis.s\n\n#" in read["post"]["caption"]
+    assert read["unknown_artists"] == ["Don Toliver"]
+    assert len(fake.prompts) == 1  # the model never saw a handle and was not asked again
+    assert "travis.s" not in fake.prompts[0] and "@travis" not in fake.prompts[0]
+
+
+def test_settings_read_and_write_the_whole_map(client: TestClient) -> None:
+    assert client.get("/api/settings").json()["artist_handles"] == {}
+    put = client.put(
+        "/api/settings",
+        json={"stats_hour": 4, "artist_handles": {"Travis Scott": "@travisscott", "Guitar": None}},
+    )
+    assert put.json()["artist_handles"] == {"travis scott": "travisscott", "guitar": None}
+    # A save of something else leaves the map alone.
+    kept = client.put("/api/settings", json={"stats_hour": 5}).json()
+    assert kept["artist_handles"] == {"travis scott": "travisscott", "guitar": None}
+    cleared = client.put("/api/settings", json={"stats_hour": 5, "artist_handles": {}}).json()
+    assert cleared["artist_handles"] == {}

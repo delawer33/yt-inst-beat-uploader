@@ -18,6 +18,7 @@ const settings = {
   title_template: "{name} | Free Type Beat",
   description_template: "prod. by me",
   tags_template: ["trap", "free"],
+  artist_handles: { "travis scott": "travisscott", guitar: null } as Record<string, string | null>,
 };
 
 const authStatus = {
@@ -40,7 +41,13 @@ const syncJob = {
   not_before: null,
 };
 
-const doneJob = { ...syncJob, id: "j0", status: "done", progress: 1, finished_at: "2026-09-24T03:00:02" };
+const doneJob = {
+  ...syncJob,
+  id: "j0",
+  status: "done",
+  progress: 1,
+  finished_at: "2026-09-24T03:00:02",
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -62,7 +69,9 @@ function saveIn(rowTitle: string) {
 
 function renderPage(entry = "/settings") {
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route path="/settings" element={<SettingsPage />} />
@@ -72,26 +81,26 @@ function renderPage(entry = "/settings") {
   );
 }
 
-test("the three rows render, with the account card and the connection state", async () => {
+test("the four rows render, with the account card and the connection state", async () => {
   renderPage();
   expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
   expect(screen.getByText("YouTube")).toBeInTheDocument();
   expect(screen.getByText("Nightly stats")).toBeInTheDocument();
   expect(screen.getByText("Templates")).toBeInTheDocument();
 
-  await waitFor(() =>
-    expect(screen.getByTestId("channel-title")).toHaveTextContent("NOVA Beats"),
-  );
+  await waitFor(() => expect(screen.getByTestId("channel-title")).toHaveTextContent("NOVA Beats"));
   expect(screen.getByLabelText("Connection state")).toHaveTextContent("Connected");
   expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
-  expect(document.querySelectorAll(".settings-row")).toHaveLength(3);
+  expect(document.querySelectorAll(".settings-row")).toHaveLength(4);
 });
 
 test("the hour and the last run come from the server", async () => {
   renderPage();
   await waitFor(() => expect(screen.getByLabelText(/^Hour/)).toHaveValue(4));
   // The jobs query feeds the last run and settles on its own clock, so wait for it too.
-  await waitFor(() => expect(screen.getByTestId("last-run")).toHaveTextContent(/last run \S+ 24, 2026/));
+  await waitFor(() =>
+    expect(screen.getByTestId("last-run")).toHaveTextContent(/last run \S+ 24, 2026/),
+  );
   expect(screen.getByTestId("last-run")).not.toHaveTextContent("never");
   expect(screen.getByTestId("last-run")).not.toHaveTextContent("unknown");
 });
@@ -151,7 +160,9 @@ test("templates load, edit and save through the settings API", async () => {
   expect(screen.getByLabelText(/^Tags/)).toHaveValue("trap, free");
 
   fireEvent.change(title, { target: { value: "{name} (free)" } });
-  fireEvent.change(screen.getByLabelText(/^Tags/), { target: { value: "trap , hard," } });
+  fireEvent.change(screen.getByLabelText(/^Tags/), {
+    target: { value: "trap , hard," },
+  });
   fireEvent.click(saveIn("Templates"));
 
   await waitFor(() =>
@@ -172,7 +183,9 @@ test("the hour saves on its own", async () => {
   fireEvent.change(screen.getByLabelText(/^Hour/), { target: { value: "3" } });
   fireEvent.click(saveIn("Nightly stats"));
   await waitFor(() =>
-    expect(api.PUT).toHaveBeenCalledWith("/api/settings", { body: { stats_hour: 3 } }),
+    expect(api.PUT).toHaveBeenCalledWith("/api/settings", {
+      body: { stats_hour: 3 },
+    }),
   );
 });
 
@@ -189,4 +202,33 @@ test("a failed OAuth return shows the reason as a note", async () => {
   const note = await screen.findByRole("alert");
   expect(note).toHaveTextContent("Connection failed");
   expect(note).toHaveTextContent("access_denied");
+});
+
+test("Artist Handles are listed, a style has no handle, and saving sends the whole map", async () => {
+  renderPage();
+  const handle = await screen.findByLabelText("Handle of travis scott");
+  expect(handle).toHaveValue("travisscott");
+  expect(screen.getByLabelText("Handle of guitar")).toBeDisabled();
+
+  fireEvent.change(handle, { target: { value: "@travis.s" } });
+  fireEvent.click(screen.getByRole("button", { name: "Remove guitar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add artist" }));
+  const [, added] = screen.getAllByLabelText("Artist");
+  fireEvent.change(added, { target: { value: "Don Toliver" } });
+  fireEvent.change(screen.getByLabelText("Handle of Don Toliver"), {
+    target: { value: "x" },
+  });
+  fireEvent.click(
+    within(screen.getByRole("form", { name: "Artist Handles" })).getByRole("button", {
+      name: "Save",
+    }),
+  );
+
+  await waitFor(() => expect(api.PUT).toHaveBeenCalled());
+  expect(api.PUT).toHaveBeenCalledWith("/api/settings", {
+    body: {
+      stats_hour: 4,
+      artist_handles: { "travis scott": "@travis.s", "Don Toliver": "x" },
+    },
+  });
 });

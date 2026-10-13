@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
+import { ArtistHandlesRow } from "./ArtistHandlesRow";
 import { authStatusKey } from "./authQueries";
 import { NightlyStatsRow } from "./NightlyStatsRow";
 import { TemplatesRow } from "./TemplatesRow";
@@ -50,6 +51,7 @@ export function SettingsPage() {
       <YouTubeRow />
       <NightlyStatsRow />
       <TemplatesRow />
+      <ArtistHandlesRow />
     </div>
   );
 }

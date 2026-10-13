@@ -9,12 +9,19 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from beat_server.api.beats import QueueDep, SessionDep, WorkspaceDep, load_beat
 from beat_server.db.models import Beat
-from beat_server.db.repo import BeatRepo, JobRepo
+from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
+from beat_server.services.handles import (
+    load_handles,
+    set_handle,
+    tag_handles,
+    title_artists,
+    unknown_artists,
+)
 from beat_server.services.instagram import (
     InstagramPost,
     InstagramService,
@@ -59,10 +66,10 @@ class InstagramPostOut(BaseModel):
     alt_text: str
 
     @classmethod
-    def from_post(cls, post: InstagramPost) -> "InstagramPostOut":
+    def from_post(cls, post: InstagramPost, tags: list[str]) -> "InstagramPostOut":
         return cls(
             hook=post.hook,
-            caption=post.caption(),
+            caption=post.caption(tags),
             hashtags=post.hashtags,
             audio_name=post.audio_name,
             alt_text=post.alt_text,
@@ -73,8 +80,19 @@ class PostedIn(BaseModel):
     posted: bool
 
 
+class ArtistHandleIn(BaseModel):
+    """One answer to "who is this?": a handle (with or without ``@``) or ``null`` = a style."""
+
+    artist: str = Field(min_length=1)
+    handle: str | None
+
+
 class InstagramOut(BaseModel):
     reel: ReelOut
+    # Artists of the title the Artist Handles do not know yet; the panel asks for each.
+    unknown_artists: list[str]
+    # ``@handle`` of the title's artists that have one: the "Tag people" field.
+    tag_people: list[str]
     # ``None`` until the owner asks for it (POST).
     post: InstagramPostOut | None
     # When the beat goes public on YouTube (UTC, like every server time); ``None`` for a
@@ -87,12 +105,18 @@ class InstagramOut(BaseModel):
 def _out(session: Session, ws: WorkspaceDep, queue: QueueDep, beat_id: str) -> InstagramOut:
     beat = load_beat(session, beat_id)
     state = ensure_reel(ws, JobRepo(session), queue, beat)
-    return _build(beat, state)
+    return _build(session, beat, state)
 
 
-def _build(beat: Beat, state: ReelState) -> InstagramOut:
+def _build(session: Session, beat: Beat, state: ReelState) -> InstagramOut:
     job = state.job
+    # Read at display time, so a fixed handle shows up without writing the text again.
+    handles = load_handles(SettingsRepo(session))
+    artists = title_artists(beat.title)
+    tags = tag_handles(handles, artists)
     return InstagramOut(
+        unknown_artists=unknown_artists(handles, artists),
+        tag_people=tags,
         reel=ReelOut(
             state=state.state,
             progress=job.progress if job and state.state == "rendering" else None,
@@ -100,7 +124,7 @@ def _build(beat: Beat, state: ReelState) -> InstagramOut:
             error=job.error if job and state.state == "failed" else None,
         ),
         post=(
-            InstagramPostOut.from_post(InstagramPost.from_json(beat.instagram_post))
+            InstagramPostOut.from_post(InstagramPost.from_json(beat.instagram_post), tags)
             if beat.instagram_post
             else None
         ),
@@ -136,8 +160,21 @@ def write_instagram(
 ) -> InstagramOut:
     """Write the Instagram Post, or write it again (the old one is replaced)."""
     beat = load_beat(session, beat_id)
-    service.write(session, beat)
-    return _build(beat, ensure_reel(ws, JobRepo(session), queue, beat))
+    handles = load_handles(SettingsRepo(session))
+    tags = tag_handles(handles, title_artists(beat.title))
+    service.write(session, beat, tags)
+    return _build(session, beat, ensure_reel(ws, JobRepo(session), queue, beat))
+
+
+@router.put("/{beat_id}/instagram/artist-handle", response_model=InstagramOut)
+def put_artist_handle(
+    beat_id: str, body: ArtistHandleIn, session: SessionDep, ws: WorkspaceDep
+) -> InstagramOut:
+    """Answer the panel's question about one artist: save the handle (or "a style") in the
+    Artist Handles Setting and read the panel again."""
+    beat = load_beat(session, beat_id)
+    set_handle(SettingsRepo(session), body.artist, body.handle)
+    return _build(session, beat, reel_state(ws, JobRepo(session), beat))
 
 
 @router.put("/{beat_id}/instagram/posted", response_model=InstagramOut)
@@ -146,4 +183,4 @@ def set_posted(beat_id: str, body: PostedIn, session: SessionDep, ws: WorkspaceD
     beat = load_beat(session, beat_id)
     beat.instagram_posted = body.posted
     BeatRepo(session).save(beat)
-    return _build(beat, reel_state(ws, JobRepo(session), beat))
+    return _build(session, beat, reel_state(ws, JobRepo(session), beat))

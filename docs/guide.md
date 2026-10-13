@@ -124,6 +124,9 @@ The page is three rows, what on the left and how on the right:
   progress, right there.
 - **Templates** — the title, description and tag templates every new Beat starts from;
   `{name}` becomes the audio file name without extension.
+- **Artist Handles** — the Instagram account of each artist a title names, one line per
+  artist, and names marked "Style, not an artist" (Guitar, Reggaeton) that are never tagged.
+  The Instagram panel asks for a new artist's handle once; fix a wrong one here.
 
 #### Add a beat from the web UI
 
