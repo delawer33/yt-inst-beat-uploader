@@ -32,6 +32,18 @@ export function useCreateBeatFromFolder() {
   );
 }
 
+/** Attach a Bounce Folder to a Published beat made before them, for "Put on BeatStars". */
+export function useAttachFolder() {
+  return useBeatMutation(({ id, path }: { id: string; path: string }) =>
+    unwrap(
+      api.POST("/api/beats/{beat_id}/bounce-folder", {
+        params: { path: { beat_id: id } },
+        body: { path },
+      }),
+    ),
+  );
+}
+
 export function useCreateBeat() {
   return useBeatMutation(({ audio, image }: { audio: File; image: File }) =>
     createBeat(audio, image),

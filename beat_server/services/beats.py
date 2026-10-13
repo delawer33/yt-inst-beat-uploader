@@ -45,6 +45,11 @@ NAME_PLACEHOLDER = "{name}"
 # Beat's BeatStars Track once it exists, else the text after the ``|`` (possibly nothing).
 BEATSTARS_MARKER = re.compile(r"\{beatstars(?:\|(?P<fallback>[^}]*))?\}")
 
+# The DM line of descriptions written before the marker existed; "Put on BeatStars" later
+# swaps it for the link when the description carries no marker.
+DM_LINE = re.compile(r"^.*DM me on Instagram.*$", re.MULTILINE)
+LINK_LINE = "💰 Buy / license this beat: {url}"
+
 AUDIO_BASENAME = "audio"
 COVER_BASENAME = "cover"
 
@@ -182,6 +187,48 @@ def create_draft_from_folder(
     return repo.add(beat)
 
 
+def attach_bounce_folder(beat: Beat, folder: Path) -> Beat:
+    """Give a Published or Scheduled Beat made before Bounce Folders its folder, so it can be
+    put on BeatStars. The video's audio and cover stay as they are; only the folder and its
+    facts are stored. ``BeatStateError`` for a beat that has one already, is on BeatStars or
+    is not on YouTube; ``BounceFolderError`` when the folder is wrong."""
+    if beat.status not in {BeatStatus.PUBLISHED, BeatStatus.SCHEDULED} or not beat.youtube_id:
+        raise BeatStateError(
+            f"Beat {beat.id} is {beat.status}; a Bounce Folder is attached only to a "
+            "Published or Scheduled beat."
+        )
+    if beat.bounce_folder is not None:
+        raise BeatStateError(f"Beat {beat.id} already has a Bounce Folder: {beat.bounce_folder}")
+    if beat.beatstars_url is not None:
+        raise BeatStateError(f"Beat {beat.id} is already on BeatStars: {beat.beatstars_url}")
+    if not folder.is_absolute():
+        raise BounceFolderError(f"Give the full path of the Bounce Folder, not {folder}.")
+    bounce = read_bounce_folder(folder)
+    facts = bounce.facts
+    beat.bounce_folder = str(bounce.folder)
+    beat.bpm = facts.bpm
+    beat.music_key = facts.key
+    beat.name_moods = list(facts.moods)
+    beat.name_instruments = list(facts.instruments)
+    beat.samples = facts.samples
+    return beat
+
+
+def youtube_description_with_link(description: str, url: str) -> str:
+    """The description of a video already on YouTube with the BeatStars link in it: the marker
+    swapped if there is one, else the old DM line replaced, else a link line after the first
+    line (the title)."""
+    if BEATSTARS_MARKER.search(description):
+        return with_beatstars_link(description, url)
+    if url in description:
+        return description
+    line = LINK_LINE.format(url=url)
+    if DM_LINE.search(description):
+        return DM_LINE.sub(lambda _: line, description, count=1)
+    first, sep, rest = description.partition("\n")
+    return f"{first}\n\n{line}{sep}{rest}" if first else line
+
+
 def with_beatstars_link(description: str, url: str | None) -> str:
     """``description`` with every ``{beatstars|fallback}`` marker swapped for ``url``, or for
     its fallback text when there is no Track. The Beat keeps the marker; only what goes to
@@ -195,10 +242,19 @@ def with_beatstars_link(description: str, url: str | None) -> str:
 
 def metadata_of(beat: Beat) -> YouTubeMetadata:
     """The beat's Metadata as ``upload_video`` wants it (validated on the way), the
-    BeatStars marker of its description turned into the link or its fallback."""
+    BeatStars link put in its description (``youtube_description``)."""
     data = _mapping(beat)
-    data["description"] = with_beatstars_link(beat.description, beat.beatstars_url)
+    data["description"] = youtube_description(beat)
     return YouTubeMetadata.from_mapping(data)
+
+
+def youtube_description(beat: Beat) -> str:
+    """What YouTube gets as the description: with a Track, its link in place of the marker,
+    else of the DM line, else after the title; without one, the marker's fallback."""
+    url = beat.beatstars_url
+    if url:
+        return youtube_description_with_link(beat.description, url)
+    return with_beatstars_link(beat.description, None)
 
 
 def snippet_of(beat: Beat) -> YouTubeMetadata:
@@ -206,7 +262,7 @@ def snippet_of(beat: Beat) -> YouTubeMetadata:
     ``metadata_of`` but without the publish time: a time that has passed since the upload
     must not stop the description from being updated."""
     data = _mapping(beat)
-    data["description"] = with_beatstars_link(beat.description, beat.beatstars_url)
+    data["description"] = youtube_description(beat)
     data["publish_at"] = None
     return YouTubeMetadata.from_mapping(data)
 

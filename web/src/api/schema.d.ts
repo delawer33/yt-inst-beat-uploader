@@ -197,6 +197,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/bounce-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach Folder
+         * @description Attach a Bounce Folder to a Published or Scheduled beat made before Bounce Folders, so
+         *     "Put on BeatStars" applies to it. 409 for a beat that has one or is on BeatStars, 422 for
+         *     a wrong folder.
+         */
+        post: operations["attach_folder_api_beats__beat_id__bounce_folder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/beats/{beat_id}/cover": {
         parameters: {
             query?: never;
@@ -551,6 +573,8 @@ export interface components {
             /** Cover Url */
             cover_url: string | null;
             beatstars: components["schemas"]["BeatStarsPreview"] | null;
+            /** Beatstars Url */
+            beatstars_url: string | null;
             /** Synced At */
             synced_at: string | null;
             /**
@@ -1129,6 +1153,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attach_folder_api_beats__beat_id__bounce_folder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -24,6 +24,7 @@ from beat_server.jobs.queue import JobQueue
 from beat_server.services.beats import (
     EDITABLE,
     apply_patch,
+    attach_bounce_folder,
     check_no_placeholders,
     create_draft,
     create_draft_from_folder,
@@ -269,6 +270,22 @@ def put_on_beatstars(beat_id: str, session: SessionDep, queue: QueueDep) -> Beat
     BeatRepo(session).save(beat)
     if not JobRepo(session).has_pending(JobKind.BEATSTARS, beat.id):
         queue.enqueue(JobKind.BEATSTARS, beat.id)
+    return beat_out(session, beat)
+
+
+@router.post("/{beat_id}/bounce-folder", response_model=BeatOut)
+def attach_folder(beat_id: str, body: BounceIn, session: SessionDep) -> BeatOut:
+    """Attach a Bounce Folder to a Published or Scheduled beat made before Bounce Folders, so
+    "Put on BeatStars" applies to it. 409 for a beat that has one or is on BeatStars, 422 for
+    a wrong folder."""
+    beat = load_beat(session, beat_id)
+    path = Path(body.path.strip().strip("\"'")).expanduser()
+    try:
+        attach_bounce_folder(beat, path)
+    except BeatUploadError:
+        session.rollback()
+        raise
+    BeatRepo(session).save(beat)
     return beat_out(session, beat)
 
 

@@ -30,15 +30,21 @@ const uploaded: Beat = {
   active_job: null,
   cover_url: null,
   beatstars: null,
+  beatstars_url: null,
   synced_at: null,
   created_at: "2026-09-22T10:00:00",
   updated_at: "2026-09-22T10:00:00",
 };
 
-const scheduled: Beat = { ...uploaded, status: "scheduled", publish_at: "2026-10-01T18:00:00" };
+const scheduled: Beat = {
+  ...uploaded,
+  status: "scheduled",
+  publish_at: "2026-10-01T18:00:00",
+};
 
 const select = () => screen.getByLabelText("Privacy");
-const pick = (value: string) => fireEvent.change(select(), { target: { value } });
+const pick = (value: string) =>
+  fireEvent.change(select(), { target: { value } });
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -46,10 +52,15 @@ test("Private, Unlisted and Public apply on selection and clear any schedule", (
   const onChange = vi.fn();
   render(<PrivacyControl beat={uploaded} onChange={onChange} />);
   expect(select()).toHaveValue("private");
-  expect(screen.queryByRole("button", { name: "Schedule" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Schedule" }),
+  ).not.toBeInTheDocument();
 
   pick("unlisted");
-  expect(onChange).toHaveBeenCalledWith({ privacy: "unlisted", publish_at: null });
+  expect(onChange).toHaveBeenCalledWith({
+    privacy: "unlisted",
+    publish_at: null,
+  });
 });
 
 test("Scheduled shows the time field and sends only on the Schedule button", () => {
@@ -76,7 +87,9 @@ test("picking Private again before Schedule just hides the field, no request", (
   render(<PrivacyControl beat={uploaded} onChange={onChange} />);
   pick("scheduled");
   pick("private");
-  expect(screen.queryByRole("button", { name: "Schedule" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Schedule" }),
+  ).not.toBeInTheDocument();
   expect(onChange).not.toHaveBeenCalled();
 });
 
@@ -115,7 +128,10 @@ test("Private on a Scheduled beat cancels the schedule immediately", () => {
   const onChange = vi.fn();
   render(<PrivacyControl beat={scheduled} onChange={onChange} />);
   pick("private");
-  expect(onChange).toHaveBeenCalledWith({ privacy: "private", publish_at: null });
+  expect(onChange).toHaveBeenCalledWith({
+    privacy: "private",
+    publish_at: null,
+  });
 });
 
 test("Public on a Scheduled beat asks 'Publish now?' and only publishes on OK", () => {
@@ -130,7 +146,10 @@ test("Public on a Scheduled beat asks 'Publish now?' and only publishes on OK", 
 
   confirm.mockReturnValue(true);
   pick("public");
-  expect(onChange).toHaveBeenCalledWith({ privacy: "public", publish_at: null });
+  expect(onChange).toHaveBeenCalledWith({
+    privacy: "public",
+    publish_at: null,
+  });
 });
 
 test("Public on a plain uploaded beat does not ask", () => {
@@ -139,11 +158,16 @@ test("Public on a plain uploaded beat does not ask", () => {
   render(<PrivacyControl beat={uploaded} onChange={onChange} />);
   pick("public");
   expect(confirm).not.toHaveBeenCalled();
-  expect(onChange).toHaveBeenCalledWith({ privacy: "public", publish_at: null });
+  expect(onChange).toHaveBeenCalledWith({
+    privacy: "public",
+    publish_at: null,
+  });
 });
 
 test("shows the server error next to the selector", () => {
-  render(<PrivacyControl beat={uploaded} onChange={vi.fn()} error="Not connected" />);
+  render(
+    <PrivacyControl beat={uploaded} onChange={vi.fn()} error="Not connected" />,
+  );
   expect(screen.getByRole("alert")).toHaveTextContent("Not connected");
 });
 
@@ -195,7 +219,10 @@ const day = (d: string, views: number): DayPoint => ({
   avg_view_percent: 40,
 });
 
-function renderPage(beat: Beat = published, props: Partial<Parameters<typeof PublishedBeatView>[0]> = {}) {
+function renderPage(
+  beat: Beat = published,
+  props: Partial<Parameters<typeof PublishedBeatView>[0]> = {},
+) {
   const onRetry = vi.fn();
   const onPrivacy = vi.fn();
   render(
@@ -216,37 +243,50 @@ function renderPage(beat: Beat = published, props: Partial<Parameters<typeof Pub
 test("the head carries the crumb, the status tag and the YouTube link", () => {
   renderPage();
 
-  expect(screen.getByRole("link", { name: "← Library" })).toHaveAttribute("href", "/");
-  expect(screen.getByText("Published")).toHaveAttribute("data-status", "published");
+  expect(screen.getByRole("link", { name: "← Library" })).toHaveAttribute(
+    "href",
+    "/",
+  );
+  expect(screen.getByText("Published")).toHaveAttribute(
+    "data-status",
+    "published",
+  );
   const link = screen.getByRole("link", { name: /youtu\.be\/yt1/ });
   expect(link).toHaveAttribute("href", "https://youtu.be/yt1");
   expect(link).toHaveAttribute("target", "_blank");
 });
 
 test("the head links the BeatStars Track once it exists", () => {
-  renderPage({ ...published, beatstars: {
-  title: "Naughty | Yeat Type Beat",
-  tags: [],
-  genres: [],
-  moods: [],
-  instruments: [],
-  samples: false,
-  release: "with_video" as const,
-  error: null,
-  track_id: "TK1",
-  url: "https://www.beatstars.com/beat/naughty-1",
-} });
+  renderPage({
+    ...published,
+    beatstars: {
+      title: "Naughty | Yeat Type Beat",
+      tags: [],
+      genres: [],
+      moods: [],
+      instruments: [],
+      samples: false,
+      release: "with_video" as const,
+      error: null,
+      track_id: "TK1",
+      url: "https://www.beatstars.com/beat/naughty-1",
+    },
+  });
 
   expect(screen.getByRole("link", { name: /BeatStars/ })).toHaveAttribute(
     "href",
     "https://www.beatstars.com/beat/naughty-1",
   );
-  expect(screen.getByRole("link", { name: /youtu\.be\/yt1/ })).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: /youtu\.be\/yt1/ }),
+  ).toBeInTheDocument();
 });
 
 test("a beat without a Track shows no BeatStars link", () => {
   renderPage();
-  expect(screen.queryByRole("link", { name: /BeatStars/ })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: /BeatStars/ }),
+  ).not.toBeInTheDocument();
 });
 
 test("the metadata is read-only: no title or description field, just the words and tags", () => {
@@ -298,12 +338,18 @@ test("the daily views are drawn as bars, the last one partial", () => {
 });
 
 test("a scheduled beat keeps its schedule controls", () => {
-  const { onPrivacy } = renderPage({ ...published, status: "scheduled", publish_at: "2026-10-01T18:00:00" });
+  const { onPrivacy } = renderPage({
+    ...published,
+    status: "scheduled",
+    publish_at: "2026-10-01T18:00:00",
+  });
 
   expect(screen.getByLabelText("Privacy")).toHaveValue("scheduled");
   expect(screen.getByLabelText("Publish at")).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("Publish at"), { target: { value: "2026-10-05T12:00" } });
+  fireEvent.change(screen.getByLabelText("Publish at"), {
+    target: { value: "2026-10-05T12:00" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
   expect(onPrivacy).toHaveBeenCalledWith({
     privacy: "private",
@@ -312,7 +358,12 @@ test("a scheduled beat keeps its schedule controls", () => {
 });
 
 test("a beat that is not on YouTube yet cannot change its visibility", () => {
-  renderPage({ ...published, status: "uploading", youtube_id: null, youtube_url: null });
+  renderPage({
+    ...published,
+    status: "uploading",
+    youtube_id: null,
+    youtube_url: null,
+  });
 
   expect(screen.getByLabelText("Privacy")).toBeDisabled();
   expect(screen.getByText("Set on YouTube after upload.")).toBeInTheDocument();
@@ -342,23 +393,35 @@ test("a Published Bounce Folder beat without a Track offers Put on BeatStars", (
 
 test("a Scheduled Bounce Folder beat without a Track offers it too", () => {
   renderPage({ ...published, status: "scheduled", beatstars: trackless });
-  expect(screen.getByRole("button", { name: "Put on BeatStars" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Put on BeatStars" }),
+  ).toBeEnabled();
 });
 
 test("no button once the beat has a Track", () => {
-  const withTrack = { ...trackless, track_id: "TK1", url: "https://www.beatstars.com/beat/n-1" };
+  const withTrack = {
+    ...trackless,
+    track_id: "TK1",
+    url: "https://www.beatstars.com/beat/n-1",
+  };
   renderPage({ ...published, beatstars: withTrack });
-  expect(screen.queryByRole("button", { name: "Put on BeatStars" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Put on BeatStars" }),
+  ).not.toBeInTheDocument();
 });
 
 test("no button for a beat with no Bounce Folder", () => {
   renderPage();
-  expect(screen.queryByRole("button", { name: "Put on BeatStars" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Put on BeatStars" }),
+  ).not.toBeInTheDocument();
 });
 
 test("no button for a private upload without a schedule", () => {
   renderPage({ ...published, status: "uploaded", beatstars: trackless });
-  expect(screen.queryByRole("button", { name: "Put on BeatStars" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Put on BeatStars" }),
+  ).not.toBeInTheDocument();
 });
 
 test("the button waits while the BEATSTARS Job runs, and shows the refusal", () => {
@@ -370,6 +433,28 @@ test("the button waits while the BEATSTARS Job runs, and shows the refusal", () 
     },
     { putError: "Beat b1 is already on BeatStars" },
   );
-  expect(screen.getByRole("button", { name: "Put on BeatStars" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Put on BeatStars" }),
+  ).toBeDisabled();
   expect(screen.getByRole("alert")).toHaveTextContent("already on BeatStars");
+});
+
+test("a Published beat with no Bounce Folder and no Track offers to attach one", () => {
+  const onAttachFolder = vi.fn();
+  renderPage(undefined, { onAttachFolder });
+  fireEvent.change(screen.getByLabelText(/Bounce Folder path/), {
+    target: { value: " /b/Jungle_104bpm_Amin " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Attach folder" }));
+  expect(onAttachFolder).toHaveBeenCalledWith("/b/Jungle_104bpm_Amin");
+});
+
+test("no folder field for a beat already on BeatStars", () => {
+  renderPage({
+    ...published,
+    beatstars_url: "https://www.beatstars.com/beat/n-1",
+  });
+  expect(
+    screen.queryByRole("button", { name: "Attach folder" }),
+  ).not.toBeInTheDocument();
 });

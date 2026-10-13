@@ -5,8 +5,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from beat_server.db.models import JobKind
+from beat_server.db.models import Beat, BeatStatus, JobKind, new_id
 from beat_server.db.repo import BeatRepo, JobRepo
+from beat_server.services.beats import youtube_description_with_link
 from beat_upload.workspace import Workspace
 
 
@@ -149,3 +150,57 @@ def test_a_mood_outside_the_list_is_422(client: TestClient, tmp_path: Path) -> N
         f"/api/beats/{beat_id}", json={"title": TITLE, "beatstars_instruments": ["808"]}
     )
     assert response.status_code == 422
+
+
+def published(session: Session, **fields: object) -> str:
+    beat = Beat(
+        id=new_id(),
+        status=BeatStatus.PUBLISHED,
+        title="t",
+        description="d",
+        tags=[],
+        privacy="public",
+        audio_path="audio.mp3",
+        image_path="cover.png",
+        youtube_id="yt1",
+        **fields,
+    )
+    BeatRepo(session).add(beat)
+    session.commit()
+    return beat.id
+
+
+def test_a_folder_is_attached_to_a_published_beat(
+    client: TestClient, session: Session, tmp_path: Path
+) -> None:
+    beat_id = published(session)
+    folder = bounce(tmp_path)
+    response = client.post(f"/api/beats/{beat_id}/bounce-folder", json={"path": str(folder)})
+    assert response.status_code == 200
+    assert response.json()["beatstars"] is not None
+    session.expire_all()
+    beat = BeatRepo(session).get(beat_id)
+    assert beat is not None and beat.bounce_folder == str(folder) and beat.bpm == 104
+    assert beat.audio_path == "audio.mp3"  # the video's files are left alone
+
+
+def test_a_beat_already_on_beatstars_gets_no_folder(
+    client: TestClient, session: Session, tmp_path: Path
+) -> None:
+    beat_id = published(session, beatstars_url="https://www.beatstars.com/beat/x-1")
+    response = client.post(
+        f"/api/beats/{beat_id}/bounce-folder", json={"path": str(bounce(tmp_path))}
+    )
+    assert response.status_code == 409
+
+
+def test_the_link_replaces_the_dm_line_or_follows_the_title() -> None:
+    url = "https://www.beatstars.com/beat/x-1"
+    dm = "T\n\n💰 Want this beat? DM me on Instagram @delawer33 — files.\n\nBPM"
+    assert (
+        youtube_description_with_link(dm, url) == f"T\n\n💰 Buy / license this beat: {url}\n\nBPM"
+    )
+    assert youtube_description_with_link("T\nrest", url) == (
+        f"T\n\n💰 Buy / license this beat: {url}\nrest"
+    )
+    assert youtube_description_with_link("T {beatstars|DM}", url) == f"T {url}"

@@ -122,6 +122,8 @@ class BeatOut(BaseModel):
     cover_url: str | None
     # ``None`` for a Beat that does not come from a Bounce Folder.
     beatstars: BeatStarsPreview | None
+    # The BeatStars Track's page, also for a Beat put there before Bounce Folders.
+    beatstars_url: str | None
     synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -153,6 +155,7 @@ class BeatOut(BaseModel):
             active_job=JobOut.model_validate(active_job) if active_job else None,
             cover_url=cover_url_for(beat),
             beatstars=BeatStarsPreview.from_beat(beat) if beat.bounce_folder else None,
+            beatstars_url=beat.beatstars_url,
             synced_at=beat.synced_at,
             created_at=beat.created_at,
             updated_at=beat.updated_at,
