@@ -1,7 +1,7 @@
 """The Instagram Post: what the owner types into Instagram for a Beat's Reel (CONTEXT.md).
 
-``InstagramService.write`` builds a prompt from the Beat's title, BPM, key, moods,
-instruments and YouTube description, runs it through the same **runner** as Fill from title
+``InstagramService.write`` builds a prompt from the Beat's title, moods, instruments and
+YouTube description, runs it through the same **runner** as Fill from title
 (``claude_cli.run_claude`` in the app, a fake in tests; ADR 0006), validates the answer and
 saves it with the Beat. The full caption is assembled by code (``assemble_caption``), never
 by the model.
@@ -19,8 +19,7 @@ from sqlalchemy.orm import Session
 from beat_server.db.models import Beat
 from beat_server.db.repo import BeatRepo
 from beat_server.services.errors import FillError
-from beat_upload.audio_name import audio_name_facts
-from beat_upload.beatstars.naming import PRODUCER, spelled_key
+from beat_upload.beatstars.naming import PRODUCER
 from beat_upload.beatstars.track import parse_youtube_title
 from beat_upload.errors import BeatStarsError, ConfigError
 from beat_upload.placeholders import placeholders_in
@@ -52,8 +51,8 @@ Rules:
    characters, one emoji at most. It makes a scroller stop, e.g. "this guitar x reggaeton beat
    is crazy".
 3. `caption_body`: the caption without hashtags. Its first line holds the searchable words:
-   the beat's name in quotes, its style, the BPM and the key, e.g.
-   "Dance With Me" - guitar x reggaeton type beat, 90 BPM, A minor.
+   the beat's name in quotes and its style, e.g. "Dance With Me" - guitar x reggaeton type
+   beat. No BPM and no key anywhere.
    Then one line that the beat is free for non-profit use. Nothing else: no sentence about
    the sound or mood, no "link in bio", no invitation to comment, never a URL (the BeatStars
    link is added after the caption by code).
@@ -173,17 +172,9 @@ YouTube description (for the style; do not copy its text):
 
 
 def _facts(beat: Beat) -> str:
-    audio = audio_name_facts(beat.source_name) if beat.source_name else None
-    if beat.bpm is not None and beat.music_key is not None:
-        bpm_key = f"BPM {beat.bpm}, key {spelled_key(beat.music_key)}"
-    elif audio is not None:
-        bpm_key = f"BPM {audio.bpm}, key {audio.spelled_key}"
-    else:
-        bpm_key = "not known (leave BPM and key out of the first line)"
     source = PurePath(beat.source_name).name if beat.source_name else "not known"
     return (
         f"Audio file name: {source}\n"
-        f"BPM and key: {bpm_key}\n"
         f"Moods: {', '.join(beat.name_moods) or 'none given'}\n"
         f"Instruments: {', '.join(beat.name_instruments) or 'none given'}"
     )

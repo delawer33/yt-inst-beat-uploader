@@ -26,7 +26,7 @@ from beat_upload.errors import ConfigError
 TITLE = '[FREE] Travis Scott Type Beat 2026 - "Lasso" | Dark Trap'
 GOOD: dict[str, Any] = {
     "hook": "this dark trap beat is crazy",
-    "caption_body": '"Lasso" - dark trap type beat, 140 BPM, D minor\nFree for non-profit use',
+    "caption_body": '"Lasso" - dark trap type beat\nFree for non-profit use',
     "hashtags": ["#travisscotttypebeat", "darktrap", "prodbydelawer"],
     "audio_name": "Lasso (prod. delawer)",
     "alt_text": 'Cover art for "Lasso", a dark trap type beat by delawer',
@@ -91,7 +91,7 @@ def test_the_prompt_carries_title_facts_description_and_hashtags(session: Sessio
 
     (prompt,) = runner.prompts
     assert TITLE in prompt
-    assert "BPM 140, key D minor" in prompt
+    assert "BPM 140" not in prompt
     assert "Dark" in prompt and "808" in prompt
     assert "Heavy 808s and a cold melody." in prompt
     assert "#travisscotttypebeat" in prompt

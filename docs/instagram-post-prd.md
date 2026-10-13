@@ -37,7 +37,7 @@ What the panel shows, for "Dance With Me" (approved shape, wording is the model'
 
 ```
 On-screen text   this guitar x reggaeton beat is crazy 🎸
-Caption          "Dance With Me" — guitar x reggaeton type beat 🎸 90 BPM · A minor
+Caption          "Dance With Me" — guitar x reggaeton type beat 🎸
                  Free for non-profit use
                  License / download: https://www.beatstars.com/TK26407192
                  @artist1 @artist2
@@ -81,7 +81,7 @@ so other people's Reels with the beat lead back.
 18. As the owner, I want a copy button on every field, so that I paste each into Instagram in one click.
 19. As the owner, I want the fields in the order Instagram's upload flow asks for them, so that I go top to bottom.
 20. As the owner, I want a short on-screen hook, so that the static cover has something that stops the scroll.
-21. As the owner, I want the caption's first line to hold the beat's name, its style, BPM and key, so that it is what people see before "more" and what Instagram search reads.
+21. As the owner, I want the caption's first line to hold the beat's name and its style (no BPM or key, changed after QA on 2026-10-13), so that it is what people see before "more" and what Instagram search reads.
 22. As the owner, I want the caption to carry the Beat's BeatStars link (added by code, never by the model) and no paragraph about the sound or "link in bio", so that the caption stays short and points at the beat itself. (Changed after QA on 2026-10-13.)
 23. As the owner, I want exactly five or fewer hashtags, so that Instagram accepts the post.
 24. As the owner, I want the hashtags mid-sized for the beat's style and artists plus my own, so that they put the Reel in the right category.
