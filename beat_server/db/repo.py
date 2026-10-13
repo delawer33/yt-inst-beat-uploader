@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from beat_server.db.models import (
@@ -85,13 +85,17 @@ class JobRepo:
         return job
 
     def next_queued(self) -> Job | None:
-        """The oldest job still waiting to run whose retry delay (``not_before``) has passed."""
+        """The oldest job still waiting to run whose retry delay (``not_before``) has passed.
+
+        A REEL goes behind every other kind: the Reel is for Instagram, and nothing on the
+        way to YouTube waits for it.
+        """
         now = utcnow()
         stmt = (
             select(Job)
             .where(Job.status == JobStatus.QUEUED)
             .where(or_(Job.not_before.is_(None), Job.not_before <= now))
-            .order_by(Job.created_at, Job.id)
+            .order_by(case((Job.kind == JobKind.REEL, 1), else_=0), Job.created_at, Job.id)
             .limit(1)
         )
         return self.session.scalar(stmt)
@@ -122,15 +126,27 @@ class JobRepo:
         """The Job that is happening on ``beat_id`` now: the oldest pending one, or none.
 
         Oldest first because a Render is enqueued before the Upload it leads to, so the
-        Render is what the owner is waiting on while both are pending.
+        Render is what the owner is waiting on while both are pending. A REEL is never it: it
+        is background work for the Instagram panel (``reel_job_for_beat``).
         """
-        return next(iter(self.pending_for_beat(beat_id)), None)
+        pending = [j for j in self.pending_for_beat(beat_id) if j.kind != JobKind.REEL]
+        return next(iter(pending), None)
+
+    def reel_job_for_beat(self, beat_id: str) -> Job | None:
+        """The newest REEL job of ``beat_id``, whatever its status."""
+        stmt = (
+            select(Job)
+            .where(Job.beat_id == beat_id, Job.kind == JobKind.REEL)
+            .order_by(Job.created_at.desc(), Job.id)
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
 
     def active_by_beat(self) -> dict[str, Job]:
         """``active_for_beat`` for every beat at once, for the Library listing."""
         stmt = (
             select(Job)
-            .where(Job.beat_id.is_not(None), Job.status.in_(PENDING))
+            .where(Job.beat_id.is_not(None), Job.status.in_(PENDING), Job.kind != JobKind.REEL)
             .order_by(Job.created_at.desc(), Job.id)
         )
         # Descending so that the oldest pending job per beat is written last and wins.

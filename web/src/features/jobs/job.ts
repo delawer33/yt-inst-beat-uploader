@@ -6,6 +6,7 @@ export const JOB_LABEL: Record<Job["kind"], string> = {
   render: "Render",
   upload: "Upload",
   beatstars: "BeatStars",
+  reel: "Reel",
   sync: "Sync",
   stats: "Stats refresh",
 };

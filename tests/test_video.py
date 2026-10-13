@@ -18,7 +18,11 @@ from beat_upload.video import (
     fit_in_frame,
     parse_ffmpeg_progress,
     probe_duration,
+    reel_fit,
+    reel_graph,
     render_cover,
+    render_reel,
+    render_reel_cover,
     render_video,
 )
 
@@ -238,3 +242,90 @@ def test_a_sliver_of_a_cover_is_refused_with_a_reason(
     Image.new("RGB", (60, 4000), "red").save(cover)
     with pytest.raises(VideoError, match="too narrow for the Label"):
         render_cover(cover, tmp_path / "out.png")
+
+
+# --- the Reel ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [
+        ((3000, 3000), (1080, 1080)),  # square: full width
+        ((1280, 720), (1080, 608)),  # wide: full width, short
+        ((1001, 1333), (1080, 1438)),  # odd sizes come out even
+        ((1000, 3000), (640, 1920)),  # taller than the frame: fit the height instead
+    ],
+)
+def test_reel_fit(size: tuple[int, int], expected: tuple[int, int]) -> None:
+    assert reel_fit(*size) == expected
+
+
+def test_reel_graph_paints_stamps_and_lays_the_cover_over_a_blurred_copy() -> None:
+    g = reel_graph(CoverStyle.STONE_OCEAN, (1080, 1080))
+    assert g.startswith("[0:v]scale=1080:1080")
+    style = g.index("lutrgb=")
+    split = g.index("[styled]split[a][b]")
+    blur = g.index("gblur=sigma=40,eq=brightness=-0.25[bg]")
+    stamp = g.index("[b][1:v]overlay=x=W-w-43:y=43")
+    lay = g.index("[bg][marked]overlay=x=(W-w)/2:y=(H-h)/2-120[out]")
+    assert style < split < blur < stamp < lay
+    assert "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" in g
+
+
+def test_reel_graph_stamps_a_tall_cover_at_its_own_width() -> None:
+    w, h = reel_fit(1000, 3000)
+    g = reel_graph(CoverStyle.STONE_OCEAN, (w, h))
+    assert g.startswith(f"[0:v]scale={w}:{h}")
+    assert f"overlay=x=W-w-{label.placement(w)[1]}" in g
+
+
+def test_render_reel_cover_feeds_the_label_and_the_reel_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cover = tmp_path / "cover.jpg"
+    Image.new("RGB", (1000, 1000), "red").save(cover)
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(video, "ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    render_reel_cover(cover, tmp_path / "out.png", CoverStyle.BLOOD_3TONE)
+    cmd = seen[0]
+    assert cmd[cmd.index("-filter_complex") + 1].endswith("[out]")
+    assert cmd[cmd.index("-map") + 1] == "[out]"
+    assert not list(tmp_path.glob("label-*"))
+
+
+def test_a_sliver_of_a_cover_is_refused_for_the_reel_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video, "ensure_ffmpeg", lambda: None)
+    cover = tmp_path / "sliver.png"
+    Image.new("RGB", (60, 4000), "red").save(cover)
+    with pytest.raises(VideoError, match="too narrow for the Label"):
+        render_reel_cover(cover, tmp_path / "out.png")
+
+
+def test_render_reel_loops_the_reel_frame(
+    tmp_path: Path, fake_ffmpeg: type[FakePopen], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    styles: list[CoverStyle] = []
+
+    def fake_reel_cover(image: Path, output: Path, style: CoverStyle) -> Path:
+        styles.append(style)
+        output.write_bytes(b"png")
+        return output
+
+    monkeypatch.setattr(video, "render_reel_cover", fake_reel_cover)
+    seen: list[float] = []
+    out = render_reel(
+        tmp_path / "a.mp3", tmp_path / "c.png", tmp_path / "reel.mp4", seen.append,
+        CoverStyle.DIO_GREEN,
+    )  # fmt: skip
+    assert styles == [CoverStyle.DIO_GREEN]
+    assert out == tmp_path / "reel.mp4" and seen[-1] == 1.0
+    assert fake_ffmpeg.calls[0][fake_ffmpeg.calls[0].index("-loop") + 3].endswith("cover.png")
+    assert not list(tmp_path.glob("reel-*"))

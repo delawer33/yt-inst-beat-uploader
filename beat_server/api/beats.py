@@ -107,12 +107,13 @@ def create_beat(
 ) -> BeatOut:
     """A new DRAFT from an audio file and a cover image (multipart form).
 
-    The RENDER is queued here and comes back as ``active_job``; no UPLOAD is created, that
-    waits for the owner to send the beat.
+    The RENDER is queued here and comes back as ``active_job``, with a REEL behind it; no
+    UPLOAD is created, that waits for the owner to send the beat.
     """
     template = default_metadata(SettingsRepo(session))
     beat = create_draft(ws, BeatRepo(session), audio, image, template)
     job = queue.enqueue(JobKind.RENDER, beat.id)
+    queue.enqueue(JobKind.REEL, beat.id)  # for Instagram; the Upload never waits for it
     return BeatOut.from_beat(beat, job)
 
 
@@ -129,6 +130,7 @@ def create_beat_from_folder(
     template = default_metadata(SettingsRepo(session))
     beat = create_draft_from_folder(ws, BeatRepo(session), path, template)
     job = queue.enqueue(JobKind.RENDER, beat.id)
+    queue.enqueue(JobKind.REEL, beat.id)  # for Instagram; the Upload never waits for it
     return BeatOut.from_beat(beat, job)
 
 
@@ -155,8 +157,11 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep, queue: QueueD
     if beat.status == BeatStatus.QUEUED:
         check_no_placeholders(beat)  # it is on its way to YouTube; the send was the guard
     BeatRepo(session).save(beat)
-    if render_due and not JobRepo(session).has_waiting(JobKind.RENDER, beat.id):
+    jobs = JobRepo(session)
+    if render_due and not jobs.has_waiting(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)
+    if render_due and not jobs.has_waiting(JobKind.REEL, beat.id):
+        queue.enqueue(JobKind.REEL, beat.id)
     return beat_out(session, beat)
 
 

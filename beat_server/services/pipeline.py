@@ -41,9 +41,9 @@ from beat_server.services.beats import metadata_of
 from beat_server.services.beatstars import queue_upload_if_ready
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_server.services.sync import status_for
-from beat_upload.beat_folder import VIDEO_FILENAME
+from beat_upload.beat_folder import REEL_FILENAME, VIDEO_FILENAME
 from beat_upload.errors import AuthError, BeatUploadError, ConfigError, NetworkError
-from beat_upload.video import render_video
+from beat_upload.video import render_reel, render_video
 from beat_upload.youtube import upload_video
 
 RENDERABLE = frozenset({BeatStatus.DRAFT, BeatStatus.QUEUED})
@@ -104,6 +104,56 @@ async def run_render(ctx: JobContext) -> None:
             ctx.enqueue(JobKind.RENDER, beat.id)
     else:
         queue_upload_if_ready(ctx, beat)  # not while the BEATSTARS job still has the beat
+
+
+async def run_reel(ctx: JobContext) -> None:
+    """reel.mp4 on disk, for a Beat in any status that has audio and cover.
+
+    Never touches the Beat's status and never leads to an UPLOAD: the Reel is for Instagram
+    and nothing waits for it. Like the RENDER it writes a ``.part`` file and moves it over
+    only if the owner still wants the style it was painted in; when the style changed while
+    ffmpeg ran, another REEL is queued.
+    """
+    repo = BeatRepo(ctx.session)
+    beat = _load(ctx, repo)
+    if not (beat.audio_path and beat.image_path):
+        raise BeatStateError(f"Beat {beat.id} has no audio or cover; add both first.")
+
+    beat_dir = ctx.workspace.beat_dir(beat.id)
+    audio = beat_dir / beat.audio_path
+    image = beat_dir / beat.image_path
+    reel = beat_dir / REEL_FILENAME
+
+    if reel.is_file() and beat.reel_is_current:
+        ctx.log(f"{REEL_FILENAME} already rendered in {beat.reel_style}")
+    else:
+        style = beat.cover_style
+        part = reel.with_name(f"{reel.stem}.part{reel.suffix}")
+        ctx.progress(0.0, "Rendering the Reel")
+        try:
+            await asyncio.to_thread(
+                render_reel,
+                audio,
+                image,
+                part,
+                lambda f: ctx.progress(f, "Rendering the Reel"),
+                style=style,
+            )
+            ctx.session.refresh(beat)  # the owner may have picked another style meanwhile
+            if beat.cover_style == style:
+                part.replace(reel)
+                beat.reel_style = style
+                beat.reel_path = REEL_FILENAME
+                repo.save(beat)
+            else:
+                ctx.log(f"Rendered {style}, but the beat is now {beat.cover_style}; dropped")
+        finally:
+            part.unlink(missing_ok=True)
+    ctx.progress(1.0, "Reel rendered")
+    ctx.session.refresh(beat)
+    ctx.bus.publish_beat(beat.id, beat.status)
+    if not beat.reel_is_current and not JobRepo(ctx.session).has_waiting(JobKind.REEL, beat.id):
+        ctx.enqueue(JobKind.REEL, beat.id)
 
 
 async def run_upload(ctx: JobContext) -> None:
