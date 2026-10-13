@@ -124,6 +124,26 @@ top right. Always on, always black and white, drawn after the Cover Style so it 
 shape.
 _Avoid_: Badge, watermark, logo, stamp, Parental Advisory
 
+**Reel**:
+A Beat's vertical video for Instagram: the whole beat over the cover in its Cover Style with
+the Label, full width, on a blurred copy of the same cover. Rendered together with the
+YouTube video and again when the Cover Style changes; the owner cuts the snippet in
+Instagram and posts it by hand.
+_Avoid_: Vertical video, story, short, snippet
+
+**Instagram Post**:
+What the owner types into Instagram for a Beat's Reel, by hand: the on-screen hook, the
+caption with its five hashtags, the Artist Handles to tag, the audio name, the alt text and
+the publish time. Written once per Beat when the owner first asks for it, kept, and written
+again only on request. The owner marks it posted; nothing is sent to Instagram.
+_Avoid_: Caption, Instagram data, post text
+
+**Artist Handle**:
+The Instagram account of an artist a title names, as the owner wrote it down once; remembered
+for every later Beat with that artist. A style named in place of an artist ("Guitar Type
+Beat") has none.
+_Avoid_: Username, nickname, tag
+
 **Workspace**:
 Everything belonging to one channel owner: their credentials, their Library, their files.
 Today there is exactly one, local to the machine; the concept exists so there can be more.
