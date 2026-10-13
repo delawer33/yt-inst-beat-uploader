@@ -54,10 +54,9 @@ Rules:
 3. `caption_body`: the caption without hashtags. Its first line holds the searchable words:
    the beat's name in quotes, its style, the BPM and the key, e.g.
    "Dance With Me" - guitar x reggaeton type beat, 90 BPM, A minor.
-   Then one plain sentence about the sound (take it from the YouTube description below), a
-   line that the beat is free for non-profit use, and "link in bio" together with an
-   invitation to comment (an emoji) to get the link by DM. Links in a caption are not
-   clickable, so never write a URL.
+   Then one line that the beat is free for non-profit use. Nothing else: no sentence about
+   the sound or mood, no "link in bio", no invitation to comment, never a URL (the BeatStars
+   link is added after the caption by code).
 4. `hashtags`: at most {MAX_HASHTAGS}, lower case, no spaces, written without the # sign.
    Mid-sized tags (20k to 500k posts) for the beat's style and artists, no giants like
    "music" or "beats". One of them is always "{OWN_HASHTAG}".
@@ -77,9 +76,10 @@ class InstagramPost:
     audio_name: str
     alt_text: str
 
-    def caption(self, tags: list[str] | None = None) -> str:
-        """The caption with the artists' ``@handle`` line (``tags``) after the body."""
-        return assemble_caption(self.caption_body, self.hashtags, tags)
+    def caption(self, tags: list[str] | None = None, link: str | None = None) -> str:
+        """The caption with the BeatStars ``link`` and the artists' ``@handle`` line (``tags``)
+        after the body."""
+        return assemble_caption(self.caption_body, self.hashtags, tags, link)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -101,13 +101,17 @@ class InstagramPost:
         )
 
 
-def assemble_caption(body: str, hashtags: list[str], tags: list[str] | None = None) -> str:
-    """The caption as pasted into Instagram: the body, the line of ``@handle`` tags (from the
-    Artist Handles, never the model's), a blank line, the hashtags.
+def assemble_caption(
+    body: str, hashtags: list[str], tags: list[str] | None = None, link: str | None = None
+) -> str:
+    """The caption as pasted into Instagram: the body, the Beat's BeatStars ``link``, the line
+    of ``@handle`` tags (from the Artist Handles, never the model's), a blank line, the
+    hashtags. The link and the handles are read at display time, never written by the model.
 
     ``ConfigError`` when it is longer than Instagram's 2200 characters.
     """
-    text = "\n".join(part for part in (body.strip(), " ".join(tags or [])) if part)
+    link_line = f"License / download: {link}" if link else ""
+    text = "\n".join(part for part in (body.strip(), link_line, " ".join(tags or [])) if part)
     parts = [text, " ".join(f"#{tag}" for tag in hashtags)]
     caption = "\n\n".join(part for part in parts if part)
     if len(caption) > MAX_CAPTION_LENGTH:
@@ -131,7 +135,8 @@ class InstagramService:
 
         ``ConfigError`` for a title with a Placeholder or one that does not read,
         ``FillError`` when the runner fails or the answer breaks a rule. ``tags`` are the
-        ``@handle`` tags the caption will carry, so the 2200 limit is checked with them.
+        ``@handle`` tags the caption will carry, so the 2200 limit is checked with them and
+        with the Beat's BeatStars link.
         """
         left = placeholders_in(beat.title)
         if left:
@@ -141,7 +146,7 @@ class InstagramService:
         except BeatStarsError as e:
             raise ConfigError(str(e)) from None
         answer = self._run(build_prompt(beat), INSTAGRAM_SCHEMA)
-        post = parse_answer(answer, tags)
+        post = parse_answer(answer, tags, beat.beatstars_url)
         beat.instagram_post = post.to_json()
         BeatRepo(session).save(beat)
         return post
@@ -160,7 +165,7 @@ Title:
 {_facts(beat)}
 YouTube hashtags: {" ".join(re.findall(r"#\w+", beat.description)) or "none"}
 
-YouTube description (it holds the sentence about the sound):
+YouTube description (for the style; do not copy its text):
 ```
 {beat.description}
 ```
@@ -184,7 +189,9 @@ def _facts(beat: Beat) -> str:
     )
 
 
-def parse_answer(answer: dict[str, Any], tags: list[str] | None = None) -> InstagramPost:
+def parse_answer(
+    answer: dict[str, Any], tags: list[str] | None = None, link: str | None = None
+) -> InstagramPost:
     """Validate the model's answer; ``FillError`` names the rule it broke."""
     texts = {}
     for key in ("hook", "caption_body", "audio_name", "alt_text"):
@@ -214,7 +221,7 @@ def parse_answer(answer: dict[str, Any], tags: list[str] | None = None) -> Insta
         raise FillError("The Instagram Post has an @ in it; the model must not tag. Try again.")
     post = InstagramPost(hashtags=hashtags, **texts)
     try:
-        post.caption(tags)
+        post.caption(tags, link)
     except ConfigError as e:
         raise FillError(f"{e} Try again.") from None
     return post

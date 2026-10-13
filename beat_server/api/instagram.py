@@ -66,10 +66,12 @@ class InstagramPostOut(BaseModel):
     alt_text: str
 
     @classmethod
-    def from_post(cls, post: InstagramPost, tags: list[str]) -> "InstagramPostOut":
+    def from_post(
+        cls, post: InstagramPost, tags: list[str], link: str | None
+    ) -> "InstagramPostOut":
         return cls(
             hook=post.hook,
-            caption=post.caption(tags),
+            caption=post.caption(tags, link),
             hashtags=post.hashtags,
             audio_name=post.audio_name,
             alt_text=post.alt_text,
@@ -124,7 +126,9 @@ def _build(session: Session, beat: Beat, state: ReelState) -> InstagramOut:
             error=job.error if job and state.state == "failed" else None,
         ),
         post=(
-            InstagramPostOut.from_post(InstagramPost.from_json(beat.instagram_post), tags)
+            InstagramPostOut.from_post(
+                InstagramPost.from_json(beat.instagram_post), tags, beat.beatstars_url
+            )
             if beat.instagram_post
             else None
         ),

@@ -26,7 +26,7 @@ from beat_upload.errors import ConfigError
 TITLE = '[FREE] Travis Scott Type Beat 2026 - "Lasso" | Dark Trap'
 GOOD: dict[str, Any] = {
     "hook": "this dark trap beat is crazy",
-    "caption_body": '"Lasso" - dark trap type beat, 140 BPM, D minor\nHeavy 808s.\nlink in bio',
+    "caption_body": '"Lasso" - dark trap type beat, 140 BPM, D minor\nFree for non-profit use',
     "hashtags": ["#travisscotttypebeat", "darktrap", "prodbydelawer"],
     "audio_name": "Lasso (prod. delawer)",
     "alt_text": 'Cover art for "Lasso", a dark trap type beat by delawer',
@@ -95,7 +95,7 @@ def test_the_prompt_carries_title_facts_description_and_hashtags(session: Sessio
     assert "Dark" in prompt and "808" in prompt
     assert "Heavy 808s and a cold melody." in prompt
     assert "#travisscotttypebeat" in prompt
-    assert "link in bio" in prompt and "60" in prompt and "prodbydelawer" in prompt
+    assert "60" in prompt and "prodbydelawer" in prompt
     assert runner.schemas == [INSTAGRAM_SCHEMA]
 
 
@@ -275,6 +275,11 @@ DUO = '[FREE] Travis Scott x Don Toliver Type Beat 2026 - "Lasso" | Dark Trap'
 def test_handles_are_inserted_from_the_map_after_the_body() -> None:
     caption = assemble_caption("Body", ["a"], ["@travisscott", "@dontoliver"])
     assert caption == "Body\n@travisscott @dontoliver\n\n#a"
+
+
+def test_the_beatstars_link_goes_after_the_body_before_the_handles() -> None:
+    caption = assemble_caption("Body", ["a"], ["@travisscott"], "https://bsta.rs/x")
+    assert caption == "Body\nLicense / download: https://bsta.rs/x\n@travisscott\n\n#a"
 
 
 def test_tag_handles_leave_out_styles_and_unknown_artists() -> None:
