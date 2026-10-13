@@ -1,4 +1,4 @@
-"""Settings: the Google OAuth client (secret write-only) and scheduler options.
+"""Settings: the Google OAuth client (secret write-only), scheduler options, Artist Handles.
 
 Keys in ``SettingsRepo``: ``stats_hour`` (hour of day, 0..23, for the daily stats job; the
 scheduler slice reads it, default ``DEFAULT_STATS_HOUR``) and the new-beat templates
@@ -23,6 +23,7 @@ from beat_server.services.beats import (
     default_metadata,
     save_templates,
 )
+from beat_server.services.handles import load_handles, save_handles
 from beat_upload.auth import save_client_secrets
 from beat_upload.workspace import Workspace
 
@@ -43,6 +44,8 @@ class SettingsOut(BaseModel):
     title_template: str  # ``{name}`` = audio file name without extension
     description_template: str
     tags_template: list[str]
+    # Artist Handles: artist (lower case) -> handle without @, or null for a style.
+    artist_handles: dict[str, str | None]
 
 
 class SettingsIn(BaseModel):
@@ -50,6 +53,8 @@ class SettingsIn(BaseModel):
     title_template: str | None = None
     description_template: str | None = None
     tags_template: list[str] | None = None
+    # The whole map replaces the stored one; ``None`` leaves it alone.
+    artist_handles: dict[str, str | None] | None = None
 
 
 class GoogleClientIn(BaseModel):
@@ -95,6 +100,7 @@ def _out(request: Request, ws: Workspace, settings: SettingsRepo) -> SettingsOut
         title_template=templates[KEY_TITLE_TEMPLATE],
         description_template=templates[KEY_DESCRIPTION_TEMPLATE],
         tags_template=templates[KEY_TAGS_TEMPLATE],
+        artist_handles=load_handles(settings),
     )
 
 
@@ -115,6 +121,8 @@ def put_settings(
         description=body.description_template,
         tags=body.tags_template,
     )
+    if body.artist_handles is not None:
+        save_handles(settings, body.artist_handles)
     return _out(request, ws, settings)
 
 

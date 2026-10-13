@@ -21,6 +21,14 @@ a change to it needs no new model call.
 The text is stored as the model's parts, not as one caption string, so the panel can show
 each field with its own copy button and the caption can be re-assembled when its inputs change.
 
+Artist Handles follow the same rule. They are one Setting (`artist_handles`: artist name in
+lower case -> handle, or `null` for a style such as "Guitar"), asked in the panel for each
+artist of the title the map does not know, and read at display time: `assemble_caption` puts
+their `@handle` line after the body and the panel's "Tag people" field lists the same
+handles. The model never sees or writes a handle, so fixing one in Settings changes the
+caption with no new model call. The 2200-character limit is checked with the handle line, at
+write time and at display time.
+
 ## Consequences
 
 - A Beat's title must read (`parse_youtube_title`) and hold no Placeholder before the post is

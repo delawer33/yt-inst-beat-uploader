@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { formatDateTime } from "@/lib/format";
 import type { Instagram } from "./queries";
-import { useInstagram, useSetPosted, useShowReel, useWriteInstagram } from "./queries";
+import {
+  useInstagram,
+  useSetArtistHandle,
+  useSetPosted,
+  useShowReel,
+  useWriteInstagram,
+} from "./queries";
 
 /** The Reel part of the panel, as the API reports it. */
 type Reel = Instagram["reel"];
@@ -12,6 +18,7 @@ export function InstagramPanel({ beatId, onClose }: { beatId: string; onClose: (
   const show = useShowReel();
   const write = useWriteInstagram(beatId);
   const posted = useSetPosted(beatId);
+  const handle = useSetArtistHandle(beatId);
   return (
     <InstagramPanelView
       panel={panel.data ?? null}
@@ -23,6 +30,9 @@ export function InstagramPanel({ beatId, onClose }: { beatId: string; onClose: (
       writePending={write.isPending}
       writeError={write.error?.message ?? null}
       onPosted={(value) => posted.mutate(value)}
+      onHandle={(artist, value) => handle.mutate({ artist, handle: value })}
+      handlePending={handle.isPending}
+      handleError={handle.error?.message ?? null}
       onClose={onClose}
     />
   );
@@ -38,6 +48,10 @@ type ViewProps = {
   writePending?: boolean;
   writeError?: string | null;
   onPosted?: (posted: boolean) => void;
+  /** Save an artist's handle, or `null` = "a style, not an artist". */
+  onHandle?: (artist: string, handle: string | null) => void;
+  handlePending?: boolean;
+  handleError?: string | null;
   onClose: () => void;
 };
 
@@ -56,6 +70,9 @@ export function InstagramPanelView({
   writePending = false,
   writeError = null,
   onPosted = () => {},
+  onHandle = () => {},
+  handlePending = false,
+  handleError = null,
   onClose,
 }: ViewProps) {
   return (
@@ -81,6 +98,14 @@ export function InstagramPanelView({
         {panel === null && loadError === null && <p className="text-muted">Loading…</p>}
         {panel !== null && (
           <>
+            {panel.unknown_artists.length > 0 && (
+              <HandlesBlock
+                artists={panel.unknown_artists}
+                onHandle={onHandle}
+                pending={handlePending}
+                error={handleError}
+              />
+            )}
             <ReelBlock reel={panel.reel} onShow={onShow} pending={showPending} error={showError} />
             <PostBlock
               panel={panel}
@@ -93,6 +118,82 @@ export function InstagramPanelView({
         )}
       </div>
     </aside>
+  );
+}
+
+/** Artists of the title with no Artist Handle yet: asked once, remembered for every Beat. */
+function HandlesBlock({
+  artists,
+  onHandle,
+  pending,
+  error,
+}: {
+  artists: string[];
+  onHandle: (artist: string, handle: string | null) => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  return (
+    <section className="flex flex-col gap-3" aria-label="Artist Handles">
+      <div className="section-head">
+        <span className="label">Who to tag</span>
+      </div>
+      <p className="text-soft">
+        The Instagram account of each artist in the title, asked once. A name that is a style, not
+        an artist, is never tagged.
+      </p>
+      {artists.map((artist) => (
+        <HandleAsk key={artist} artist={artist} onHandle={onHandle} pending={pending} />
+      ))}
+      {error !== null && (
+        <div className="note" role="alert">
+          <span className="text-soft">{error}</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HandleAsk({
+  artist,
+  onHandle,
+  pending,
+}: {
+  artist: string;
+  onHandle: (artist: string, handle: string | null) => void;
+  pending: boolean;
+}) {
+  const [handle, setHandle] = useState("");
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (handle.trim() !== "") onHandle(artist, handle.trim());
+  };
+  return (
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2" aria-label={artist}>
+      <input
+        className="input w-48"
+        aria-label={`Instagram handle of ${artist}`}
+        placeholder={`@handle of ${artist}`}
+        value={handle}
+        onChange={(e) => setHandle(e.target.value)}
+        disabled={pending}
+      />
+      <button
+        type="submit"
+        className="btn btn-secondary btn-sm"
+        disabled={pending || handle.trim() === ""}
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => onHandle(artist, null)}
+        disabled={pending}
+      >
+        {artist} is a style, not an artist
+      </button>
+    </form>
   );
 }
 
@@ -184,7 +285,12 @@ function PostBlock({
       <div className="section-head">
         <span className="label">Instagram Post</span>
         {post !== null && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onWrite} disabled={pending}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={onWrite}
+            disabled={pending}
+          >
             {pending ? "Writing…" : "Write again"}
           </button>
         )}
@@ -200,8 +306,8 @@ function PostBlock({
       {post === null && (
         <>
           <p className="text-soft">
-            The hook, caption, audio name and alt text are written once from the title and kept
-            with the beat.
+            The hook, caption, audio name and alt text are written once from the title and kept with
+            the beat.
           </p>
           <button
             type="button"
@@ -218,6 +324,11 @@ function PostBlock({
         <div>
           <CopyRow label="On-screen text" value={post.hook} />
           <CopyRow label="Caption" value={post.caption} />
+          <CopyRow
+            label="Tag people"
+            value={panel.tag_people.join(", ")}
+            emptyText="No artist to tag"
+          />
           <CopyRow label="Audio name" value={post.audio_name} />
           <CopyRow label="Alt text" value={post.alt_text} />
           <CopyRow
@@ -278,7 +389,9 @@ function CopyRow({
   return (
     <div className="copy-row" role="group" aria-label={label}>
       <span className="label">{label}</span>
-      <span className={`value${value === "" ? " empty" : ""}`}>{value === "" ? emptyText : value}</span>
+      <span className={`value${value === "" ? " empty" : ""}`}>
+        {value === "" ? emptyText : value}
+      </span>
       {copyable && (
         <button
           type="button"
