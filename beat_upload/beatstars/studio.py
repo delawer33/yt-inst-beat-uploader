@@ -90,6 +90,11 @@ def studio(profile: Path, on_status: StatusFn) -> Iterator["Page"]:
         env = dict(os.environ)
         if env.get("WAYLAND_DISPLAY"):
             env["XDG_SESSION_TYPE"] = "wayland"
+        if not Path(p.chromium.executable_path).is_file():
+            raise BeatStarsError(
+                "The browser for BeatStars is missing (deleted with ~/.cache?): "
+                "run `playwright install chromium` in the project's venv"
+            )
         context = p.chromium.launch_persistent_context(
             str(profile),
             headless=False,
