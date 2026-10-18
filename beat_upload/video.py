@@ -11,6 +11,7 @@ is ``render_cover`` too, so it shows exactly what the video will.
 """
 
 import hashlib
+import os
 import shutil
 import subprocess
 import tempfile
@@ -291,6 +292,13 @@ def render_video(
         return _loop(audio, cover, output, on_progress)
 
 
+def _yield_to_desktop() -> None:
+    """In the ffmpeg child before it starts: the lowest CPU priority, which on Linux also
+    lowers its disk priority. A Render takes every core; this way the desktop stays usable
+    and ffmpeg gets what is left over."""
+    os.nice(19)
+
+
 def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None) -> Path:
     cmd = [
         "ffmpeg",
@@ -306,7 +314,9 @@ def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None
     ]  # fmt: skip
 
     if on_progress is None:
-        result = subprocess.run([*cmd, str(output)], capture_output=True, text=True)
+        result = subprocess.run(
+            [*cmd, str(output)], capture_output=True, text=True, preexec_fn=_yield_to_desktop
+        )
         if result.returncode != 0:
             raise VideoError(f"ffmpeg failed:\n{result.stderr.strip()}")
         return output
@@ -317,6 +327,7 @@ def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        preexec_fn=_yield_to_desktop,
     ) as proc:
         assert proc.stdout is not None and proc.stderr is not None
         # stderr is tiny at loglevel error, so draining stdout first cannot block ffmpeg.
