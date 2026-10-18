@@ -47,6 +47,18 @@ def test_bpm_and_key_only() -> None:
     assert parse_bounce_name("104bpm_Amin") == BounceFacts(bpm=104, key="Amin")
 
 
+def test_bare_bpm_and_a_stray_dash() -> None:
+    assert parse_bounce_name("125_Bmin_-inspiring-dreamy_synth-guitar_smp_cymatics") == BounceFacts(
+        bpm=125,
+        key="Bmin",
+        moods=("inspiring", "dreamy"),
+        instruments=("synth", "guitar"),
+        samples=True,
+        sample_source="Cymatics",
+    )
+    assert parse_bounce_name("16.19_26") is None
+
+
 def test_no_facts() -> None:
     assert parse_bounce_name("Jungle") is None
     assert parse_bounce_name("104bpm_nokey") is None

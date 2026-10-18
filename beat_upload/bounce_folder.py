@@ -5,10 +5,10 @@ folder's name, or else the WAV's, carries the facts::
 
     Jungle_104bpm_Amin_calm-rhytmic-mysterious_guitar-808_smp
 
-Everything before ``<n>bpm`` is dropped, then comes the key, then up to two groups joined
-with ``-`` (the moods, then the instruments), then ``smp`` when foreign samples are used,
-optionally with where they come from: ``smp-looperman`` or ``smp_looperman`` (Splice when
-not given).
+Everything before ``<n>bpm`` (or a bare ``<n>`` right before the key) is dropped, then comes
+the key, then up to two groups joined with ``-`` (the moods, then the instruments), then
+``smp`` when foreign samples are used, optionally with where they come from:
+``smp-looperman`` or ``smp_looperman`` (Splice when not given).
 Nothing here copies or changes a file.
 """
 
@@ -25,7 +25,7 @@ DEFAULT_SAMPLE_SOURCE = "Splice"
 # How a source written in the name is spelled on BeatStars; others are title-cased.
 SAMPLE_SOURCES = {"splice": "Splice", "looperman": "Looperman"}
 
-_BPM = re.compile(r"(?P<bpm>\d{2,3})bpm")
+_BPM = re.compile(r"(?P<bpm>\d{2,3})(?:bpm)?")
 _KEY = re.compile(r"[A-G][#b]?(?:min|maj)")
 _GROUP = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
 
@@ -63,6 +63,7 @@ def parse_bounce_name(name: str) -> BounceFacts | None:
             continue
         rest, source = _split_samples(parts[i + 2 :])
         samples = source is not None
+        rest = [g.strip("-") for g in rest]  # "_-inspiring-dreamy_": a stray dash
         groups = [tuple(g.split("-")) for g in rest if _GROUP.fullmatch(g)][:2]
         groups += [()] * (2 - len(groups))
         return BounceFacts(
