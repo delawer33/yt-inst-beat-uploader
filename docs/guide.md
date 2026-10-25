@@ -149,7 +149,8 @@ into a few bands, each band gets one fixed colour and ink outlines go on top, so
 comes out in the channel's series. The **Label** (PRODUCED BY / DELAWER / YOU BETTER RUN, in
 the Parental Advisory layout) is stamped top right on every one. A new draft renders in
 Purple Yellow 5-tone; the tiles under the preview show your cover in each of the seven
-styles, and picking another one renders the draft again. Only a Draft can change its style.
+styles. Picking one only previews it; **Apply** renders the draft again in that style, and
+**Keep** goes back to the current one. Only a Draft can change its style.
 
 The draft's page puts the form on the left and the YouTube preview on the right: the video's
 first frame as the server renders it (cover, Cover Style, Label, letterboxed in 16:9), the title as you type it, the channel, the publish time when
