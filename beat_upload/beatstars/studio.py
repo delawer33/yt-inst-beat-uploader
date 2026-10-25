@@ -17,6 +17,8 @@ touched, nor is the paid "Boost Track".
 import base64
 import os
 import re
+import subprocess
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -67,6 +69,9 @@ def edit_url(track_id: str) -> str:
     return f"{STUDIO_URL}/content/tracks/edit/{track_id}"
 
 
+BROWSERS_DIRNAME = "ms-playwright"  # next to the Studio profile, in the data dir
+
+
 def public_url(track_id: str) -> str:
     """Redirects to ``/beat/<slug>-<id>``."""
     return f"https://www.beatstars.com/{track_id}"
@@ -83,6 +88,8 @@ def studio(profile: Path, on_status: StatusFn) -> Iterator["Page"]:
             "playwright install chromium"
         ) from None
     profile.mkdir(parents=True, exist_ok=True)
+    # Not ~/.cache/ms-playwright: that goes whenever the owner clears the cache for space.
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(profile.parent / BROWSERS_DIRNAME))
     with sync_playwright() as p:
         # Under systemd XDG_SESSION_TYPE is "unspecified": Chromium then neither paints nor
         # loads properly in its window on a hidden workspace (every page ~30 s, clicks and
@@ -91,10 +98,7 @@ def studio(profile: Path, on_status: StatusFn) -> Iterator["Page"]:
         if env.get("WAYLAND_DISPLAY"):
             env["XDG_SESSION_TYPE"] = "wayland"
         if not Path(p.chromium.executable_path).is_file():
-            raise BeatStarsError(
-                "The browser for BeatStars is missing (deleted with ~/.cache?): "
-                "run `playwright install chromium` in the project's venv"
-            )
+            _install_chromium(on_status)
         context = p.chromium.launch_persistent_context(
             str(profile),
             headless=False,
@@ -142,6 +146,21 @@ def publish_package(
         first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
         raise BeatStarsError(f"{track_id}: {first}; finish it with --draft {track_id}") from e
     return track_id
+
+
+def _install_chromium(on_status: StatusFn) -> None:
+    """Download Playwright's Chromium (~170 MB) into ``PLAYWRIGHT_BROWSERS_PATH``."""
+    on_status("Downloading the browser for BeatStars (~170 MB)")
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout).strip().splitlines()[-1:]
+        raise BeatStarsError(
+            f"Could not download the browser for BeatStars: {' '.join(tail) or 'no output'}"
+        )
 
 
 def _playwright_error() -> type[Exception]:
