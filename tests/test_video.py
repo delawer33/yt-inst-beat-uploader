@@ -329,3 +329,15 @@ def test_render_reel_loops_the_reel_frame(
     assert out == tmp_path / "reel.mp4" and seen[-1] == 1.0
     assert fake_ffmpeg.calls[0][fake_ffmpeg.calls[0].index("-loop") + 3].endswith("cover.png")
     assert not list(tmp_path.glob("reel-*"))
+
+
+def test_a_render_is_capped_in_cores_and_memory(
+    tmp_path: Path, fake_ffmpeg: type[FakePopen], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video, "_can_scope", lambda: True)
+    render_video(tmp_path / "a.mp3", tmp_path / "c.png", tmp_path / "v.mp4", lambda f: None)
+    cmd = fake_ffmpeg.calls[0]
+    assert cmd[:3] == ["systemd-run", "--user", "--scope"]
+    assert "CPUQuota=400%" in cmd and "MemoryMax=2G" in cmd and "MemorySwapMax=0" in cmd
+    ffmpeg = cmd[cmd.index("--") + 1 :]
+    assert ffmpeg[0] == "ffmpeg" and ffmpeg[ffmpeg.index("-threads") + 1] == "4"

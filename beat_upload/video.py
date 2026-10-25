@@ -33,6 +33,10 @@ REEL_LIFT = 120  # the cover sits this far above the centre, clear of Instagram'
 
 ProgressFn = Callable[[float], None]  # fraction 0..1
 
+# A Render's share of the laptop: x264 otherwise takes every core and ~2 GB at 1080p.
+RENDER_CPUS = 4
+RENDER_MEMORY_MAX = "2G"
+
 _MICROSECONDS = 1_000_000.0
 _TIME_KEYS = frozenset({"out_time_us", "out_time_ms"})  # both are microseconds in ffmpeg
 
@@ -294,9 +298,33 @@ def render_video(
 
 def _yield_to_desktop() -> None:
     """In the ffmpeg child before it starts: the lowest CPU priority, which on Linux also
-    lowers its disk priority. A Render takes every core; this way the desktop stays usable
-    and ffmpeg gets what is left over."""
+    lowers its disk priority: within its cores (``_limited``) ffmpeg still gets only what
+    the desktop leaves over."""
     os.nice(19)
+
+
+@cache
+def _can_scope() -> bool:
+    """Whether ``systemd-run --user --scope`` works here (a user systemd session)."""
+    if shutil.which("systemd-run") is None:
+        return False
+    probe = ["systemd-run", "--user", "--scope", "--quiet", "true"]
+    return subprocess.run(probe, capture_output=True).returncode == 0
+
+
+def _limited(cmd: list[str]) -> list[str]:
+    """``cmd`` in its own systemd scope: at most ``RENDER_CPUS`` cores and
+    ``RENDER_MEMORY_MAX`` of RAM with no swap, so a Render never makes the desktop stutter.
+    Without a user systemd session ``cmd`` runs as is; ``-threads`` still caps the cores."""
+    if not _can_scope():
+        return cmd
+    return [
+        "systemd-run", "--user", "--scope", "--quiet", "--collect",
+        "-p", f"CPUQuota={RENDER_CPUS * 100}%",
+        "-p", f"MemoryMax={RENDER_MEMORY_MAX}",
+        "-p", "MemorySwapMax=0",
+        "--", *cmd,
+    ]  # fmt: skip
 
 
 def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None) -> Path:
@@ -307,6 +335,7 @@ def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None
         "-i", str(cover),
         "-i", str(audio),
         "-c:v", "libx264",
+        "-threads", str(RENDER_CPUS),
         "-c:a", "aac",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",  # moov atom first; YouTube otherwise flags nonStreamableMov
@@ -315,7 +344,10 @@ def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None
 
     if on_progress is None:
         result = subprocess.run(
-            [*cmd, str(output)], capture_output=True, text=True, preexec_fn=_yield_to_desktop
+            _limited([*cmd, str(output)]),
+            capture_output=True,
+            text=True,
+            preexec_fn=_yield_to_desktop,
         )
         if result.returncode != 0:
             raise VideoError(f"ffmpeg failed:\n{result.stderr.strip()}")
@@ -323,7 +355,7 @@ def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None
 
     duration = probe_duration(audio)
     with subprocess.Popen(
-        [*cmd, "-loglevel", "error", "-progress", "pipe:1", "-nostats", str(output)],
+        _limited([*cmd, "-loglevel", "error", "-progress", "pipe:1", "-nostats", str(output)]),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
