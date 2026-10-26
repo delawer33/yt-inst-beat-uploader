@@ -104,3 +104,15 @@ def test_no_bpm_or_key_anywhere(tmp_path: Path) -> None:
 def test_missing_folder(tmp_path: Path) -> None:
     with pytest.raises(BounceFolderError, match="does not exist"):
         read_bounce_folder(tmp_path / "nope")
+
+
+def test_a_dash_instead_of_the_underscore_after_the_key() -> None:
+    name = "156_Amin-atmospheric-dreamy-calm_piano-reesebass-reverb_smp_youtube"
+    assert parse_bounce_name(name) == BounceFacts(
+        bpm=156,
+        key="Amin",
+        moods=("atmospheric", "dreamy", "calm"),
+        instruments=("piano", "reesebass", "reverb"),
+        samples=True,
+        sample_source="Youtube",
+    )

@@ -26,7 +26,8 @@ DEFAULT_SAMPLE_SOURCE = "Splice"
 SAMPLE_SOURCES = {"splice": "Splice", "looperman": "Looperman"}
 
 _BPM = re.compile(r"(?P<bpm>\d{2,3})(?:bpm)?")
-_KEY = re.compile(r"[A-G][#b]?(?:min|maj)")
+# "Amin", or "Amin-calm-dark" when a dash stands where the underscore after the key belongs.
+_KEY = re.compile(r"(?P<key>[A-G][#b]?(?:min|maj))(?:-(?P<moods>.*))?")
 _GROUP = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
 
 
@@ -59,16 +60,17 @@ def parse_bounce_name(name: str) -> BounceFacts | None:
     parts = name.split("_")
     for i, part in enumerate(parts[:-1]):
         bpm = _BPM.fullmatch(part)
-        if bpm is None or _KEY.fullmatch(parts[i + 1]) is None:
+        key = _KEY.fullmatch(parts[i + 1])
+        if bpm is None or key is None:
             continue
-        rest, source = _split_samples(parts[i + 2 :])
+        rest, source = _split_samples([key["moods"] or "", *parts[i + 2 :]])
         samples = source is not None
         rest = [g.strip("-") for g in rest]  # "_-inspiring-dreamy_": a stray dash
         groups = [tuple(g.split("-")) for g in rest if _GROUP.fullmatch(g)][:2]
         groups += [()] * (2 - len(groups))
         return BounceFacts(
             bpm=int(bpm["bpm"]),
-            key=parts[i + 1],
+            key=key["key"],
             moods=groups[0],
             instruments=groups[1],
             samples=samples,
