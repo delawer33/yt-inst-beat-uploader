@@ -198,11 +198,19 @@ def _description(youtube_title: str, bpm: int, key: str, youtube_id: str | None)
 
 
 def _tags(parsed: YouTubeTitle) -> list[str]:
-    tags = [f"{a.lower()} type beat" for a in parsed.artists[:2]]
+    tags = [_artist_tag(a.lower()) for a in parsed.artists[:2]]
     tags.append(_main_genre(parsed.genre))
     if len(tags) < MAX_TAGS:
         tags.append(f"{PRODUCER} type beat")
     return tags
+
+
+def _artist_tag(artist: str) -> str:
+    """'kanye west type beat'; 'childish gambino beat' when the long form does not fit."""
+    for tag in (f"{artist} type beat", f"{artist} beat"):
+        if len(tag) <= MAX_TAG_LENGTH:
+            return tag
+    return artist[:MAX_TAG_LENGTH].strip()
 
 
 def _main_genre(genre: str) -> str:

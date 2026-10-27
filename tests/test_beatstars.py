@@ -95,6 +95,12 @@ def test_two_artists_make_title_tags_and_description() -> None:
     ]
 
 
+def test_an_artist_too_long_for_type_beat_gets_a_shorter_tag() -> None:
+    title = '[FREE] Childish Gambino Type Beat x Kanye West Type Beat 2026 - "X" | Alternative Rap'
+    track = track_from_youtube(title, 164, "Dmin")
+    assert track.tags == ["childish gambino beat", "kanye west type beat", "alternative rap"]
+
+
 def test_one_artist_adds_the_producer_tag_and_genre_adds_a_beatstars_genre() -> None:
     track = track_from_youtube(
         '[FREE] King Von Type Beat 2026 - "Actor" | Chicago Drill x Hard Trap', 140, "Gmin"
