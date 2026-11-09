@@ -12,6 +12,7 @@ the Lab still draws lots among its five stones).
 An Effect that is not baked yet renders through the engine as before.
 """
 
+import subprocess
 import tempfile
 import wave
 from collections.abc import Callable
@@ -101,10 +102,42 @@ def bake(
             features = analyse(silence, plan.fps, None)
             features.frames = features.frames[: BAKE_SECONDS * plan.fps]
             _render_frames(silence, cover, part, plan, features, on_progress)
+        frames = _frame_count(part)
+        if frames != BAKE_SECONDS * plan.fps:
+            raise VideoError(
+                f"The bake {target.name} came out with {frames} frames, not "
+                f"{BAKE_SECONDS * plan.fps}; the encoder was cut short (a suspend?). Run it again."
+            )
         part.replace(target)
     finally:
         part.unlink(missing_ok=True)
     return target
+
+
+def _frame_count(clip: Path) -> int:
+    """The video frames in ``clip`` as ffprobe counts them; 0 for a file without a video
+    stream (an mp4 whose trailer was never written)."""
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "csv=p=0",
+            str(clip),
+        ],  # fmt: skip
+        capture_output=True,
+        text=True,
+    )
+    try:
+        return int(result.stdout.strip().rstrip(","))
+    except ValueError:
+        return 0
 
 
 def render_from_bake(
