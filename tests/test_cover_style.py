@@ -61,3 +61,9 @@ def test_parse_cover_style() -> None:
     assert parse_cover_style(None) is DEFAULT_COVER_STYLE
     with pytest.raises(ConfigError, match="cover_style must be one of .*blood_3tone"):
         parse_cover_style("sepia")
+
+
+def test_film_grain_given_as_the_plain_string_the_db_stores() -> None:
+    assert cover_style_graph("film_grain", "in", "out", (1080, 1080)) == cover_style_graph(  # type: ignore[arg-type]
+        CoverStyle.FILM_GRAIN, "in", "out", (1080, 1080)
+    )

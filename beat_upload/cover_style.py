@@ -106,7 +106,7 @@ def cover_style_graph(style: CoverStyle, src: str, dst: str, size: tuple[int, in
     mid-grey plate of static noise, made at half size so the grain is coarse, overlaid on the
     original colours.
     """
-    if style is CoverStyle.FILM_GRAIN:
+    if style == CoverStyle.FILM_GRAIN:  # the DB hands a plain str
         w, h = size
         return (
             f"[{src}]split[{dst}_pic][{dst}_plate];"
