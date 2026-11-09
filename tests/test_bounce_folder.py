@@ -125,3 +125,10 @@ def test_a_clip_stands_in_for_the_cover_image(tmp_path: Path) -> None:
     assert found.cover is None and found.clip == found.folder / "c.MOV"
     with_image = read_bounce_folder(make(tmp_path, "105bpm_Amin"))
     assert with_image.clip is None and with_image.cover == with_image.folder / "c.png"
+
+
+def test_a_key_without_min_or_maj_counts_as_minor() -> None:
+    facts = parse_bounce_name("90_D#_sad-calm-melancholic_guitar-bass_smp-splice")
+    assert facts is not None
+    assert (facts.bpm, facts.key, facts.moods) == (90, "D#min", ("sad", "calm", "melancholic"))
+    assert parse_bounce_name("160_A#maj_happy").key == "A#maj"  # type: ignore[union-attr]

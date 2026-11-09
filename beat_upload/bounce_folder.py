@@ -28,7 +28,8 @@ SAMPLE_SOURCES = {"splice": "Splice", "looperman": "Looperman"}
 
 _BPM = re.compile(r"(?P<bpm>\d{2,3})(?:bpm)?")
 # "Amin", or "Amin-calm-dark" when a dash stands where the underscore after the key belongs.
-_KEY = re.compile(r"(?P<key>[A-G][#b]?(?:min|maj))(?:-(?P<moods>.*))?")
+# A key without min/maj ("D#") counts as minor.
+_KEY = re.compile(r"(?P<note>[A-G][#b]?)(?P<mode>min|maj)?(?:-(?P<moods>.*))?")
 _GROUP = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
 
 
@@ -72,7 +73,7 @@ def parse_bounce_name(name: str) -> BounceFacts | None:
         groups += [()] * (2 - len(groups))
         return BounceFacts(
             bpm=int(bpm["bpm"]),
-            key=key["key"],
+            key=key["note"] + (key["mode"] or "min"),
             moods=groups[0],
             instruments=groups[1],
             samples=samples,
