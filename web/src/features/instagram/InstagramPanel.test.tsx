@@ -24,11 +24,13 @@ const beat: Beat = {
   source_name: null,
   cover_style: "purple_yellow_5tone",
   video_style: null,
+  effect: "still",
   rendered: false,
   active_job: null,
   cover_url: null,
   beatstars: null,
   beatstars_url: null,
+  bounce_folder: null,
   instagram_posted: false,
   synced_at: null,
   created_at: "2026-10-13T10:00:00",
@@ -117,6 +119,12 @@ test("a server error from Show in folder is shown", () => {
 test("a beat with nothing to make a Reel from says so", () => {
   render(view(reel({ state: "unavailable" })));
   expect(screen.getByText(/no audio and cover/)).toBeInTheDocument();
+});
+
+test("a Reel whose Effect waits for the title says so", () => {
+  render(view(reel({ state: "untitled" })));
+  expect(screen.getByText(/Give the beat its title first/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Show in folder/ })).not.toBeInTheDocument();
 });
 
 test("before the post is written the panel offers to write it, and says nothing is copyable", () => {

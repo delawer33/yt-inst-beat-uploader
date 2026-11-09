@@ -181,6 +181,7 @@ async def run_beatstars(ctx: JobContext) -> None:
             parse_youtube_title(beat.title).name,
             package_dir,
             CoverStyle(beat.video_style or beat.cover_style),
+            ctx.workspace.beat_dir(beat.id) / beat.image_path if beat.image_path else None,
         )
 
         beat_id = beat.id
@@ -221,18 +222,25 @@ async def run_beatstars(ctx: JobContext) -> None:
 
 
 def prepare(
-    bounce: Path, track: BeatStarsTrack, name: str, out_dir: Path, style: CoverStyle
+    bounce: Path,
+    track: BeatStarsTrack,
+    name: str,
+    out_dir: Path,
+    style: CoverStyle,
+    cover: Path | None = None,
 ) -> TrackPackage:
     """The Track Package of the Bounce Folder in ``out_dir``: trimmed master, tagged MP3,
     square cover painted in the video's ``style`` with the Label, stems zip, files named
-    after the beat's ``name``. Blocking (ffmpeg)."""
+    after the beat's ``name``. ``cover`` is the still that stands in when the folder holds a
+    Clip (the Beat's image). Blocking (ffmpeg)."""
     folder = read_bounce_folder(bounce)
     if folder.facts.sample_source:
         track = replace(track, sample_source=folder.facts.sample_source)
+    source = folder.cover or cover
+    if source is None:
+        raise BeatStarsError(f"{bounce.name} holds a clip and no still was given for the artwork.")
     out_dir.mkdir(parents=True, exist_ok=True)
-    styled = render_square_cover(
-        folder.cover, out_dir / STYLED_COVER_FILENAME, style, COVER_MAX_SIDE
-    )
+    styled = render_square_cover(source, out_dir / STYLED_COVER_FILENAME, style, COVER_MAX_SIDE)
     facts = TrackFileName(
         name=file_safe_name(name) or FALLBACK_FILE_NAME,
         bpm=track.bpm,

@@ -26,10 +26,13 @@ from beat_upload.beatstars.track import MAX_INSTRUMENTS
 from beat_upload.bounce_folder import read_bounce_folder
 from beat_upload.config import MAX_TITLE_LENGTH, PrivacyStatus, YouTubeMetadata
 from beat_upload.cover_style import CoverStyle
-from beat_upload.errors import BeatFolderError, BounceFolderError, ConfigError
+from beat_upload.errors import BeatFolderError, BounceFolderError, ConfigError, VideoError
 from beat_upload.placeholders import fields_with_placeholder
-from beat_upload.video import cover_fingerprint, render_cover
+from beat_upload.video import clip_frame, cover_fingerprint, render_cover
+from beat_upload.visual import effect as effect_of_id
 from beat_upload.workspace import Workspace
+
+CLIP_COVER_FILENAME = "cover.jpg"  # the Clip's middle frame, in the beat's dir
 
 KEY_TITLE_TEMPLATE = "title_template"
 KEY_DESCRIPTION_TEMPLATE = "description_template"
@@ -153,7 +156,9 @@ def create_draft_from_folder(
     ws: Workspace, repo: BeatRepo, folder: Path, template: dict[str, Any]
 ) -> Beat:
     """A DRAFT read from a Bounce Folder in place (ADR 0007): the tagged MP3 is the audio and
-    the cover the image, both kept as absolute paths into the folder; nothing is copied.
+    the cover the image, both kept as absolute paths into the folder; nothing is copied. A
+    Clip in place of the cover is kept the same way; its middle frame is written into the
+    beat's dir as the image, so previews and artwork have a still to show.
 
     ``{name}`` in the Templates becomes empty: the title is written by the owner. Raises
     ``BounceFolderError`` (no row is added) when the folder does not hold what it should.
@@ -167,6 +172,14 @@ def create_draft_from_folder(
         str(template.get(KEY_DESCRIPTION_TEMPLATE, DEFAULT_DESCRIPTION_TEMPLATE)), ""
     )
     facts = bounce.facts
+    beat_dir = ws.beat_dir(beat_id)
+    beat_dir.mkdir(parents=True, exist_ok=False)  # the video is rendered here
+    if bounce.clip is not None:
+        try:
+            clip_frame(bounce.clip, beat_dir / CLIP_COVER_FILENAME)
+        except VideoError:
+            shutil.rmtree(beat_dir)
+            raise
     beat = Beat(
         id=beat_id,
         status=BeatStatus.DRAFT,
@@ -175,7 +188,8 @@ def create_draft_from_folder(
         tags=[str(t) for t in template.get(KEY_TAGS_TEMPLATE, DEFAULT_TAGS_TEMPLATE)],
         privacy=PrivacyStatus.PRIVATE.value,
         audio_path=str(bounce.tagged),
-        image_path=str(bounce.cover),
+        image_path=str(bounce.cover) if bounce.cover else CLIP_COVER_FILENAME,
+        clip_path=str(bounce.clip) if bounce.clip else None,
         bounce_folder=str(bounce.folder),
         bpm=facts.bpm,
         music_key=facts.key,
@@ -183,7 +197,6 @@ def create_draft_from_folder(
         name_instruments=list(facts.instruments),
         samples=facts.samples,
     )
-    ws.beat_dir(beat_id).mkdir(parents=True, exist_ok=False)  # the video is rendered here
     return repo.add(beat)
 
 
@@ -345,6 +358,18 @@ def set_cover_style(beat: Beat, style: CoverStyle) -> bool:
         beat.video_path = None  # a sepia video matches no Cover Style, the current one included
     beat.cover_style = style
     return not beat.video_is_current
+
+
+def set_effect(beat: Beat, effect_id: str) -> bool:
+    """Choose the Effect: how the Reel moves (ADR 0012; the YouTube video is Still, so any
+    editable Beat may change it). True when the Reel on disk no longer matches, so a REEL is
+    due; the caller saves and queues it. An unknown Effect -> ``ConfigError`` (422).
+    """
+    effect_of_id(effect_id)
+    if effect_id == beat.effect:
+        return False
+    beat.effect = effect_id
+    return not beat.reel_is_current
 
 
 def preview_of(ws: Workspace, beat: Beat, style: CoverStyle) -> Path:

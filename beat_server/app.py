@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 
 from beat_server.api import auth as auth_api
-from beat_server.api import beats, events, instagram, jobs, stats, sync
+from beat_server.api import beats, effects, events, instagram, jobs, stats, sync
 from beat_server.api import settings as settings_api
 from beat_server.api.csrf import install_csrf
 from beat_server.api.errors import register_error_handlers
@@ -34,6 +34,7 @@ from beat_server.jobs.worker import Worker
 from beat_server.services.claude_cli import run_claude
 from beat_server.services.reel import show_in_folder
 from beat_server.settings import ServerSettings
+from beat_upload.visual import visual_dir
 from beat_upload.workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -120,6 +121,7 @@ def create_app(
     register_error_handlers(app)
     install_csrf(app)
     _include_routers(app)
+    _mount_visual(app)
     _mount_web(app, web_dist)
     return app
 
@@ -138,11 +140,20 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(beats.router)
     app.include_router(instagram.router)
     app.include_router(jobs.router)
+    app.include_router(effects.router)
     app.include_router(sync.router)
     app.include_router(stats.router)
     app.include_router(events.router)
     app.include_router(auth_api.router)
     app.include_router(settings_api.router)
+
+
+def _mount_visual(app: FastAPI) -> None:
+    """The Visual Lab at ``/visual/lab.html`` with the engine and the effects beside it, and
+    the fonts it draws with at ``/fonts/``: the same files the Render loads."""
+    visual = visual_dir()
+    app.mount("/visual", StaticFiles(directory=visual), name="visual")
+    app.mount("/fonts", StaticFiles(directory=visual.parent / "fonts"), name="fonts")
 
 
 def _mount_web(app: FastAPI, web_dist: Path | None) -> None:

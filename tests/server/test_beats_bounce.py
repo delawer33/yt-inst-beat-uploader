@@ -2,12 +2,15 @@
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from beat_server.db.models import Beat, BeatStatus, JobKind, new_id
 from beat_server.db.repo import BeatRepo, JobRepo
+from beat_server.services import beats as beats_service
 from beat_server.services.beats import youtube_description_with_link
+from beat_upload.errors import VideoError
 from beat_upload.workspace import Workspace
 
 
@@ -48,6 +51,55 @@ def test_cover_is_served_from_the_folder(client: TestClient, tmp_path: Path) -> 
     ]
     cover = client.get(f"/api/beats/{beat_id}/cover")
     assert cover.status_code == 200 and cover.content == b"x"
+
+
+def test_a_clip_in_the_folder_stands_in_for_the_cover(
+    client: TestClient,
+    session: Session,
+    workspace: Workspace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    folder = bounce(tmp_path, png=True)
+    (folder / "loop.mp4").write_bytes(b"mp4")
+    frames: list[tuple[Path, Path]] = []
+
+    def fake_frame(clip: Path, output: Path) -> Path:
+        frames.append((clip, output))
+        output.write_bytes(b"jpg")
+        return output
+
+    monkeypatch.setattr(beats_service, "clip_frame", fake_frame)
+    body = client.post("/api/beats/from-folder", json={"path": str(folder)}).json()
+    assert body["status"] == "draft" and body["has_files"] is True
+
+    beat = BeatRepo(session).get(body["id"])
+    assert beat is not None
+    assert beat.clip_path == str(folder / "loop.mp4")
+    assert beat.image_path == "cover.jpg"  # the clip's middle frame, in the beat's dir
+    assert frames == [(folder / "loop.mp4", workspace.beat_dir(beat.id) / "cover.jpg")]
+    assert client.get(f"/api/beats/{beat.id}/cover").content == b"jpg"
+    assert sorted(p.name for p in folder.iterdir()) == ["loop.mp4", "master.wav", "tagged.mp3"]
+
+
+def test_a_clip_ffmpeg_cannot_read_leaves_no_row_and_no_dir(
+    client: TestClient,
+    session: Session,
+    workspace: Workspace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    folder = bounce(tmp_path, png=True)
+    (folder / "loop.mp4").write_bytes(b"mp4")
+
+    def broken(clip: Path, output: Path) -> Path:
+        raise VideoError("ffmpeg could not read a frame of loop.mp4")
+
+    monkeypatch.setattr(beats_service, "clip_frame", broken)
+    response = client.post("/api/beats/from-folder", json={"path": str(folder)})
+    assert response.status_code == 400 and "loop.mp4" in response.json()["detail"]
+    assert BeatRepo(session).list() == []
+    assert list(workspace.data_dir.glob("beats/*")) == []
 
 
 def test_a_folder_without_its_wav_is_refused_and_leaves_no_row(

@@ -130,7 +130,7 @@ unsquashed, and the leftover width of each line becomes equal letter gaps. Two f
 (white text straight on the cover) and *boxed* (black box, white band with the big word in
 black). The open form disappears on light or busy covers, so use the boxed one.
 **Decided by the owner: boxed form, PRODUCED BY / DELAWER / YOU BETTER RUN, top right,**
-about 17 % of the cover width (27 % until 2026-11-09), margin 4 %. Top right is where the real Parental Advisory
+about 17 % of the cover width, margin 4 %. Top right is where the real Parental Advisory
 label sits, so on covers that already carry one ours covers it and the label never appears
 twice. The label goes on after the Cover Style, in plain black and white, on every Beat.
 

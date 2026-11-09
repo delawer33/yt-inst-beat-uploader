@@ -34,6 +34,7 @@ from beat_server.services.beats import (
     metadata_with_privacy,
     preview_of,
     set_cover_style,
+    set_effect,
     to_naive_utc,
 )
 from beat_server.services.beatstars import (
@@ -49,6 +50,7 @@ from beat_server.services.sync import status_for
 from beat_upload.auth import get_valid_credentials
 from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import BeatUploadError
+from beat_upload.visual import STILL
 from beat_upload.workspace import Workspace
 from beat_upload.youtube import set_privacy
 
@@ -144,23 +146,34 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep, queue: QueueD
     """Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
 
     A Draft may hold Placeholders; a Queued beat may not take one back (409). A new
-    ``cover_style`` (Draft only, else 409) queues a Render unless one is already waiting:
-    that one reads the style when it starts.
+    ``cover_style`` (Draft only, else 409) queues a Render and a Reel unless one is already
+    waiting: that one reads the style when it starts. A new ``effect`` queues a Reel only:
+    the Effect moves the Reel, the YouTube video is Still (ADR 0012). An Effect paints the
+    title into the Reel's frames, so a new title queues a Reel too, and none is queued while
+    the title still holds Placeholders or no name: the Instagram panel queues it once the
+    title passes.
     """
     beat = load_beat(session, beat_id)
     if beat.status not in EDITABLE:
         raise BeatStateError(
             f"Beat {beat_id} is {beat.status}; metadata can only be edited before upload."
         )
+    header_before = beat.header
     apply_patch(beat, body)
     render_due = body.cover_style is not None and set_cover_style(beat, body.cover_style)
+    reel_due = render_due
+    if body.effect is not None and set_effect(beat, body.effect):
+        reel_due = True
+    if beat.effect != STILL and beat.header != header_before:
+        reel_due = True  # new words in the header, which is in the Reel's frames
+    reel_due = reel_due and beat.header_ready  # an Effect waits for the title
     if beat.status == BeatStatus.QUEUED:
         check_no_placeholders(beat)  # it is on its way to YouTube; the send was the guard
     BeatRepo(session).save(beat)
     jobs = JobRepo(session)
     if render_due and not jobs.has_waiting(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)
-    if render_due and not jobs.has_waiting(JobKind.REEL, beat.id):
+    if reel_due and not jobs.has_waiting(JobKind.REEL, beat.id):
         queue.enqueue(JobKind.REEL, beat.id)
     return beat_out(session, beat)
 

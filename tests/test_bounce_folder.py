@@ -85,7 +85,9 @@ def test_facts_from_the_wav_when_the_folder_has_none(tmp_path: Path) -> None:
     [
         (("a.mp3", "c.png"), "WAV"),
         (("a.wav", "a.mp3", "b.mp3", "c.png"), "MP3"),
-        (("a.wav", "a.mp3"), "cover image"),
+        (("a.wav", "a.mp3"), "cover image or clip"),
+        (("a.wav", "a.mp3", "c.png", "c.mp4"), "More than one cover image or clip"),
+        (("a.wav", "a.mp3", "c.mov", "d.mp4"), "More than one cover image or clip"),
     ],
 )
 def test_folder_problems_name_the_file_kind(
@@ -116,3 +118,10 @@ def test_a_dash_instead_of_the_underscore_after_the_key() -> None:
         samples=True,
         sample_source="Youtube",
     )
+
+
+def test_a_clip_stands_in_for_the_cover_image(tmp_path: Path) -> None:
+    found = read_bounce_folder(make(tmp_path, "104bpm_Amin", ("a.wav", "a.mp3", "c.MOV")))
+    assert found.cover is None and found.clip == found.folder / "c.MOV"
+    with_image = read_bounce_folder(make(tmp_path, "105bpm_Amin"))
+    assert with_image.clip is None and with_image.cover == with_image.folder / "c.png"

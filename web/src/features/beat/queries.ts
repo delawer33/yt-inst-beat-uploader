@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { applyJobEvent } from "@/api/events";
 import type { components } from "@/api/schema";
@@ -8,6 +8,7 @@ import { beatKey, beatsKey, useBeatMutation, type Beat } from "@/features/librar
 export type BeatPatch = components["schemas"]["BeatPatch"];
 export type FillIn = components["schemas"]["FillIn"];
 export type FillOut = components["schemas"]["FillOut"];
+export type Effect = components["schemas"]["EffectOut"];
 
 export const BEATS_URL = "/api/beats";
 
@@ -132,5 +133,16 @@ export function useDeleteBeat() {
       queryClient.removeQueries({ queryKey: beatKey(id) });
       void queryClient.invalidateQueries({ queryKey: beatsKey, exact: true });
     },
+  });
+}
+
+export const effectsKey = ["effects"] as const;
+
+/** Every Effect the owner can pick, Still first; the list never changes while the app runs. */
+export function useEffects() {
+  return useQuery({
+    queryKey: effectsKey,
+    queryFn: async () => (await unwrap(api.GET("/api/effects"))).effects,
+    staleTime: Infinity,
   });
 }

@@ -42,7 +42,9 @@ class Fakes:
 def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
     fakes = Fakes()
 
-    def fake_prepare(bounce: Path, track: Any, name: str, out_dir: Path, style: Any) -> Any:
+    def fake_prepare(
+        bounce: Path, track: Any, name: str, out_dir: Path, style: Any, cover: Path | None = None
+    ) -> Any:
         fakes.prepared.append((bounce, name))
         return track
 

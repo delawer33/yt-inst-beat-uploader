@@ -94,8 +94,12 @@ export interface paths {
          * @description Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
          *
          *     A Draft may hold Placeholders; a Queued beat may not take one back (409). A new
-         *     ``cover_style`` (Draft only, else 409) queues a Render unless one is already waiting:
-         *     that one reads the style when it starts.
+         *     ``cover_style`` (Draft only, else 409) queues a Render and a Reel unless one is already
+         *     waiting: that one reads the style when it starts. A new ``effect`` queues a Reel only:
+         *     the Effect moves the Reel, the YouTube video is Still (ADR 0012). An Effect paints the
+         *     title into the Reel's frames, so a new title queues a Reel too, and none is queued while
+         *     the title still holds Placeholders or no name: the Instagram panel queues it once the
+         *     title passes.
          */
         patch: operations["patch_beat_api_beats__beat_id__patch"];
         trace?: never;
@@ -418,6 +422,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Effects
+         * @description Every Effect in picker order, Still first; ``files`` are the effect files under
+         *     ``/visual/effects/`` in load order, for the Visual Lab.
+         */
+        get: operations["list_effects_api_effects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sync": {
         parameters: {
             query?: never;
@@ -659,6 +684,8 @@ export interface components {
             source_name: string | null;
             cover_style: components["schemas"]["CoverStyle"];
             video_style: components["schemas"]["CoverStyle"] | null;
+            /** Effect */
+            effect: string;
             /** Rendered */
             rendered: boolean;
             active_job: components["schemas"]["JobOut"] | null;
@@ -667,6 +694,8 @@ export interface components {
             beatstars: components["schemas"]["BeatStarsPreview"] | null;
             /** Beatstars Url */
             beatstars_url: string | null;
+            /** Bounce Folder */
+            bounce_folder: string | null;
             /** Instagram Posted */
             instagram_posted: boolean;
             /** Synced At */
@@ -696,6 +725,8 @@ export interface components {
             tags?: string[] | null;
             privacy?: components["schemas"]["PrivacyStatus"] | null;
             cover_style?: components["schemas"]["CoverStyle"] | null;
+            /** Effect */
+            effect?: string | null;
             /** Publish At */
             publish_at?: string | null;
             /** Beatstars Moods */
@@ -785,6 +816,28 @@ export interface components {
             avg_view_seconds: number;
             /** Avg View Percent */
             avg_view_percent: number;
+        };
+        /**
+         * EffectOut
+         * @description One Effect the owner can pick (``GET /api/effects``).
+         */
+        EffectOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Blurb */
+            blurb: string;
+        };
+        /**
+         * EffectsOut
+         * @description Every Effect in picker order, Still first, and the engine files the Visual Lab loads.
+         */
+        EffectsOut: {
+            /** Effects */
+            effects: components["schemas"]["EffectOut"][];
+            /** Files */
+            files: string[];
         };
         /**
          * FillIn
@@ -926,14 +979,15 @@ export interface components {
         /**
          * ReelOut
          * @description The Reel of a Beat. ``rendering`` carries the REEL job's progress; ``failed`` its error;
-         *     ``unavailable`` means the Beat has no audio and cover on disk.
+         *     ``untitled`` means its Effect waits for a title to paint; ``unavailable`` that the Beat
+         *     has no audio and cover on disk.
          */
         ReelOut: {
             /**
              * State
              * @enum {string}
              */
-            state: "ready" | "rendering" | "failed" | "unavailable";
+            state: "ready" | "rendering" | "failed" | "untitled" | "unavailable";
             /** Progress */
             progress: number | null;
             /** Message */
@@ -1710,6 +1764,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_effects_api_effects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EffectsOut"];
                 };
             };
         };

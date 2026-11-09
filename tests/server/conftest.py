@@ -6,17 +6,20 @@ HTTP calls and direct repo access against the same database. Tables come from
 """
 
 from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from beat_server.app import create_app
 from beat_server.db.engine import MEMORY
-from beat_server.db.models import Base
+from beat_server.db.models import Base, Beat
+from beat_server.db.repo import BeatRepo
+from beat_server.services.beats import create_draft
 from beat_server.settings import ServerSettings
 from beat_upload.workspace import Workspace
 
@@ -64,3 +67,34 @@ def session(app: FastAPI) -> Iterator[Session]:
 def client(app: FastAPI) -> Iterator[TestClient]:
     with TestClient(app) as client:
         yield client
+
+
+MP3 = b"ID3" + b"\x00" * 32
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def upload(name: str, data: bytes) -> UploadFile:
+    return UploadFile(BytesIO(data), filename=name)
+
+
+@pytest.fixture
+def repo(session: Session) -> BeatRepo:
+    return BeatRepo(session)
+
+
+@pytest.fixture
+def template() -> dict:
+    return {
+        "title_template": '[FREE] Trap Type Beat - "{name}"',
+        "description_template": "{name} prod. by me",
+        "tags_template": ["trap", "free"],
+    }
+
+
+@pytest.fixture
+def draft(workspace: Workspace, repo: BeatRepo, template: dict) -> Beat:
+    """A Draft made from files, as ``POST /api/beats`` makes one (the Render is queued by the
+    endpoint, not here)."""
+    return create_draft(
+        workspace, repo, upload("Dark Night.mp3", MP3), upload("c.png", PNG), template
+    )

@@ -112,6 +112,9 @@ class BeatOut(BaseModel):
     # The Cover Style the video on disk has. ``None`` with ``rendered`` means a video from
     # before Cover Styles (sepia, no Label); picking any style renders it again.
     video_style: CoverStyle | None
+    # The Effect the owner chose (``GET /api/effects`` lists them): how the Reel moves. The
+    # YouTube video is always Still (ADR 0012).
+    effect: str
     # A Draft whose video file is ready in its Cover Style: sending it will not wait for a
     # Render (CONTEXT.md, "Rendered"). Stays true through a failed upload; turns false when
     # the owner picks another Cover Style, until the new Render is done.
@@ -124,6 +127,8 @@ class BeatOut(BaseModel):
     beatstars: BeatStarsPreview | None
     # The BeatStars Track's page, also for a Beat put there before Bounce Folders.
     beatstars_url: str | None
+    # The Bounce Folder this Beat reads in place (ADR 0007); None for a dropped pair.
+    bounce_folder: str | None
     # The owner posted the Reel on Instagram by hand (the Library marks these).
     instagram_posted: bool
     synced_at: datetime | None
@@ -153,11 +158,13 @@ class BeatOut(BaseModel):
             source_name=beat.source_name,
             cover_style=CoverStyle(beat.cover_style),
             video_style=CoverStyle(beat.video_style) if beat.video_style else None,
+            effect=beat.effect,
             rendered=beat.video_is_current,
             active_job=JobOut.model_validate(active_job) if active_job else None,
             cover_url=cover_url_for(beat),
             beatstars=BeatStarsPreview.from_beat(beat) if beat.bounce_folder else None,
             beatstars_url=beat.beatstars_url,
+            bounce_folder=beat.bounce_folder,
             instagram_posted=beat.instagram_posted,
             synced_at=beat.synced_at,
             created_at=beat.created_at,
@@ -184,6 +191,8 @@ class BeatPatch(BaseModel):
     privacy: PrivacyStatus | None = None
     # Draft only: a new Cover Style queues a new Render.
     cover_style: CoverStyle | None = None
+    # A new Effect queues a new Reel; the video stays. Unknown -> 422.
+    effect: str | None = None
     # Scheduled publish time; ``null`` clears it (check ``model_fields_set`` to tell the two
     # apart from "not sent"). A naive value counts as local time, like in config.yaml.
     publish_at: datetime | None = None
@@ -218,3 +227,18 @@ class FillOut(BaseModel):
     # Matched to the BeatStars lists; empty for a Beat that is not from a Bounce Folder.
     beatstars_moods: list[str]
     beatstars_instruments: list[str]
+
+
+class EffectOut(BaseModel):
+    """One Effect the owner can pick (``GET /api/effects``)."""
+
+    id: str
+    name: str
+    blurb: str
+
+
+class EffectsOut(BaseModel):
+    """Every Effect in picker order, Still first, and the engine files the Visual Lab loads."""
+
+    effects: list[EffectOut]
+    files: list[str]

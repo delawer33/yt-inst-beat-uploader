@@ -17,10 +17,18 @@ _Avoid_: Folder, project folder
 
 **Bounce Folder**:
 The folder the owner exports a finished beat into: one untagged WAV, one tagged MP3, one cover
-image and optionally a `stems` folder. Its name (or the WAV's) carries the BPM, key, moods,
-instruments and whether foreign samples are used; never the beat's name, which comes from
-the title. A Draft made from it goes to YouTube and to BeatStars.
+image or one Clip, and optionally a `stems` folder. Its name (or the WAV's) carries the BPM,
+key, moods, instruments and whether foreign samples are used; never the beat's name, which
+comes from the title. A Draft made from it goes to YouTube and to BeatStars.
 _Avoid_: Beat Folder, source folder, export
+
+**Clip**:
+A short video the owner puts in the Bounce Folder in the cover image's place. The Render
+treats it exactly as it treats a cover, only moving: looped for the length of the beat, its
+own sound dropped, painted in the Cover Style with the Label, and under an Effect the Effect's
+treatments run on the moving picture. Its middle frame stands as the cover wherever a still is
+wanted: the Draft page, the previews, the BeatStars artwork.
+_Avoid_: video source, loop, footage, background video
 
 **BeatStars Track**:
 A Beat's page for sale on BeatStars, made from its Bounce Folder when the owner sends it.
@@ -67,9 +75,10 @@ already be rendering or Rendered; that is the state of its Job, not of the Beat.
 _Avoid_: New, pending, unsent
 
 **Rendered**:
-A Draft whose video file is ready in the Cover Style the owner chose, so sending it will
-not wait for a Render. Choosing another Cover Style makes it un-Rendered until the new
-Render is done.
+A Draft whose video file is ready in the Cover Style the owner chose, so sending it will not
+wait for a Render. Choosing another Cover Style makes it un-Rendered until the new Render is
+done. The Effect and the title do not touch it: they gate the Reel (ADR 0012), which an
+Effect paints the title into, so no Reel starts until the title names the beat.
 _Avoid_: Encoded, prepared
 
 **Queued**:
@@ -111,11 +120,34 @@ the lists is dropped.
 _Avoid_: Autofill, generate, regenerate
 
 **Cover Style**:
-One of seven named looks a Render paints the cover in: the cover goes grey, its brightness
-is cut into a few bands, each band gets one fixed colour and ink outlines go on top. Chosen
-per Beat by the mood of the beat; the colours come from the Cover Style, not from the cover,
-so every video on the channel reads as one series.
+One of eight named looks a Render paints the cover in. Seven turn the cover grey, cut its
+brightness into a few bands, give each band one fixed colour and lay ink outlines on top;
+the colours come from the Cover Style, not from the cover, so every video on the channel
+reads as one series. "Film Grain" is the eighth: the cover's own colours under static grain.
+Chosen per Beat by the mood of the beat.
 _Avoid_: Palette, filter, sepia, theme
+
+**Effect**:
+How the Reel moves to the beat: a ray-traced object turning in studio light, particles, or
+cuts and treatments driven by the beat's own kicks, snares and bars. Chosen per Beat next to
+the Cover Style; it moves the Reel alone, the YouTube video stays Still (ADR 0012). "Still"
+is the default and the look every video had before Effects: the cover standing for the whole
+beat. The objects (Crown, Chain, Dagger, Doubloon, Gem) and the particles (Burst, Flow) ignore
+the cover and paint the header in tiny mono type; "VJ Cut" cuts between treatments of it.
+_Avoid_: Visualizer, animation, style, filter, motion
+
+**Bake**:
+An object Effect (Chain, Crown, Gem) drawn once as a 24-second loop at full quality and kept
+in the data dir; a Reel with that Effect is the loop repeated under the header, so it takes
+ffmpeg a minute instead of Chromium half an hour. The gem has one Bake per stone. Made by
+`beat-upload bake`; an Effect without its Bake still renders frame by frame.
+_Avoid_: Cache, pre-render, template clip
+
+**Visual Lab**:
+The page where the owner designs Effects by ear: a beat plays in the browser and the frame
+reacts live, on the very engine the Render runs. An Effect that works in the Visual Lab is
+an Effect the Render can paint.
+_Avoid_: Lab, playground, prototype page
 
 **Label**:
 The channel's own mark stamped on every cover during the Render, in the layout of the
@@ -125,10 +157,10 @@ shape.
 _Avoid_: Badge, watermark, logo, stamp, Parental Advisory
 
 **Reel**:
-A Beat's vertical video for Instagram: the whole beat over the cover in its Cover Style with
-the Label, full width, on a blurred copy of the same cover. Rendered together with the
-YouTube video and again when the Cover Style changes; the owner cuts the snippet in
-Instagram and posts it by hand.
+A Beat's vertical video for Instagram: the whole beat in the Beat's Effect; with Still, the
+cover in its Cover Style with the Label, full width, on a blurred copy of the same cover.
+Rendered together with the YouTube video and again when the Cover Style, the Effect or (with
+an Effect) the title changes; the owner cuts the snippet in Instagram and posts it by hand.
 _Avoid_: Vertical video, story, short, snippet
 
 **Instagram Post**:

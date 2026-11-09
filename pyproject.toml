@@ -23,10 +23,12 @@ dependencies = [
     "python-multipart>=0.0.9",
     "itsdangerous>=2.2",
     "Pillow>=10",
+    "numpy>=2.0",
+    "playwright>=1.45",
 ]
 
 [project.optional-dependencies]
-beatstars = ["playwright>=1.45"]
+beatstars = []  # Playwright is a core dependency now (Effects, ADR 0011)
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "ruff>=0.5"]
 
 [project.scripts]
@@ -36,6 +38,7 @@ beat-upload = "beat_upload.cli:app"
 packages = [
     "beat_upload",
     "beat_upload.beatstars",
+    "beat_upload.visual",
     "beat_server",
     "beat_server.db",
     "beat_server.db.migrations",
@@ -46,7 +49,7 @@ packages = [
 
 [tool.setuptools.package-data]
 beat_server = ["db/migrations/script.py.mako"]
-beat_upload = ["fonts/*.ttf", "fonts/OFL.txt"]
+beat_upload = ["fonts/*.ttf", "fonts/OFL.txt", "visual/*.js", "visual/*.html", "visual/effects/*.js"]
 
 [tool.ruff]
 line-length = 100

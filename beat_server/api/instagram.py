@@ -48,9 +48,10 @@ InstagramServiceDep = Annotated[InstagramService, Depends(get_instagram_service)
 
 class ReelOut(BaseModel):
     """The Reel of a Beat. ``rendering`` carries the REEL job's progress; ``failed`` its error;
-    ``unavailable`` means the Beat has no audio and cover on disk."""
+    ``untitled`` means its Effect waits for a title to paint; ``unavailable`` that the Beat
+    has no audio and cover on disk."""
 
-    state: Literal["ready", "rendering", "failed", "unavailable"]
+    state: Literal["ready", "rendering", "failed", "untitled", "unavailable"]
     progress: float | None
     message: str | None
     error: str | None

@@ -216,6 +216,7 @@ function ReelBlock({
         {reel.state === "ready" && <span className="tag tag-neutral">Ready</span>}
         {reel.state === "rendering" && <span className="tag tag-accent">Rendering</span>}
         {reel.state === "failed" && <span className="tag tag-failed">Failed</span>}
+        {reel.state === "untitled" && <span className="tag tag-neutral">Waits for the title</span>}
       </div>
 
       {reel.state === "rendering" && (
@@ -238,6 +239,12 @@ function ReelBlock({
           <span className="note-title">The Reel did not render</span>
           <span className="text-soft">{reel.error}</span>
         </div>
+      )}
+
+      {reel.state === "untitled" && (
+        <p className="text-muted">
+          The Effect paints the title into the Reel. Give the beat its title first.
+        </p>
       )}
 
       {reel.state === "unavailable" && (

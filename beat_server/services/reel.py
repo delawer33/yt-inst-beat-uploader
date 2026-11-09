@@ -2,9 +2,10 @@
 
 ``reel_state`` says what the panel shows: the Reel is ``ready``, ``rendering`` (a REEL job
 waits or runs), ``failed`` (the last REEL job failed; the panel does not queue another by
-itself, or a failing render would loop) or ``unavailable`` (the Beat has no audio and cover
-on disk). ``ensure_reel`` queues the REEL job the first time a Beat without a current Reel
-is looked at.
+itself, or a failing render would loop), ``untitled`` (the Beat's Effect paints the title
+into the frames and the title does not name the beat yet) or ``unavailable`` (the Beat has
+no audio and cover on disk). ``ensure_reel`` queues the REEL job the first time a Beat
+without a current Reel is looked at.
 
 ``show_in_folder`` opens the file manager with the file selected. The browser cannot open a
 ``file://`` path, so the server does it, as the local owner (ADR 0001): D-Bus
@@ -26,7 +27,7 @@ from beat_upload.beat_folder import REEL_FILENAME
 from beat_upload.errors import BeatUploadError
 from beat_upload.workspace import Workspace
 
-ReelStateName = Literal["ready", "rendering", "failed", "unavailable"]
+ReelStateName = Literal["ready", "rendering", "failed", "untitled", "unavailable"]
 Opener = Callable[[Path], None]
 
 _PENDING = (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.PAUSED)
@@ -62,6 +63,8 @@ def reel_state(ws: Workspace, jobs: JobRepo, beat: Beat) -> ReelState:
         return ReelState("rendering", job)
     if not can_make_reel(ws, beat):
         return ReelState("unavailable")
+    if not beat.header_ready:
+        return ReelState("untitled")
     if job is not None and job.status == JobStatus.FAILED:
         return ReelState("failed", job)
     return ReelState("rendering", job)  # nothing queued yet: ``ensure_reel`` is about to

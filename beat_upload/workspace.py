@@ -45,3 +45,8 @@ class Workspace:
 
     def beat_dir(self, beat_id: str) -> Path:
         return self.data_dir / "beats" / beat_id
+
+    @property
+    def bakes_dir(self) -> Path:
+        """The baked loops of the object Effects (``visual/bake.py``), shared by every Beat."""
+        return self.data_dir / "bakes"

@@ -15,9 +15,10 @@ import {
   tagsLength,
 } from "./metadata";
 import { fillHint, sendHint } from "./placeholders";
-import type { BeatPatch, FillIn, FillOut } from "./queries";
+import type { BeatPatch, Effect, FillIn, FillOut } from "./queries";
 import {
   useDeleteBeat,
+  useEffects,
   useFillBeat,
   usePatchBeat,
   useSkipBeatStars,
@@ -25,6 +26,7 @@ import {
 } from "./queries";
 import { BeatStarsBlock } from "./BeatStarsBlock";
 import { CoverStylePicker } from "./CoverStylePicker";
+import { EffectPicker } from "./EffectPicker";
 import { coverStyleName, type CoverStyle } from "./coverStyles";
 import { TagInput } from "./TagInput";
 import { YouTubePreview } from "./YouTubePreview";
@@ -50,6 +52,8 @@ export type DraftForm = {
   /** Local `datetime-local` value, or null for "publish now". */
   publishAt: string | null;
   coverStyle: CoverStyle;
+  /** The Effect's id (`GET /api/effects`); "still" is the one every video had before. */
+  effect: string;
   /** BeatStars moods and instruments (a Bounce Folder Beat); empty otherwise. */
   beatstarsMoods: string[];
   beatstarsInstruments: string[];
@@ -65,6 +69,7 @@ export function formOf(beat: Beat): DraftForm {
       ? toDateTimeLocal(serverDate(beat.publish_at))
       : null,
     coverStyle: beat.cover_style,
+    effect: beat.effect,
     beatstarsMoods: beat.beatstars?.moods ?? [],
     beatstarsInstruments: beat.beatstars?.instruments ?? [],
   };
@@ -102,6 +107,7 @@ export function rebase(
     // Only a Draft may change its Cover Style: once the Beat has left Draft, a pick the
     // server never took is dropped instead of being sent (and refused) with every save.
     coverStyle: to.status === "draft" ? adopt("coverStyle") : next.coverStyle,
+    effect: adopt("effect"), // the Effect moves the Reel only, so a Queued beat may change it too
     beatstarsMoods: adopt("beatstarsMoods"),
     beatstarsInstruments: adopt("beatstarsInstruments"),
   };
@@ -144,6 +150,9 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   if (beat.status === "draft" && form.coverStyle !== beat.cover_style) {
     patch.cover_style = form.coverStyle;
   }
+  if (form.effect !== beat.effect) {
+    patch.effect = form.effect;
+  }
   if (beat.beatstars) {
     if (!same(form.beatstarsMoods, beat.beatstars.moods)) {
       patch.beatstars_moods = form.beatstarsMoods;
@@ -155,10 +164,11 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   return patch;
 }
 
-/** `patch` without its Cover Style: what the autosave may send. Pure. */
+/** `patch` without its Cover Style and Effect: what the autosave may send. Pure. */
 export function withoutCoverStyle(patch: BeatPatch): BeatPatch {
   const rest = { ...patch };
   delete rest.cover_style;
+  delete rest.effect;
   return rest;
 }
 
@@ -193,6 +203,7 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
   const jobs = useJobs(beat.id);
   const retry = useRetryJob();
   const skip = useSkipBeatStars();
+  const effects = useEffects();
   const navigate = useNavigate();
 
   const failed =
@@ -225,6 +236,7 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
       beat={beat}
       channel={auth.data?.channel?.title ?? null}
       library={beats.data ?? []}
+      effects={effects.data ?? []}
       failedRender={failed}
       failedBeatStars={failedBeatStars}
       onSkipBeatStars={() => skip.mutate(beat.id)}
@@ -263,6 +275,8 @@ type ViewProps = {
   beat: Beat;
   channel: string | null;
   library: { id: string; title: string; tags: string[] }[];
+  /** The Effects the owner can pick; empty until loaded (the picker then stays out). */
+  effects?: Effect[];
   failedRender: Job | null;
   /** The failed BEATSTARS Job of a Queued beat: offers Retry or sending without BeatStars. */
   failedBeatStars?: Job | null;
@@ -292,6 +306,7 @@ export function DraftBeatView({
   beat,
   channel,
   library,
+  effects = [],
   failedRender,
   failedBeatStars = null,
   onSkipBeatStars,
@@ -333,8 +348,8 @@ export function DraftBeatView({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dirty = patchOf(form, baseline);
-  // A picked Cover Style is only a preview until "Apply": every pick would otherwise start
-  // a new Render. The buttons below still send it along with the rest.
+  // A picked Cover Style or Effect is only a pick until "Apply": every pick would otherwise
+  // start a new Render. The buttons below still send it along with the rest.
   const autosaved = withoutCoverStyle(dirty);
   const dirtyKey = JSON.stringify(autosaved);
   pending.current = autosaved;
@@ -835,6 +850,19 @@ export function DraftBeatView({
               applied={baseline.cover_style}
               disabled={beat.status !== "draft" || saving}
               onChange={(style) => set("coverStyle", style)}
+              onApply={() => {
+                cancelAutosave();
+                save(patchOf(form, baseline));
+              }}
+            />
+          )}
+          {beat.has_files && effects.length > 0 && (
+            <EffectPicker
+              effects={effects}
+              value={form.effect}
+              applied={baseline.effect}
+              disabled={saving}
+              onChange={(effect) => set("effect", effect)}
               onApply={() => {
                 cancelAutosave();
                 save(patchOf(form, baseline));

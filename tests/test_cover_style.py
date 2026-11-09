@@ -12,9 +12,9 @@ from beat_upload.cover_style import (
 from beat_upload.errors import ConfigError
 
 
-def test_there_are_eight_and_the_default_is_purple_yellow() -> None:
+def test_there_are_eight_and_the_default_is_film_grain() -> None:
     assert len(CoverStyle) == 8
-    assert DEFAULT_COVER_STYLE is CoverStyle.PURPLE_YELLOW_5TONE
+    assert DEFAULT_COVER_STYLE is CoverStyle.FILM_GRAIN
 
 
 def test_gradient_map_paints_each_band_one_colour() -> None:

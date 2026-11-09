@@ -24,7 +24,8 @@ class CoverStyle(StrEnum):
     FILM_GRAIN = "film_grain"
 
 
-DEFAULT_COVER_STYLE = CoverStyle.PURPLE_YELLOW_5TONE
+# The one style the channel uses; the seven gradient maps stay as choices.
+DEFAULT_COVER_STYLE = CoverStyle.FILM_GRAIN
 
 # Applied to the grey cover before it is cut into bands; the cuts below are on its output.
 CONTRAST = 1.3

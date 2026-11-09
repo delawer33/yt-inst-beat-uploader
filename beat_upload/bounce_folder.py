@@ -1,6 +1,7 @@
 """The Bounce Folder: where the owner exports a finished beat (CONTEXT.md, ADR 0007).
 
-One untagged WAV, one tagged MP3, one cover image and optionally a ``stems`` folder. The
+One untagged WAV, one tagged MP3, one cover image or one Clip (a muted video in its place)
+and optionally a ``stems`` folder. The
 folder's name, or else the WAV's, carries the facts::
 
     Jungle_104bpm_Amin_calm-rhytmic-mysterious_guitar-808_smp
@@ -16,7 +17,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from beat_upload.beat_folder import IMAGE_EXTENSIONS
+from beat_upload.beat_folder import CLIP_EXTENSIONS, IMAGE_EXTENSIONS
 from beat_upload.errors import BounceFolderError
 
 STEMS_DIRNAME = "stems"
@@ -46,7 +47,8 @@ class BounceFolder:
     folder: Path
     master: Path  # the one .wav
     tagged: Path  # the one .mp3
-    cover: Path  # the one image
+    cover: Path | None  # the one image, or None when a Clip stands in its place
+    clip: Path | None  # the one video (CONTEXT.md: Clip); None with a cover image
     stems: Path | None
     facts: BounceFacts
 
@@ -104,7 +106,7 @@ def read_bounce_folder(folder: Path) -> BounceFolder:
         raise BounceFolderError(f"Not a folder: {folder}")
     master = _single(folder, {".wav"}, "WAV")
     tagged = _single(folder, {".mp3"}, "MP3")
-    cover = _single(folder, IMAGE_EXTENSIONS, "cover image")
+    cover, clip = _visual(folder)
     facts = parse_bounce_name(folder.name) or parse_bounce_name(master.stem)
     if facts is None:
         raise BounceFolderError(
@@ -117,9 +119,26 @@ def read_bounce_folder(folder: Path) -> BounceFolder:
         master=master,
         tagged=tagged,
         cover=cover,
+        clip=clip,
         stems=stems if stems.is_dir() else None,
         facts=facts,
     )
+
+
+def _visual(folder: Path) -> tuple[Path | None, Path | None]:
+    """The cover image or the Clip: exactly one of the two."""
+    images = _all(folder, IMAGE_EXTENSIONS)
+    clips = _all(folder, CLIP_EXTENSIONS)
+    if len(images) + len(clips) > 1:
+        names = ", ".join(f.name for f in images + clips)
+        raise BounceFolderError(f"More than one cover image or clip in {folder}: {names}.")
+    if not images and not clips:
+        raise BounceFolderError(f"No cover image or clip in {folder}.")
+    return (images[0], None) if images else (None, clips[0])
+
+
+def _all(folder: Path, extensions: frozenset[str]) -> list[Path]:
+    return sorted(f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in extensions)
 
 
 def _single(folder: Path, extensions: set[str] | frozenset[str], kind: str) -> Path:

@@ -28,11 +28,13 @@ const draft: Beat = {
   source_name: "Dmin110.mp3",
   cover_style: "purple_yellow_5tone",
   video_style: null,
+  effect: "still",
   rendered: false,
   active_job: null,
   cover_url: "/api/beats/b1/cover",
   beatstars: null,
   beatstars_url: null,
+  bounce_folder: null,
   instagram_posted: false,
   synced_at: null,
   created_at: "2026-09-24T10:00:00",
@@ -501,6 +503,41 @@ test("picking a Cover Style previews it; only Apply saves it and renders again",
   vi.useRealTimers();
 });
 
+const EFFECTS = [
+  { id: "still", name: "Still", blurb: "The cover, standing." },
+  { id: "vjcut", name: "VJ Cut", blurb: "Five treatments, a cut per hit." },
+];
+
+test("picking an Effect marks it; only Apply saves it and renders again", () => {
+  vi.useFakeTimers();
+  const { onSave } = renderView(draft, { effects: EFFECTS });
+  expect(
+    screen.getByRole("radiogroup", { name: /Effect · Still/ }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: /^Still/ })).toBeChecked();
+
+  fireEvent.click(screen.getByRole("radio", { name: /^VJ Cut/ }));
+  expect(
+    screen.getByRole("radiogroup", { name: /Effect · VJ Cut/ }),
+  ).toBeInTheDocument();
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Keep Still" }));
+  expect(screen.getByRole("radio", { name: /^Still/ })).toBeChecked();
+  expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
+
+  fireEvent.click(screen.getByRole("radio", { name: /^VJ Cut/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply VJ Cut" }));
+  expect(onSave).toHaveBeenCalledWith({ effect: "vjcut" });
+  vi.useRealTimers();
+});
+
+test("without the Effects list the picker stays out", () => {
+  renderView();
+  expect(screen.queryByRole("radiogroup", { name: /Effect/ })).toBeNull();
+});
+
 test("Keep puts the pick back on the applied Cover Style", () => {
   vi.useFakeTimers();
   const { onSave } = renderView();
@@ -581,6 +618,7 @@ test("a Draft rendered before Cover Styles says so and renders again in the chos
     ...draft,
     rendered: true,
     video_style: null,
+    effect: "still",
   });
   expect(screen.getByText("Rendered before Cover Styles")).toBeInTheDocument();
   fireEvent.click(
