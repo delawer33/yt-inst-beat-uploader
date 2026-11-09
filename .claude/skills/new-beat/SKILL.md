@@ -112,8 +112,7 @@ Write the slot as a naive local time string, e.g. `"2026-11-10T20:00:00"`.
 
 Ask him, in one line, with this list and nothing else (these are the Effects he chose for
 Instagram on 2026-11-09): **Burst, Chain, Crown, Dagger, Doubloon, Flow, Gem**. Mark which are
-instant: `(быстро)` for Chain and Crown when `bake --status` says `baked`, and for Gem only when
-all five `gem-*` stones are baked (the Beat's seed picks the stone); the others `(~30 мин, в фоне)`. Pick nothing for him. If he answers before you asked, use it.
+instant: `(быстро)` for Chain, Crown and Gem when `bake --status` says `baked`; the others `(~30 мин, в фоне)`. Pick nothing for him. If he answers before you asked, use it.
 
 The ids are lower case: `burst, chain, crown, dagger, doubloon, flow, gem`.
 

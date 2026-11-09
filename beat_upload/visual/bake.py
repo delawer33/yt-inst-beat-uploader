@@ -6,8 +6,8 @@ supersampling, some 20 minutes), as a ``BAKE_SECONDS`` loop over black without t
 with every motion made periodic over the loop (``window.__bake`` in the Effect's file), and
 kept in the data dir (``Workspace.bakes_dir``). A Reel then is the loop repeated for the
 whole beat with the header (``header.py``) laid on top and the audio: a minute of ffmpeg
-instead of half an hour of Chromium. The gem has one bake per stone; the stone of a Beat
-follows its seed, as ``gem.js`` would pick it.
+instead of half an hour of Chromium. The gem is always the diamond in the Render (one bake;
+the Lab still draws lots among its five stones).
 
 An Effect that is not baked yet renders through the engine as before.
 """
@@ -28,26 +28,26 @@ from beat_upload.visual.render import EffectMeta, RenderPlan, _render_frames, en
 
 BAKE_SECONDS = 24  # the loop; every rate in a baked Effect is a multiple of 2*pi/24
 STONES = ("ruby", "diamond", "sapphire", "emerald", "amber")  # gem.js STONES, in order
+DIAMOND = STONES.index("diamond")  # the one stone the Render uses
 # Effect id -> its variants (None: just the one). Only Effects that stand still to the beat
 # can be baked; these three do.
 BAKED: dict[str, tuple[str | None, ...]] = {
     "chain": (None,),
     "crown": (None,),
-    "gem": STONES,
+    "gem": (None,),
 }
 
 
 def variant_for(effect: str, seed: int) -> str | None:
-    """Pure. The variant a Beat with ``seed`` gets: the gem's stone, else None."""
+    """Pure. The variant a Beat with ``seed`` gets; None while every baked Effect has one."""
     variants = BAKED[effect]
     return variants[seed % len(variants)] if variants != (None,) else None
 
 
 def stone_for(effect: str, seed: int) -> int | None:
-    """Pure. The gem's stone as an index into ``gem.js`` STONES, for an engine render of the
-    same Beat; None for any other Effect."""
-    variant = variant_for(effect, seed) if effect in BAKED else None
-    return STONES.index(variant) if effect == "gem" and variant else None
+    """Pure. The gem's stone as an index into ``gem.js`` STONES for a Render (always the
+    diamond, like the bake); None for any other Effect."""
+    return DIAMOND if effect == "gem" else None
 
 
 def bake_file(bakes_dir: Path, effect: str, variant: str | None) -> Path:
@@ -88,7 +88,7 @@ def bake(
     bakes_dir.mkdir(parents=True, exist_ok=True)
     target = bake_file(bakes_dir, effect, variant)
     part = target.with_name(f"{target.stem}.part{target.suffix}")
-    options = {"stone": STONES.index(variant)} if effect == "gem" else {}
+    options = {"stone": DIAMOND} if effect == "gem" else {}
     plan = RenderPlan(effect, DEFAULT_COVER_STYLE, "reel", EffectMeta(), seed=7, bake=options)
     try:
         with tempfile.TemporaryDirectory(prefix="bake-", dir=bakes_dir) as tmp:

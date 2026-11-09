@@ -10,7 +10,7 @@ the beat (the owner dropped every kick flash and camera jolt on 2026-11-09). The
 therefore depend on nothing but time, and drawing them through SwiftShader for every Reel
 (25-30 minutes a beat at half shader size, 40 at full) buys nothing. Each is drawn once
 instead: `beat-upload bake` renders a 24-second loop at full quality (2x2 supersampling) into
-the data dir (`bakes/<effect>[-<variant>].mp4`), and the REEL job plays it: ffmpeg loops the
+the data dir (`bakes/<effect>.mp4`), and the REEL job plays it: ffmpeg loops the
 clip for the whole beat, lays the header (title, artists, BPM, key) over it and adds the audio.
 A minute of work, and the owner can post a beat the day it is bounced.
 
@@ -18,7 +18,7 @@ To loop without a seam the Effect's motion is made periodic in bake mode (`windo
 every rate becomes a multiple of 2*pi/24, the chain's spin a whole number of half turns. The
 header is left out of the bake and drawn by Pillow (`visual/header.py`) in the same font,
 size and places as the JavaScript `tiny()`, so a baked Reel and an engine Reel look the same.
-The gem's stone is chosen per Beat by its seed; five bakes, one per stone, keep that choice.
+The gem is always the diamond in the Render (the Lab still draws lots among five stones): one bake, not five.
 
 Rejected: baking frame sequences and playing them inside the engine (2D speed, but still
 Chromium and still minutes); making every Effect react to the beat again so a bake would be

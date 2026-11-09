@@ -24,7 +24,7 @@ beat-upload analytics -d 28      # per-video views, watch time, AVD (Analytics A
 beat-upload serve --open-browser # web UI + API on http://127.0.0.1:8765
 beat-upload beatstars prepare DIR && beat-upload beatstars upload DIR/beatstars
 beat-upload effect test_data/16.3.25.mp3 test_data/_.jpeg out.mp4 --seconds 10  # an Effect, outside the app
-beat-upload bake --status        # the baked object loops (chain, crown, gem x5) in the data dir; `bake` makes the missing ones, ~20 min each
+beat-upload bake --status        # the baked object loops (chain, crown, gem) in the data dir; `bake` makes the missing ones, ~20 min each
 
 cd web
 npm run dev                      # Vite on :5173, proxies /api to :8765 (or preview "web-dev")
@@ -162,8 +162,7 @@ The stray copies in the repo root are leftovers and unused by the code.
   Queued beat too.
 - Bakes (ADR 0013): chain, crown and gem do not react to the beat, so `beat-upload bake` draws
   each once as a 24 s loop at full quality (`RenderPlan.bake` -> `window.__bake`: no header,
-  every motion rate a multiple of 2*pi/24, the gem's stone fixed; five gem files, one per stone,
-  the Beat's stone follows its seed). The REEL job plays the loop through ffmpeg with the header
+  every motion rate a multiple of 2*pi/24, the gem always the diamond, in the engine too). The REEL job plays the loop through ffmpeg with the header
   from `header.py` when the file exists, else the engine draws as usual. New motion in one of
   these three must stay periodic in bake mode, and the bake must be redone (`bake --redo`).
 - The Label (black box top right) is off in the engine (`knobs.label`); Still keeps it.
