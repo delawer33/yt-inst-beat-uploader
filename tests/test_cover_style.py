@@ -1,4 +1,4 @@
-"""Cover Style: the seven looks and the ffmpeg graph that paints one. Pure, no ffmpeg."""
+"""Cover Style: the eight looks and the ffmpeg graph that paints one. Pure, no ffmpeg."""
 
 import pytest
 
@@ -12,8 +12,8 @@ from beat_upload.cover_style import (
 from beat_upload.errors import ConfigError
 
 
-def test_there_are_seven_and_the_default_is_purple_yellow() -> None:
-    assert len(CoverStyle) == 7
+def test_there_are_eight_and_the_default_is_purple_yellow() -> None:
+    assert len(CoverStyle) == 8
     assert DEFAULT_COVER_STYLE is CoverStyle.PURPLE_YELLOW_5TONE
 
 
@@ -27,7 +27,7 @@ def test_gradient_map_paints_each_band_one_colour() -> None:
     assert f.endswith("format=gbrp")
 
 
-@pytest.mark.parametrize("style", list(CoverStyle))
+@pytest.mark.parametrize("style", [s for s in CoverStyle if s is not CoverStyle.FILM_GRAIN])
 def test_every_style_has_one_cut_less_than_colours(style: CoverStyle) -> None:
     f = gradient_map_filter(style)
     r = f.split("r='")[1].split("'")[0]
@@ -41,6 +41,15 @@ def test_graph_multiplies_ink_over_the_colours_both_as_gbrp() -> None:
     assert "blend=all_mode=multiply" in g
     assert g.endswith("[out]")
     assert "erosion" not in g  # thin ink
+
+
+def test_film_grain_overlays_coarse_static_noise_on_the_original_colours() -> None:
+    g = cover_style_graph(CoverStyle.FILM_GRAIN, "in", "out", (1080, 1080))
+    assert g.startswith("[in]split") and g.endswith("[out]")
+    assert "lutrgb" not in g and "edgedetect" not in g  # no gradient map, no ink
+    assert "scale=iw/2:ih/2,hue=s=0,lutyuv=y=128,noise=c0s=100:c0f=u:all_seed=3" in g
+    assert "scale=1080:1080:flags=bilinear" in g
+    assert "blend=all_mode=overlay:all_opacity=0.9" in g
 
 
 def test_thick_ink_is_eroded() -> None:

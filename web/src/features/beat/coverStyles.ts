@@ -12,6 +12,7 @@ const NAMES: Record<CoverStyle, string> = {
   diamond_pink_cyan: "Diamond Pink Cyan",
   stone_ocean: "Stone Ocean",
   blood_3tone: "Blood 3-tone",
+  film_grain: "Film Grain",
 };
 
 export const COVER_STYLES = Object.keys(NAMES) as CoverStyle[];

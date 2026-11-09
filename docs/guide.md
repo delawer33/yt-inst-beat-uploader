@@ -247,7 +247,7 @@ youtube:
                                   # makes it public then; needs privacy_status: private
 cover_style: stone_ocean          # optional, default purple_yellow_5tone; also
                                   # purple_yellow_thick_ink, golden_wind, dio_green,
-                                  # diamond_pink_cyan, blood_3tone
+                                  # diamond_pink_cyan, blood_3tone, film_grain
 ```
 
 `publish_at` must be at least 5 minutes ahead when the upload runs; a time that has already

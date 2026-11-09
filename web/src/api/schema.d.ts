@@ -769,7 +769,7 @@ export interface components {
          * CoverStyle
          * @enum {string}
          */
-        CoverStyle: "purple_yellow_5tone" | "purple_yellow_thick_ink" | "golden_wind" | "dio_green" | "diamond_pink_cyan" | "stone_ocean" | "blood_3tone";
+        CoverStyle: "purple_yellow_5tone" | "purple_yellow_thick_ink" | "golden_wind" | "dio_green" | "diamond_pink_cyan" | "stone_ocean" | "blood_3tone" | "film_grain";
         /** DayPoint */
         DayPoint: {
             /**

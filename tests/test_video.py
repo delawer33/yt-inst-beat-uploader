@@ -13,6 +13,7 @@ from beat_upload import label, video
 from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import VideoError
 from beat_upload.video import (
+    clip_command,
     cover_fingerprint,
     cover_graph,
     fit_in_frame,
@@ -157,7 +158,7 @@ def test_fit_in_frame(size: tuple[int, int], expected: tuple[int, int]) -> None:
 
 
 def test_label_sits_on_the_cover_not_the_frame() -> None:
-    assert label.placement(1080) == (292, 43)  # 27 % wide, 4 % margin of the cover
+    assert label.placement(1080) == (184, 43)  # 17 % wide, 4 % margin of the cover
 
 
 def test_cover_graph_styles_and_stamps_before_the_pad() -> None:
@@ -187,7 +188,7 @@ def test_render_cover_feeds_the_label_as_second_input(
         seen.append(cmd)
         label = Path(cmd[cmd.index("-i", cmd.index("-i") + 1) + 1])
         with Image.open(label) as im:
-            assert im.width == 292  # 27 % of the cover's 1080 px in the frame
+            assert im.width == 184  # 17 % of the cover's 1080 px in the frame
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(video, "ensure_ffmpeg", lambda: None)
@@ -341,3 +342,17 @@ def test_a_render_is_capped_in_cores_and_memory(
     assert "CPUQuota=400%" in cmd and "MemoryMax=2G" in cmd and "MemorySwapMax=0" in cmd
     ffmpeg = cmd[cmd.index("--") + 1 :]
     assert ffmpeg[0] == "ffmpeg" and ffmpeg[ffmpeg.index("-threads") + 1] == "4"
+
+
+def test_clip_command_loops_the_clip_drops_its_sound_and_stops_with_the_audio(
+    tmp_path: Path,
+) -> None:
+    cmd = clip_command(
+        tmp_path / "a.mp3", tmp_path / "c.mp4", tmp_path / "l.png", "[0:v]null[cover]", "cover",
+        tmp_path / "v.mp4",
+    )  # fmt: skip
+    assert cmd[cmd.index("-stream_loop") + 1] == "-1"
+    assert cmd[cmd.index("-i") + 1] == str(tmp_path / "c.mp4")
+    assert "-map" in cmd and cmd[cmd.index("-map") + 1] == "[cover]"
+    assert "2:a" in cmd  # the beat, never the clip's own sound
+    assert "-shortest" in cmd and cmd[-1] == str(tmp_path / "v.mp4")
