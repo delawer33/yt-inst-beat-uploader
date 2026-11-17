@@ -3,7 +3,8 @@
 Sending a public or scheduled Beat from a Bounce Folder queues this Job next to the Render.
 It builds the Track Package, drives Studio in a real browser window, releases the Track at
 the moment YouTube will (now, or the Beat's publish time) and saves the Track's id the moment
-Studio makes it and its URL at the end. Whichever of the Render and this Job finishes last
+Studio makes it and its URL at the end, then drops the Package (a copy of the Bounce Folder).
+Whichever of the Render and this Job finishes last
 queues the Upload, whose description then carries the link (``with_beatstars_link``).
 
 A Beat sent private or unlisted without a time gets no Track (``beatstars_due``). A failure
@@ -22,6 +23,7 @@ replace.
 
 import asyncio
 import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import replace
@@ -209,6 +211,9 @@ async def run_beatstars(ctx: JobContext) -> None:
         beat.beatstars_url = url
         repo.save(beat)
         ctx.bus.publish_beat(beat.id, beat.status)
+        # The Package is a copy of the Bounce Folder (WAV, stems zip): once the Track is up
+        # it is only disk space (2026-11-17: 4 GB of them filled the drive).
+        shutil.rmtree(package_dir, ignore_errors=True)
         ctx.progress(1.0, f"On BeatStars as {track_id}")
     else:
         ctx.log("Nothing to put on BeatStars")

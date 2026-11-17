@@ -46,6 +46,8 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> Fakes:
         bounce: Path, track: Any, name: str, out_dir: Path, style: Any, cover: Path | None = None
     ) -> Any:
         fakes.prepared.append((bounce, name))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "stems.zip").write_bytes(b"zip")
         return track
 
     def fake_studio(profile, package, draft, release, on_created, on_status):  # noqa: ANN001, ANN202
@@ -439,3 +441,15 @@ def test_a_service_started_before_the_desktop_takes_the_display_from_the_session
     )
     beatstars._take_display_from_session()
     assert beatstars.os.environ["WAYLAND_DISPLAY"] == "wayland-1"
+
+
+async def test_the_package_is_dropped_once_the_track_is_up(
+    app: FastAPI, client: TestClient, session: Session, bounce: Path, fakes: Fakes
+) -> None:
+    beat_id = make_beat(client, bounce)
+    assert client.post(f"/api/beats/{beat_id}/upload").status_code == 200
+    await run_next(app, session, JobKind.RENDER)
+    await run_next(app, session, JobKind.BEATSTARS)
+    package_dir = app.state.workspace.beat_dir(beat_id) / beatstars.PACKAGE_DIRNAME
+    assert beat_of(session, beat_id).beatstars_url == URL
+    assert not package_dir.exists()
