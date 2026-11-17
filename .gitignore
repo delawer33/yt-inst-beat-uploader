@@ -4,6 +4,7 @@ test_data/
 .venv/
 yt-secrets.json
 token.json
+client_secrets.json
 session-*
 *.egg-info/
 dev.sqlite3
