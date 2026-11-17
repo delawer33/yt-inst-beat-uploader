@@ -51,7 +51,7 @@ def test_login_without_secrets_raises(tmp_path: Path) -> None:
 def test_require_free_space_passes_and_refuses(tmp_path: Path, monkeypatch) -> None:
     ws = Workspace(config_dir=tmp_path / "c", data_dir=tmp_path / "d" / "deeper")
     assert ws.free_bytes() > 0  # the nearest existing parent's drive, the data dir not made
-    monkeypatch.setattr(Workspace, "free_bytes", lambda self: 2 * 1024**3)
+    monkeypatch.setattr(Workspace, "free_bytes", lambda self: 1024**3)
     ws.require_free_space("the video", minimum=1024**3)
-    with pytest.raises(DiskFullError, match=r"2\.0 GB free .* at least 5 GB needed"):
+    with pytest.raises(DiskFullError, match=r"1\.0 GB free .* at least 2 GB needed"):
         ws.require_free_space("the video")

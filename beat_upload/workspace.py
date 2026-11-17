@@ -17,7 +17,7 @@ APP_NAME = "beat-upload"
 # A render writes a ``.part`` video next to the beat, a Track Package a WAV and a stems zip;
 # a full drive fails SQLite commits as well, which the worker cannot survive cleanly
 # (2026-11-17: the root drive filled mid-run). Refuse the heavy work before that point.
-MIN_FREE_BYTES = 5 * 1024**3
+MIN_FREE_BYTES = 2 * 1024**3
 
 
 @dataclass(frozen=True)
