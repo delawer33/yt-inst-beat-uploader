@@ -99,11 +99,11 @@ hand in the PATCH if the fill drifted. Title ≤ 100 chars, tags ≤ 500 chars i
 
 ## 4. The slot
 
-Five beats a week, one a day, at **20:00 local** on **Sun, Mon, Tue, Wed, Thu** (producers and
-rappers browse type beats on weekday evenings and Sunday night; Friday and Saturday evenings are
-the quiet ones). The slot of this beat is the earliest of those days, today included, that has
-no beat already scheduled or published on that date (the list from §0: `publish_at` of
-scheduled, `published_at` of published, local dates).
+One beat every other day at **20:00 local** (the owner's rule since 2026-11-17; before that
+five a week on Sun–Thu). The slot of this beat is the earliest day, today included, that is
+**two days after the latest beat already scheduled or published** (the list from §0:
+`publish_at` of scheduled, `published_at` of published, local dates) and has no beat itself;
+with nothing scheduled, today.
 
 If that day is **today**:
 
