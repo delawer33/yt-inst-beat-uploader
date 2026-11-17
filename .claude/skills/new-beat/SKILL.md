@@ -41,6 +41,12 @@ What the app does, so you can tell the owner the truth:
 - **Instagram**: nothing is posted automatically. You render the Reel and write the Instagram
   Post (`POST /api/beats/{id}/instagram`); the owner posts by hand.
 
+**One beat at a time.** Several new beats: run this whole flow for the first, and start the
+next only when the first is `scheduled` and its Reel is `ready` or the only thing still
+rendering. On 2026-11-17 three beats sent together (three Chromium Reel renders + BeatStars)
+filled the disk and OOM-killed the laptop. Before the first Render check `df -h /`: under
+~10 GB free, tell the owner and wait.
+
 ## 1. Find the beat
 
 Bounce Folders live in **one place**: `/media/delawer/9006259B06258378/!beats/`. One folder per
