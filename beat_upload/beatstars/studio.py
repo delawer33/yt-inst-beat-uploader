@@ -274,6 +274,12 @@ def _set_release(page: "Page", release_at: datetime) -> None:
         raise BeatStarsError(f"Release date shows {shown!r}, wanted {_release_label(local)!r}")
 
 
+def kill_studio_browser() -> None:
+    """End the Studio browser from outside its thread (``WINDOW_CLASS`` names its windows):
+    every Playwright call waiting on it then raises and the thread ends."""
+    subprocess.run(["pkill", "-f", "--", f"--class={WINDOW_CLASS}"], check=False)
+
+
 def check_public_page(page: "Page", track_id: str, bpm: int) -> str:
     """Open the public page and return its URL; raises when a license or the BPM is missing."""
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError

@@ -48,6 +48,7 @@ from beat_upload.beatstars.package import (
 from beat_upload.beatstars.studio import (
     RELEASE_NOW_WINDOW,
     check_public_page,
+    kill_studio_browser,
     public_url,
     publish_package,
     studio,
@@ -64,6 +65,10 @@ from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import BeatStarsError
 from beat_upload.video import render_square_cover
 from beat_upload.youtube import update_description
+
+# The whole Studio run (create, three files, form, publish) gets this long; a slow line that
+# needs more fails here, and the retry continues the draft with only the missing files.
+STUDIO_TIMEOUT = 30 * 60.0
 
 # The cover as the video shows it (Cover Style + Label), before the package squares it.
 STYLED_COVER_FILENAME = "styled-cover.jpg"
@@ -197,15 +202,30 @@ async def run_beatstars(ctx: JobContext) -> None:
                     BeatRepo(session).save(row)
 
         ctx.progress(0.1, "Opening BeatStars Studio")
-        track_id, url = await asyncio.to_thread(
-            drive_studio,
-            ctx.workspace.beatstars_profile,
-            package,
-            beat.beatstars_id,
-            release_at(beat),
-            remember,
-            ctx.log,
-        )
+        try:
+            track_id, url = await asyncio.wait_for(
+                asyncio.to_thread(
+                    drive_studio,
+                    ctx.workspace.beatstars_profile,
+                    package,
+                    beat.beatstars_id,
+                    release_at(beat),
+                    remember,
+                    ctx.log,
+                ),
+                timeout=STUDIO_TIMEOUT,
+            )
+        except TimeoutError:
+            # Studio hung (2026-11-17: the laptop slept mid-upload and every Playwright call
+            # waited forever). Closing the browser makes the thread's call raise and end.
+            kill_studio_browser()
+            with ctx.new_session() as session:
+                row = BeatRepo(session).get(beat_id)
+                draft = row.beatstars_id if row is not None else None
+            tail = f"; finish it with --draft {draft}" if draft else ""
+            raise BeatStarsError(
+                f"BeatStars Studio did not finish in {STUDIO_TIMEOUT / 60:.0f} min{tail}"
+            ) from None
         ctx.session.refresh(beat)
         beat.beatstars_id = track_id
         beat.beatstars_url = url

@@ -453,3 +453,38 @@ async def test_the_package_is_dropped_once_the_track_is_up(
     package_dir = app.state.workspace.beat_dir(beat_id) / beatstars.PACKAGE_DIRNAME
     assert beat_of(session, beat_id).beatstars_url == URL
     assert not package_dir.exists()
+
+
+async def test_a_hung_studio_is_killed_and_the_job_fails_with_the_draft(
+    app: FastAPI,
+    client: TestClient,
+    session: Session,
+    bounce: Path,
+    fakes: Fakes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    killed = threading.Event()
+
+    def hung_studio(profile, package, draft, release, on_created, on_status):  # noqa: ANN001, ANN202
+        on_created("TK9")
+        killed.wait(timeout=5)  # a Playwright call that never returns until the browser dies
+        raise BeatStarsError("TK9: Target page, context or browser has been closed")
+
+    monkeypatch.setattr(beatstars, "drive_studio", hung_studio)
+    monkeypatch.setattr(beatstars, "kill_studio_browser", killed.set)
+    monkeypatch.setattr(beatstars, "STUDIO_TIMEOUT", 0.2)
+
+    beat_id = make_beat(client, bounce)
+    client.post(f"/api/beats/{beat_id}/upload")
+    await run_next(app, session, JobKind.RENDER)
+    await run_next(app, session, JobKind.BEATSTARS)
+
+    session.expire_all()
+    job = next(j for j in JobRepo(session).for_beat(beat_id) if j.kind == JobKind.BEATSTARS)
+    assert job.status == JobStatus.FAILED
+    assert job.error == "BeatStars Studio did not finish in 0 min; finish it with --draft TK9"
+    assert killed.is_set()
+    beat = beat_of(session, beat_id)
+    assert (beat.status, beat.beatstars_id, beat.beatstars_url) == (BeatStatus.QUEUED, "TK9", None)
