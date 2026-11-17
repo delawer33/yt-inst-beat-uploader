@@ -51,7 +51,8 @@ def test_effects_are_listed_with_the_lab_files(client: TestClient) -> None:
     body = client.get("/api/effects").json()
     ids = [e["id"] for e in body["effects"]]
     assert ids[:8] == ["still", "burst", "chain", "crown", "dagger", "doubloon", "flow", "gem"]
-    assert ids[8:10] == ["vj_rapid", "vjcut"]
+    assert ids[8:11] == ["cctv", "kinetic", "sigil"]
+    assert ids[11:13] == ["vj_rapid", "vjcut"]
     assert body["effects"][3]["name"] == "Crown"
     assert "crown.js" in body["files"] and "vjcut.js" in body["files"]
 

@@ -318,3 +318,17 @@ def test_the_migration_adds_the_reel_columns(tmp_path: Path) -> None:
     upgrade_to_head(db)
     columns = {c["name"] for c in inspect(make_engine(db)).get_columns("beats")}
     assert {"reel_path", "reel_style"} <= columns
+
+
+async def test_a_full_disk_refuses_the_reel_before_rendering(
+    app: FastAPI, session: Session, workspace: Workspace, draft: Beat, monkeypatch
+) -> None:
+    monkeypatch.setattr(Workspace, "free_bytes", lambda self: 1024)
+    monkeypatch.setattr(pipeline, "render_reel", recording_reel([]))
+    job = app.state.queue.enqueue(JobKind.REEL, draft.id)
+    await worker(app).run_one(job)
+    session.expire_all()
+    job = JobRepo(session).get(job.id)
+    assert job.status == JobStatus.FAILED
+    assert job.error.startswith("Not enough disk space for the Reel:")
+    assert not list(workspace.beat_dir(draft.id).glob("reel*"))

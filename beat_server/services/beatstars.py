@@ -173,6 +173,7 @@ async def run_beatstars(ctx: JobContext) -> None:
         track = track_of(beat)
         bounce = beat.bounce_folder
         package_dir = ctx.workspace.beat_dir(beat.id) / PACKAGE_DIRNAME
+        ctx.workspace.require_free_space("the Track Package")
         ctx.progress(0.0, "Preparing the Track Package")
         package = await asyncio.to_thread(
             prepare,

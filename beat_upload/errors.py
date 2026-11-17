@@ -44,6 +44,10 @@ class VideoError(BeatUploadError):
     """ffmpeg is unavailable or failed to render the video."""
 
 
+class DiskFullError(BeatUploadError):
+    """The data dir's drive has too little free space for a render or a Track Package."""
+
+
 class UploadError(BeatUploadError):
     """The YouTube Data API rejected the upload."""
 

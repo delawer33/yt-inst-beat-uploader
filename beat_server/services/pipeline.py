@@ -83,6 +83,7 @@ async def run_render(ctx: JobContext) -> None:
         # Written next to the video and moved over it only if the owner still wants this
         # style, so the video on disk is always whole and matches its columns.
         part = video.with_name(f"{video.stem}.part{video.suffix}")
+        ctx.workspace.require_free_space("the video")
         ctx.progress(0.0, "Rendering")
         try:
             await asyncio.to_thread(
@@ -141,6 +142,7 @@ async def run_reel(ctx: JobContext) -> None:
     else:
         style, fx, header = beat.cover_style, beat.effect, beat.header
         part = reel.with_name(f"{reel.stem}.part{reel.suffix}")
+        ctx.workspace.require_free_space("the Reel")
         ctx.progress(0.0, "Rendering the Reel")
         try:
             await asyncio.to_thread(

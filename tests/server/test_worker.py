@@ -518,3 +518,51 @@ def test_lifespan_recovers_and_can_start_worker(workspace: Workspace) -> None:
             JobStatus.DONE,
             JobStatus.PAUSED,
         }
+
+
+async def test_final_save_retries_until_it_lands(
+    app: FastAPI, queue: JobQueue, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit that fails (a full disk) must not leave the row RUNNING."""
+    from beat_server.jobs import worker as worker_module
+
+    monkeypatch.setattr(worker_module, "FINAL_SAVE_DELAY", 0.0)
+    original = JobRepo.save
+    failures = {"left": 2}
+
+    def flaky(self: JobRepo, job: Job) -> None:
+        if job.status == JobStatus.DONE and failures["left"]:
+            failures["left"] -= 1
+            raise RuntimeError("database or disk is full")
+        original(self, job)
+
+    monkeypatch.setattr(JobRepo, "save", flaky)
+
+    async def handler(ctx: JobContext) -> None:
+        pass
+
+    job = queue.enqueue(JobKind.SYNC)
+    await make_worker(app, {JobKind.SYNC: handler}).run_one(job)
+    assert reload(session, job).status == JobStatus.DONE
+    assert failures["left"] == 0
+
+
+async def test_final_save_gives_up_after_its_attempts(
+    app: FastAPI, queue: JobQueue, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from beat_server.jobs import worker as worker_module
+
+    monkeypatch.setattr(worker_module, "FINAL_SAVE_DELAY", 0.0)
+
+    def broken(self: JobRepo, job: Job) -> None:
+        if job.status == JobStatus.DONE:
+            raise RuntimeError("database or disk is full")
+
+    monkeypatch.setattr(JobRepo, "save", broken)
+
+    async def handler(ctx: JobContext) -> None:
+        pass
+
+    job = queue.enqueue(JobKind.SYNC)
+    with pytest.raises(RuntimeError, match="disk is full"):
+        await make_worker(app, {JobKind.SYNC: handler}).run_one(job)
