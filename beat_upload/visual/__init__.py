@@ -79,6 +79,28 @@ EFFECTS: tuple[Effect, ...] = (
         "studio, bloom on top. Turning slowly in dust; ruby, diamond, sapphire, emerald or "
         "amber for every beat. No cover.",
     ),
+    # The cover and the title, treated: a camera feed, kinetic type, a particle sign.
+    Effect(
+        "cctv",
+        "CCTV",
+        "The cover as a surveillance feed: desaturated, scanlines, a timecode and a REC dot. "
+        "A detection box jumps over the picture on the kick, the snare tears the signal for a "
+        "frame, every bar another camera and another zoom.",
+    ),
+    Effect(
+        "kinetic",
+        "Kinetic Type",
+        "The title in lines across the whole frame, sliding left and right in tempo; every "
+        "other line cut out of the cover, the rest outlined. Filled lines flash acid on the "
+        "kick. Black, one colour.",
+    ),
+    Effect(
+        "sigil",
+        "Sigil",
+        "A glowing sign of thousands of trembling particles over black, rays from its lines. "
+        "It turns slowly and breathes; the kick flashes it white and blows the rays out, the "
+        "snare throws sparks. No cover; its own shape and colour for every beat.",
+    ),
     # The cuts over the cover; VJ Cut rapid first.
     Effect(
         "vj_rapid",
