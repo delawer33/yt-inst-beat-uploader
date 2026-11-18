@@ -38,6 +38,8 @@ StatusFn = Callable[[str], None]
 STUDIO_URL = "https://studio.beatstars.com"
 TRACKS_URL = f"{STUDIO_URL}/content/tracks/uploaded"
 LOGIN_TIMEOUT = 600.0  # seconds the owner has to sign in
+NETWORK_CHANGED_ATTEMPTS = 4  # loads of the first page while the network settles
+NETWORK_CHANGED_PAUSE = 5  # seconds between them
 SIGN_IN_GRACE = 20.0  # seconds before a page without Studio counts as signed out
 FILE_TIMEOUT = 300.0  # seconds one file may take to upload and process, at the least
 SLOW_UPLOAD_BYTES_PER_S = 100_000  # a file gets as long as this upload speed would need
@@ -108,11 +110,25 @@ def studio(profile: Path, on_status: StatusFn) -> Iterator["Page"]:
         )
         try:
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto(TRACKS_URL, wait_until=READY)
+            _goto_studio(page)
             _wait_for_sign_in(page, on_status)
             yield page
         finally:
             context.close()
+
+
+def _goto_studio(page: "Page") -> None:
+    """Open the tracks page. A route flapping while Chromium starts (a VPN switch, a docker
+    interface going up or down) fails the first load with ``net::ERR_NETWORK_CHANGED``;
+    a moment later it loads, so the load is tried again a few times."""
+    for attempt in range(NETWORK_CHANGED_ATTEMPTS):
+        try:
+            page.goto(TRACKS_URL, wait_until=READY)
+            return
+        except _playwright_error() as e:
+            if "ERR_NETWORK_CHANGED" not in str(e) or attempt == NETWORK_CHANGED_ATTEMPTS - 1:
+                raise
+            page.wait_for_timeout(NETWORK_CHANGED_PAUSE * _MS)
 
 
 def publish_package(
