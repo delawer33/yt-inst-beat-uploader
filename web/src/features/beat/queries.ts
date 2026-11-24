@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { applyJobEvent } from "@/api/events";
 import type { components } from "@/api/schema";
@@ -8,6 +8,7 @@ import { beatKey, beatsKey, useBeatMutation, type Beat } from "@/features/librar
 export type BeatPatch = components["schemas"]["BeatPatch"];
 export type FillIn = components["schemas"]["FillIn"];
 export type FillOut = components["schemas"]["FillOut"];
+export type Effect = components["schemas"]["EffectOut"];
 
 export const BEATS_URL = "/api/beats";
 
@@ -23,6 +24,25 @@ export async function createBeat(audio: File, image: File): Promise<Beat> {
   const body: unknown = await response.json().catch(() => undefined);
   if (!response.ok) throw new Error(describe(body));
   return body as Beat;
+}
+
+/** New beat from a Bounce Folder path on this machine (ADR 0007); the Render starts at once. */
+export function useCreateBeatFromFolder() {
+  return useBeatMutation((path: string) =>
+    unwrap(api.POST("/api/beats/from-folder", { body: { path } })),
+  );
+}
+
+/** Attach a Bounce Folder to a Published beat made before them, for "Put on BeatStars". */
+export function useAttachFolder() {
+  return useBeatMutation(({ id, path }: { id: string; path: string }) =>
+    unwrap(
+      api.POST("/api/beats/{beat_id}/bounce-folder", {
+        params: { path: { beat_id: id } },
+        body: { path },
+      }),
+    ),
+  );
 }
 
 export function useCreateBeat() {
@@ -74,6 +94,31 @@ export function useUploadBeat() {
   });
 }
 
+/** "Upload without BeatStars": the failed BeatStars job is given up on and the Upload queued. */
+export function useSkipBeatStars() {
+  return useBeatMutation((id: string) =>
+    unwrap(
+      api.POST("/api/beats/{beat_id}/skip-beatstars", { params: { path: { beat_id: id } } }),
+    ),
+  );
+}
+
+/**
+ * "Put on BeatStars" on a Published or Scheduled Bounce Folder beat with no Track: queues the
+ * BEATSTARS Job, which ends by putting the link into the YouTube description.
+ */
+export function usePutOnBeatStars() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.POST("/api/beats/{beat_id}/beatstars", { params: { path: { beat_id: id } } })),
+    onSuccess: (beat) => {
+      if (beat.active_job) applyJobEvent(queryClient, beat.active_job);
+      void queryClient.invalidateQueries({ queryKey: beatsKey });
+    },
+  });
+}
+
 export function useDeleteBeat() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -88,5 +133,16 @@ export function useDeleteBeat() {
       queryClient.removeQueries({ queryKey: beatKey(id) });
       void queryClient.invalidateQueries({ queryKey: beatsKey, exact: true });
     },
+  });
+}
+
+export const effectsKey = ["effects"] as const;
+
+/** Every Effect the owner can pick, Still first; the list never changes while the app runs. */
+export function useEffects() {
+  return useQuery({
+    queryKey: effectsKey,
+    queryFn: async () => (await unwrap(api.GET("/api/effects"))).effects,
+    staleTime: Infinity,
   });
 }

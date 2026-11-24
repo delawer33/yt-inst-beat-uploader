@@ -17,8 +17,16 @@ remembers how every beat on the channel is doing afterwards.
 - **Metadata from templates.** Title, description and tags come prefilled, with a
   YouTube-style preview. "Fill from title" writes the description and tags for you through
   the local `claude` command.
-- **Seven cover styles and a label.** Every render paints the cover in one of seven fixed
+- **Eight cover styles and a label.** Every render paints the cover in one of eight fixed
   looks and stamps the channel's label, so the channel reads as one series.
+- **Effects, for Instagram.** The Reel can move to the beat: a ray-traced crown, chain,
+  dagger, coin or gem turning in studio light over black, particles, or "VJ Cut" jumping
+  between treatments of the cover on every hit. The YouTube video stays the plain cover in
+  its style with the label. Effects are drawn by a canvas engine in headless Chromium
+  (Playwright); new ones are one JavaScript file each, tried by ear in the Visual Lab at
+  `/visual/lab.html`. "Still" keeps the plain cover for the Reel too.
+- **A clip instead of a cover.** Put a short video (mp4/mov/webm) in the bounce folder in the
+  image's place: it loops, muted, in the cover style with the label, and effects run on it.
 - **Save & upload when rendered.** The upload queues itself and runs once the video is ready.
 - **Publish now or on schedule.** YouTube makes a scheduled video public on its own, even
   with the laptop closed.
@@ -32,7 +40,8 @@ remembers how every beat on the channel is doing afterwards.
 - **Survives reboots.** Runs as a user systemd service.
 
 The CLI does the YouTube part without the UI: `login`, `upload`, `videos`, `analytics`,
-`privacy`, and `beatstars prepare` / `beatstars upload` for the store.
+`privacy`, `effect` (render a beat with an Effect to a file), and `beatstars prepare` /
+`beatstars upload` for the store.
 
 ## Quick start
 

@@ -8,13 +8,14 @@ immediately and the UPLOAD is queued now if the video is already there, otherwis
 RENDER when it finishes.
 """
 
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from beat_server.api.schemas import BeatOut, BeatPatch, FillIn, FillOut, PrivacyIn
+from beat_server.api.schemas import BeatOut, BeatPatch, BounceIn, FillIn, FillOut, PrivacyIn
 from beat_server.db.models import Beat, BeatStatus, JobKind
 from beat_server.db.repo import BeatRepo, JobRepo, SettingsRepo
 from beat_server.deps import get_session, get_workspace
@@ -23,21 +24,33 @@ from beat_server.jobs.queue import JobQueue
 from beat_server.services.beats import (
     EDITABLE,
     apply_patch,
+    attach_bounce_folder,
     check_no_placeholders,
     create_draft,
+    create_draft_from_folder,
     default_metadata,
     delete_draft,
     metadata_of,
     metadata_with_privacy,
     preview_of,
     set_cover_style,
+    set_effect,
     to_naive_utc,
+)
+from beat_server.services.beatstars import (
+    beatstars_due,
+    check_can_put_later,
+    check_can_skip,
+    check_ready_to_send,
+    ready_for_upload,
 )
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_server.services.fill import FillService
 from beat_server.services.sync import status_for
 from beat_upload.auth import get_valid_credentials
 from beat_upload.cover_style import CoverStyle
+from beat_upload.errors import BeatUploadError
+from beat_upload.visual import STILL
 from beat_upload.workspace import Workspace
 from beat_upload.youtube import set_privacy
 
@@ -96,12 +109,30 @@ def create_beat(
 ) -> BeatOut:
     """A new DRAFT from an audio file and a cover image (multipart form).
 
-    The RENDER is queued here and comes back as ``active_job``; no UPLOAD is created, that
-    waits for the owner to send the beat.
+    The RENDER is queued here and comes back as ``active_job``, with a REEL behind it; no
+    UPLOAD is created, that waits for the owner to send the beat.
     """
     template = default_metadata(SettingsRepo(session))
     beat = create_draft(ws, BeatRepo(session), audio, image, template)
     job = queue.enqueue(JobKind.RENDER, beat.id)
+    queue.enqueue(JobKind.REEL, beat.id)  # for Instagram; the Upload never waits for it
+    return BeatOut.from_beat(beat, job)
+
+
+@router.post("/from-folder", response_model=BeatOut, status_code=201)
+def create_beat_from_folder(
+    body: BounceIn, session: SessionDep, ws: WorkspaceDep, queue: QueueDep
+) -> BeatOut:
+    """A new DRAFT read in place from a Bounce Folder on this machine (ADR 0007).
+
+    A folder without its WAV, MP3 or cover, or with no BPM and key in a name -> 422 naming
+    what is wrong, and no row. The RENDER is queued here like for a dropped pair.
+    """
+    path = Path(body.path.strip().strip("\"'")).expanduser()
+    template = default_metadata(SettingsRepo(session))
+    beat = create_draft_from_folder(ws, BeatRepo(session), path, template)
+    job = queue.enqueue(JobKind.RENDER, beat.id)
+    queue.enqueue(JobKind.REEL, beat.id)  # for Instagram; the Upload never waits for it
     return BeatOut.from_beat(beat, job)
 
 
@@ -115,27 +146,42 @@ def patch_beat(beat_id: str, body: BeatPatch, session: SessionDep, queue: QueueD
     """Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
 
     A Draft may hold Placeholders; a Queued beat may not take one back (409). A new
-    ``cover_style`` (Draft only, else 409) queues a Render unless one is already waiting:
-    that one reads the style when it starts.
+    ``cover_style`` (Draft only, else 409) queues a Render and a Reel unless one is already
+    waiting: that one reads the style when it starts. A new ``effect`` queues a Reel only:
+    the Effect moves the Reel, the YouTube video is Still (ADR 0012). An Effect paints the
+    title into the Reel's frames, so a new title queues a Reel too, and none is queued while
+    the title still holds Placeholders or no name: the Instagram panel queues it once the
+    title passes.
     """
     beat = load_beat(session, beat_id)
     if beat.status not in EDITABLE:
         raise BeatStateError(
             f"Beat {beat_id} is {beat.status}; metadata can only be edited before upload."
         )
+    header_before = beat.header
     apply_patch(beat, body)
     render_due = body.cover_style is not None and set_cover_style(beat, body.cover_style)
+    reel_due = render_due
+    if body.effect is not None and set_effect(beat, body.effect):
+        reel_due = True
+    if beat.effect != STILL and beat.header != header_before:
+        reel_due = True  # new words in the header, which is in the Reel's frames
+    reel_due = reel_due and beat.header_ready  # an Effect waits for the title
     if beat.status == BeatStatus.QUEUED:
         check_no_placeholders(beat)  # it is on its way to YouTube; the send was the guard
     BeatRepo(session).save(beat)
-    if render_due and not JobRepo(session).has_waiting(JobKind.RENDER, beat.id):
+    jobs = JobRepo(session)
+    if render_due and not jobs.has_waiting(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)
+    if reel_due and not jobs.has_waiting(JobKind.REEL, beat.id):
+        queue.enqueue(JobKind.REEL, beat.id)
     return beat_out(session, beat)
 
 
 @router.post("/{beat_id}/fill", response_model=FillOut)
 def fill_beat(beat_id: str, body: FillIn, session: SessionDep, fill: FillDep) -> FillOut:
-    """Fill from title: description and tags for the form, written from the form's title and
+    """Fill from title: description and tags (and, for a Bounce Folder beat, BeatStars moods
+    and instruments) for the form, written from the form's title and
     the owner's Templates. Writes nothing. Not a Draft -> 409, a title with a Placeholder ->
     422, the runner failed or answered badly -> 400 with what to fix.
     """
@@ -147,7 +193,12 @@ def fill_beat(beat_id: str, body: FillIn, session: SessionDep, fill: FillDep) ->
         tags=body.tags,
         templates=default_metadata(SettingsRepo(session)),
     )
-    return FillOut(description=filled.description, tags=filled.tags)
+    return FillOut(
+        description=filled.description,
+        tags=filled.tags,
+        beatstars_moods=filled.beatstars_moods,
+        beatstars_instruments=filled.beatstars_instruments,
+    )
 
 
 @router.post("/{beat_id}/upload", response_model=BeatOut)
@@ -157,8 +208,10 @@ def upload_beat(
     """Send the beat: "Save & upload when rendered". The beat becomes QUEUED at once.
 
     The UPLOAD is queued here when the video is already Rendered, and by the RENDER that is
-    still running otherwise. A beat whose render failed (no video, no render pending) gets a
-    fresh RENDER, so sending is always enough on its own.
+    still running otherwise. A public or scheduled Bounce Folder beat also gets a BEATSTARS
+    Job; the UPLOAD waits for it, and whichever of the two finishes last queues it. A beat
+    whose render failed (no video, no render pending) gets a fresh RENDER, so sending is
+    always enough on its own.
     """
     beat = load_beat(session, beat_id)
     if beat.status != BeatStatus.DRAFT:
@@ -167,7 +220,35 @@ def upload_beat(
         raise BeatStateError(f"Beat {beat_id} has no audio or cover; add both first.")
     check_no_placeholders(beat)
     metadata_of(beat)  # a passed publish_at is a 422 now, not a failed upload after rendering
+    check_ready_to_send(beat)  # a title BeatStars cannot read is refused now, not by the Job
     beat.status = BeatStatus.QUEUED
+    BeatRepo(session).save(beat)
+    bus.publish_beat(beat.id, beat.status)
+
+    jobs = JobRepo(session)
+    if beatstars_due(beat) and not jobs.has_pending(JobKind.BEATSTARS, beat.id):
+        queue.enqueue(JobKind.BEATSTARS, beat.id)  # next to the Render
+    video = ws.beat_dir(beat.id) / beat.video_path if beat.video_path else None
+    if video is not None and video.is_file() and beat.video_is_current:
+        if ready_for_upload(beat) and not jobs.has_pending(JobKind.UPLOAD, beat.id):
+            queue.enqueue(JobKind.UPLOAD, beat.id)
+    elif not jobs.has_pending(JobKind.RENDER, beat.id):
+        queue.enqueue(JobKind.RENDER, beat.id)
+    return beat_out(session, beat)
+
+
+@router.post("/{beat_id}/skip-beatstars", response_model=BeatOut)
+def skip_beatstars(
+    beat_id: str, session: SessionDep, ws: WorkspaceDep, bus: BusDep, queue: QueueDep
+) -> BeatOut:
+    """ "Upload without BeatStars": give up on the failed BEATSTARS Job of a Queued beat.
+
+    The beat is marked skipped by the owner, so its description gets the marker's fallback,
+    and the UPLOAD is queued now, or by the RENDER still to run. Any other beat -> 409.
+    """
+    beat = load_beat(session, beat_id)
+    check_can_skip(session, beat)
+    beat.beatstars_skipped = True
     BeatRepo(session).save(beat)
     bus.publish_beat(beat.id, beat.status)
 
@@ -178,6 +259,51 @@ def upload_beat(
             queue.enqueue(JobKind.UPLOAD, beat.id)
     elif not jobs.has_pending(JobKind.RENDER, beat.id):
         queue.enqueue(JobKind.RENDER, beat.id)
+    return beat_out(session, beat)
+
+
+@router.post("/{beat_id}/beatstars", response_model=BeatOut)
+def put_on_beatstars(beat_id: str, session: SessionDep, queue: QueueDep) -> BeatOut:
+    """ "Put on BeatStars" for a Published or Scheduled Bounce Folder beat with no Track.
+
+    Queues the BEATSTARS Job: the Track is released now (Published) or at the publish time
+    (Scheduled), then the YouTube snippet is sent again so the marker in the description
+    becomes the link. Clears the "Upload without BeatStars" mark. Refused for a beat with no
+    Bounce Folder, one that already has a Track, and a private one with no schedule.
+    """
+    beat = load_beat(session, beat_id)
+    check_can_put_later(beat)
+    beat.beatstars_skipped = False
+    if not beatstars_due(beat):  # private or unlisted with no publish time
+        session.rollback()
+        raise BeatStateError(
+            f"Beat {beat_id} is not public and has no publish time; "
+            "make it public or schedule it first."
+        )
+    try:
+        check_ready_to_send(beat)  # a title BeatStars cannot read, a Bounce Folder that is gone
+    except BeatUploadError:
+        session.rollback()
+        raise
+    BeatRepo(session).save(beat)
+    if not JobRepo(session).has_pending(JobKind.BEATSTARS, beat.id):
+        queue.enqueue(JobKind.BEATSTARS, beat.id)
+    return beat_out(session, beat)
+
+
+@router.post("/{beat_id}/bounce-folder", response_model=BeatOut)
+def attach_folder(beat_id: str, body: BounceIn, session: SessionDep) -> BeatOut:
+    """Attach a Bounce Folder to a Published or Scheduled beat made before Bounce Folders, so
+    "Put on BeatStars" applies to it. 409 for a beat that has one or is on BeatStars, 422 for
+    a wrong folder."""
+    beat = load_beat(session, beat_id)
+    path = Path(body.path.strip().strip("\"'")).expanduser()
+    try:
+        attach_bounce_folder(beat, path)
+    except BeatUploadError:
+        session.rollback()
+        raise
+    BeatRepo(session).save(beat)
     return beat_out(session, beat)
 
 

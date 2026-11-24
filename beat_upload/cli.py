@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 
@@ -170,6 +170,98 @@ def privacy(
 
 
 @app.command()
+def effect(
+    audio: Annotated[Path, typer.Argument(help="The beat (mp3/wav)")],
+    image: Annotated[Path, typer.Argument(help="The cover image, or a clip (mp4/mov/webm)")],
+    output: Annotated[Path, typer.Argument(help="The mp4 to write")],
+    effect_id: Annotated[str, typer.Option("--effect", help="An Effect id (vjcut)")] = "vjcut",
+    style: Annotated[str, typer.Option("--style", help="A Cover Style id")] = "purple_yellow_5tone",
+    fmt: Annotated[str, typer.Option("--format", help="yt (16:9) | reel (9:16)")] = "yt",
+    title: Annotated[str, typer.Option("--title", help="The header's title")] = "Untitled",
+    artists: Annotated[str, typer.Option("--artists", help='"A x B"')] = "",
+    bpm: Annotated[int | None, typer.Option("--bpm", help="The beat clock; off without it")] = None,
+    key: Annotated[str, typer.Option("--key", help="Fmin")] = "",
+    seconds: Annotated[
+        float | None, typer.Option("--seconds", help="Render only the first N seconds (a try)")
+    ] = None,
+) -> None:
+    """Render AUDIO + IMAGE with an Effect (the engine in headless Chromium), outside the app.
+    IMAGE may be a clip: it plays, looped and muted, in the cover's place."""
+    import tempfile
+
+    from beat_upload.beat_folder import CLIP_EXTENSIONS
+    from beat_upload.cover_style import CoverStyle
+    from beat_upload.video import clip_frame
+    from beat_upload.visual.analysis import analyse
+    from beat_upload.visual.render import EffectMeta, RenderPlan, _render_frames, render_effect
+
+    if fmt not in ("yt", "reel"):
+        _fail("--format is yt or reel")
+    try:
+        plan = RenderPlan(
+            effect_id,
+            CoverStyle(style),
+            fmt,
+            EffectMeta(title, artists, bpm, key),  # type: ignore[arg-type]
+        )
+        with tempfile.TemporaryDirectory(prefix="clip-") as tmp:
+            clip = image if image.suffix.lower() in CLIP_EXTENSIONS else None
+            if clip is not None:
+                image = clip_frame(clip, Path(tmp) / "cover.jpg")
+            if seconds is None:
+                render_effect(audio, image, output, plan, _progress_bar, typer.echo, clip)
+            else:
+                features = analyse(audio, plan.fps, bpm)
+                features.frames = features.frames[: int(seconds * plan.fps)]
+                _render_frames(audio, image, output, plan, features, _progress_bar, clip)
+        typer.echo(f"\n{output}")
+    except ValueError:
+        _fail(f"Unknown cover style {style!r}; one of {', '.join(CoverStyle)}")
+    except BeatUploadError as e:
+        _fail(str(e))
+
+
+def _progress_bar(fraction: float) -> None:
+    typer.echo(f"\r{fraction:4.0%}", nl=False)
+
+
+@app.command()
+def bake(
+    effects: Annotated[
+        list[str] | None, typer.Argument(help="Effect ids to bake (default: every missing one)")
+    ] = None,
+    status: Annotated[bool, typer.Option("--status", help="Only say what is baked")] = False,
+    redo: Annotated[bool, typer.Option("--redo", help="Bake again over existing files")] = False,
+) -> None:
+    """Bake the object Effects (chain, crown, gem) into looping clips in the data dir, so a
+    Reel with one is a minute of ffmpeg instead of half an hour of Chromium. ~20 min each."""
+    from beat_upload.visual.bake import BAKED, bake_status
+    from beat_upload.visual.bake import bake as bake_one
+    from beat_upload.workspace import Workspace
+
+    bakes_dir = Workspace.default().bakes_dir
+    state = bake_status(bakes_dir)
+    if status:
+        for effect_id, variants in state.items():
+            for variant, there in variants.items():
+                name = f"{effect_id}-{variant}" if variant else effect_id
+                typer.echo(f"{'baked  ' if there else 'missing'}  {name}")
+        return
+    wanted = effects or list(BAKED)
+    try:
+        for effect_id in wanted:
+            if effect_id not in BAKED:
+                _fail(f"{effect_id!r} is not a baked Effect; one of {', '.join(BAKED)}")
+            for variant, there in state[effect_id].items():
+                if there and not redo:
+                    continue
+                path = bake_one(effect_id, variant, bakes_dir, _progress_bar, typer.echo)
+                typer.echo(f"\n{path}")
+    except BeatUploadError as e:
+        _fail(str(e))
+
+
+@app.command()
 def serve(
     port: Annotated[int, typer.Option("--port", help="Port to listen on")] = 8765,
     open_browser: Annotated[
@@ -279,8 +371,15 @@ def beatstars_upload(
     no_publish: Annotated[
         bool, typer.Option("--no-publish", help="Fill the track but leave it a draft")
     ] = False,
+    release_at: Annotated[
+        datetime | None,
+        typer.Option(
+            "--release-at",
+            help="Schedule the release (local time, e.g. 2026-10-12T15:00); default is now",
+        ),
+    ] = None,
 ) -> None:
-    """Create, fill and publish each package as a Public track in BeatStars Studio."""
+    """Create, fill and publish each package in BeatStars Studio: Public now, or Scheduled."""
     import time
 
     from beat_upload.beatstars.package import find_package
@@ -297,8 +396,16 @@ def beatstars_upload(
                     time.sleep(pause)
                 typer.echo(f"Uploading {package.track.title}...")
                 try:  # one track's failure leaves a draft; the rest still go up
-                    track_id = publish_package(page, package, typer.echo, draft, not no_publish)
-                    if not no_publish:
+                    track_id = publish_package(
+                        page,
+                        package,
+                        typer.echo,
+                        draft,
+                        not no_publish,
+                        release_at.astimezone() if release_at else None,
+                        lambda tid: typer.echo(f"Studio made track {tid}"),
+                    )
+                    if not no_publish and release_at is None:
                         typer.echo(check_public_page(page, track_id, package.track.bpm))
                 except BeatUploadError as e:
                     typer.echo(f"Failed {package.folder.name}: {e}", err=True)

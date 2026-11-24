@@ -43,6 +43,7 @@ first colour, and so on. Colours run from shadows to highlights.
 | `diamond_pink_cyan` | `14123a ff3d9a 39d5e6 ffffff` | 60 120 190 | thin |
 | `stone_ocean` | `06204a 1a8f9e a6e22e f0fff0` | 60 120 190 | thin |
 | `blood_3tone` | `0a0a0a c1121f ffe8c2` | 80 170 | thin |
+| `film_grain` (2026-11-09) | the cover's own colours | none | none; a half-size plate of mid-grey static noise (`noise` c0s=100, seed 3, contrast 1.5) overlaid at 0.9 |
 
 Rejected: the inverted (negative) mapping, too light and not trap; duotones and plain hue
 shifts (`duotones.png`, the first row set of `first-gradient-maps.png`), because a hue shift
@@ -129,7 +130,7 @@ unsquashed, and the leftover width of each line becomes equal letter gaps. Two f
 (white text straight on the cover) and *boxed* (black box, white band with the big word in
 black). The open form disappears on light or busy covers, so use the boxed one.
 **Decided by the owner: boxed form, PRODUCED BY / DELAWER / YOU BETTER RUN, top right,**
-about 27 % of the cover width, margin 4 %. Top right is where the real Parental Advisory
+about 17 % of the cover width, margin 4 %. Top right is where the real Parental Advisory
 label sits, so on covers that already carry one ours covers it and the label never appears
 twice. The label goes on after the Cover Style, in plain black and white, on every Beat.
 

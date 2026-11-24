@@ -1,7 +1,13 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { Beat } from "@/features/library/queries";
-import { AUTOSAVE_MS, DraftBeatView, formOf, patchOf, rebase } from "./DraftBeatPage";
+import {
+  AUTOSAVE_MS,
+  DraftBeatView,
+  formOf,
+  patchOf,
+  rebase,
+} from "./DraftBeatPage";
 
 const draft: Beat = {
   id: "b1",
@@ -22,9 +28,14 @@ const draft: Beat = {
   source_name: "Dmin110.mp3",
   cover_style: "purple_yellow_5tone",
   video_style: null,
+  effect: "still",
   rendered: false,
   active_job: null,
   cover_url: "/api/beats/b1/cover",
+  beatstars: null,
+  beatstars_url: null,
+  bounce_folder: null,
+  instagram_posted: false,
   synced_at: null,
   created_at: "2026-09-24T10:00:00",
   updated_at: "2026-09-24T10:00:00",
@@ -35,7 +46,10 @@ const library = [
   { id: "b2", title: "Velvet", tags: ["uk drill", "free"] },
 ];
 
-function renderView(beat: Beat = draft, props: Partial<Parameters<typeof DraftBeatView>[0]> = {}) {
+function renderView(
+  beat: Beat = draft,
+  props: Partial<Parameters<typeof DraftBeatView>[0]> = {},
+) {
   const onSave = vi.fn();
   const onSend = vi.fn();
   const onDelete = vi.fn();
@@ -91,10 +105,42 @@ test("an unchanged form never saves", () => {
   vi.useRealTimers();
 });
 
+test("a Queued beat's head links its BeatStars Track once Studio made it", () => {
+  renderView({
+    ...draft,
+    status: "queued",
+    beatstars: {
+      title: "Naughty | Yeat Type Beat",
+      tags: [],
+      genres: [],
+      moods: [],
+      instruments: [],
+      samples: false,
+      release: "with_video" as const,
+      error: null,
+      track_id: "TK1",
+      url: "https://www.beatstars.com/beat/naughty-1",
+    },
+  });
+  expect(screen.getByRole("link", { name: /^BeatStars/ })).toHaveAttribute(
+    "href",
+    "https://www.beatstars.com/beat/naughty-1",
+  );
+});
+
+test("a Draft without a Track has no BeatStars link", () => {
+  renderView();
+  expect(
+    screen.queryByRole("link", { name: /BeatStars/ }),
+  ).not.toBeInTheDocument();
+});
+
 test("the head shows when the last save landed", () => {
   const at = new Date("2026-09-24T14:03:00");
   renderView(draft, { savedAt: at });
-  expect(screen.getByRole("status")).toHaveTextContent(/^Draft saved \d\d:\d\d$/);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    /^Draft saved \d\d:\d\d$/,
+  );
 });
 
 test("the preview checks the title length and counts the tags shared with another beat", () => {
@@ -108,7 +154,9 @@ test("the preview checks the title length and counts the tags shared with anothe
 
   fireEvent.change(title(), { target: { value: "x".repeat(101) } });
   expect(screen.getByText(/too long/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  ).toBeDisabled();
 });
 
 test("the preview title follows the form and shows the channel", () => {
@@ -122,7 +170,9 @@ test("Save & upload when rendered sends the edits with the beat; Save draft only
   const { onSave, onSend } = renderView();
   fireEvent.change(title(), { target: { value: "Static" } });
 
-  fireEvent.click(screen.getByRole("button", { name: /Save & upload when rendered/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  );
   expect(onSend).toHaveBeenCalledWith({ title: "Static" });
   expect(onSave).not.toHaveBeenCalled();
 
@@ -164,8 +214,12 @@ test("the Render job of the beat drives the progress bar and the log", () => {
 
 test("a Queued beat keeps the form but not the send button", () => {
   renderView({ ...draft, status: "queued" });
-  expect(screen.queryByRole("button", { name: /Save & upload when rendered/ })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Save draft" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Save & upload when rendered/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Save draft" }),
+  ).toBeInTheDocument();
   expect(title()).toBeInTheDocument();
 });
 
@@ -175,7 +229,9 @@ test("sending drops the autosave that was already armed", () => {
 
   fireEvent.change(title(), { target: { value: "Static" } });
   vi.advanceTimersByTime(300);
-  fireEvent.click(screen.getByRole("button", { name: /Save & upload when rendered/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  );
   expect(onSend).toHaveBeenCalledWith({ title: "Static" });
 
   vi.advanceTimersByTime(AUTOSAVE_MS * 3);
@@ -185,8 +241,12 @@ test("sending drops the autosave that was already armed", () => {
 
 test("the two segment groups carry an accessible name", () => {
   renderView();
-  expect(screen.getByRole("radiogroup", { name: "Privacy" })).toBeInTheDocument();
-  expect(screen.getByRole("radiogroup", { name: "Publish" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("radiogroup", { name: "Privacy" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("radiogroup", { name: "Publish" }),
+  ).toBeInTheDocument();
 });
 
 test("Delete draft asks first, and only then removes the Draft", () => {
@@ -206,14 +266,18 @@ test("Delete draft asks first, and only then removes the Draft", () => {
 
 test("a Draft without its files explains itself instead of only greying the button out", () => {
   renderView({ ...draft, has_files: false });
-  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  ).toBeDisabled();
   expect(screen.getByText(/Audio and cover are missing/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Delete draft" })).toBeEnabled();
 });
 
 test("a Queued beat offers no Delete: only a Draft is the owner's to throw away", () => {
   renderView({ ...draft, status: "queued" });
-  expect(screen.queryByRole("button", { name: "Delete draft" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Delete draft" }),
+  ).not.toBeInTheDocument();
 });
 
 test("a publish_at carrying seconds is not an edit: the form opens clean", () => {
@@ -247,7 +311,9 @@ test("a server-side change to an untouched field shows up and is not saved back"
   refetch({ ...draft, description: "Written elsewhere.", tags: ["drill"] });
 
   expect(description()).toHaveValue("Written elsewhere.");
-  expect(screen.getByRole("button", { name: "Remove tag drill" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Remove tag drill" }),
+  ).toBeInTheDocument();
   vi.advanceTimersByTime(AUTOSAVE_MS * 3);
   expect(onSave).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
@@ -259,7 +325,11 @@ test("a field under edit keeps the owner's text when the Beat is refetched", () 
   const { onSave, refetch } = renderView();
 
   fireEvent.change(title(), { target: { value: "Static" } });
-  refetch({ ...draft, title: "Server title", description: "Written elsewhere." });
+  refetch({
+    ...draft,
+    title: "Server title",
+    description: "Written elsewhere.",
+  });
 
   expect(title()).toHaveValue("Static");
   expect(description()).toHaveValue("Written elsewhere.");
@@ -271,7 +341,12 @@ test("a field under edit keeps the owner's text when the Beat is refetched", () 
 
 test("rebase adopts the server's value only where the form still holds the old one", () => {
   const form = { ...formOf(draft), title: "Mine" };
-  const next: Beat = { ...draft, title: "Theirs", description: "New", privacy: "private" };
+  const next: Beat = {
+    ...draft,
+    title: "Theirs",
+    description: "New",
+    privacy: "private",
+  };
   expect(rebase(form, draft, next)).toEqual({
     ...formOf(next),
     title: "Mine",
@@ -280,7 +355,8 @@ test("rebase adopts the server's value only where the form still holds the old o
 
 // --- Fill from title ------------------------------------------------------------------------
 
-const fillButton = () => screen.getByRole("button", { name: /Fill from title/ });
+const fillButton = () =>
+  screen.getByRole("button", { name: /Fill from title/ });
 
 test("the file facts show the audio file name as it was dropped", () => {
   renderView();
@@ -303,9 +379,16 @@ test("Fill from title sends the form as it is and puts the answer into it", () =
   onSave.mockClear();
 
   const apply = onFill.mock.calls[0][1];
-  act(() => apply({ description: "BPM: 140 mine", tags: ["uk drill", "drill type beat"] }));
+  act(() =>
+    apply({
+      description: "BPM: 140 mine",
+      tags: ["uk drill", "drill type beat"],
+    }),
+  );
   expect(description()).toHaveValue("BPM: 140 mine");
-  expect(screen.getByRole("button", { name: "Remove tag drill type beat" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Remove tag drill type beat" }),
+  ).toBeInTheDocument();
 
   vi.advanceTimersByTime(AUTOSAVE_MS);
   expect(onSave).toHaveBeenCalledWith({
@@ -316,11 +399,16 @@ test("Fill from title sends the form as it is and puts the answer into it", () =
 });
 
 test("Fill from title is dead while the title holds a Placeholder, and names it", () => {
-  renderView({ ...draft, title: "Travis Scott Type Beat x [[Artist2]] | [[Hard Trap]]" });
+  renderView({
+    ...draft,
+    title: "Travis Scott Type Beat x [[Artist2]] | [[Hard Trap]]",
+  });
   expect(fillButton()).toBeDisabled();
   expect(screen.getByText("Title still has [[Artist2]]")).toBeInTheDocument();
 
-  fireEvent.change(title(), { target: { value: "Travis Scott Type Beat | Hard Trap" } });
+  fireEvent.change(title(), {
+    target: { value: "Travis Scott Type Beat | Hard Trap" },
+  });
   expect(fillButton()).toBeEnabled();
   expect(screen.queryByText(/Title still has/)).not.toBeInTheDocument();
 });
@@ -335,7 +423,9 @@ test("a running fill says so, cannot be pressed twice, and holds the fields it w
   expect(screen.getByRole("button", { name: "Filling…" })).toBeDisabled();
   expect(description()).toHaveAttribute("readonly");
   expect(screen.getByLabelText("Add a tag")).toBeDisabled();
-  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  ).toBeDisabled();
 });
 
 test("a failed fill shows its note and leaves the form as it was", () => {
@@ -346,11 +436,17 @@ test("a failed fill shows its note and leaves the form as it was", () => {
 
 test("the send button is dead while a Placeholder is left, and says where", () => {
   renderView({ ...draft, description: "BPM: [[140]]" });
-  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeDisabled();
-  expect(screen.getByText("Fill the placeholders in the description")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  ).toBeDisabled();
+  expect(
+    screen.getByText("Fill the placeholders in the description"),
+  ).toBeInTheDocument();
 
   fireEvent.change(description(), { target: { value: "BPM: 140" } });
-  expect(screen.getByRole("button", { name: /Save & upload when rendered/ })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: /Save & upload when rendered/ }),
+  ).toBeEnabled();
 });
 
 test("an edit undone while its save is in flight is not brought back by the answer", () => {
@@ -362,30 +458,112 @@ test("an edit undone while its save is in flight is not brought back by the answ
   expect(onSave).toHaveBeenLastCalledWith({ description: "Free.x" });
 
   // Backspace before the PATCH comes back; then the answer to the save lands.
-  fireEvent.change(description(), { target: { value: "Free for non-profit." } });
+  fireEvent.change(description(), {
+    target: { value: "Free for non-profit." },
+  });
   refetch({ ...draft, description: "Free.x" });
 
   expect(description()).toHaveValue("Free for non-profit.");
   vi.advanceTimersByTime(AUTOSAVE_MS);
-  expect(onSave).toHaveBeenLastCalledWith({ description: "Free for non-profit." });
+  expect(onSave).toHaveBeenLastCalledWith({
+    description: "Free for non-profit.",
+  });
   vi.useRealTimers();
 });
 
-test("picking a Cover Style autosaves it and the preview shows the server's still", () => {
+test("picking a Cover Style previews it; only Apply saves it and renders again", () => {
   vi.useFakeTimers();
   const { onSave } = renderView();
-  const group = screen.getByRole("radiogroup", { name: /Cover style · Purple Yellow 5-tone/ });
+  const group = screen.getByRole("radiogroup", {
+    name: /Cover style · Purple Yellow 5-tone/,
+  });
   expect(group).toBeInTheDocument();
-  expect(screen.getByRole("radio", { name: "Purple Yellow 5-tone" })).toBeChecked();
+  expect(
+    screen.getByRole("radio", { name: "Purple Yellow 5-tone" }),
+  ).toBeChecked();
+  expect(
+    screen.queryByRole("button", { name: /^Apply/ }),
+  ).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("radio", { name: "Stone Ocean" }));
-  expect(screen.getByRole("radiogroup", { name: /Cover style · Stone Ocean/ })).toBeInTheDocument();
+  expect(
+    screen.getByRole("radiogroup", { name: /Cover style · Stone Ocean/ }),
+  ).toBeInTheDocument();
   const frame = document.querySelector(".yt-frame img");
   expect(frame?.getAttribute("src")).toBe("/api/beats/b1/preview/stone_ocean");
-  expect(screen.getByText("Stone Ocean, label, letterboxed")).toBeInTheDocument();
+  expect(
+    screen.getByText("Stone Ocean, label, letterboxed"),
+  ).toBeInTheDocument();
 
-  vi.advanceTimersByTime(AUTOSAVE_MS);
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Apply Stone Ocean" }));
   expect(onSave).toHaveBeenCalledWith({ cover_style: "stone_ocean" });
+  vi.useRealTimers();
+});
+
+const EFFECTS = [
+  { id: "still", name: "Still", blurb: "The cover, standing." },
+  { id: "vjcut", name: "VJ Cut", blurb: "Five treatments, a cut per hit." },
+];
+
+test("picking an Effect marks it; only Apply saves it and renders again", () => {
+  vi.useFakeTimers();
+  const { onSave } = renderView(draft, { effects: EFFECTS });
+  expect(
+    screen.getByRole("radiogroup", { name: /Effect · Still/ }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: /^Still/ })).toBeChecked();
+
+  fireEvent.click(screen.getByRole("radio", { name: /^VJ Cut/ }));
+  expect(
+    screen.getByRole("radiogroup", { name: /Effect · VJ Cut/ }),
+  ).toBeInTheDocument();
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Keep Still" }));
+  expect(screen.getByRole("radio", { name: /^Still/ })).toBeChecked();
+  expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
+
+  fireEvent.click(screen.getByRole("radio", { name: /^VJ Cut/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply VJ Cut" }));
+  expect(onSave).toHaveBeenCalledWith({ effect: "vjcut" });
+  vi.useRealTimers();
+});
+
+test("without the Effects list the picker stays out", () => {
+  renderView();
+  expect(screen.queryByRole("radiogroup", { name: /Effect/ })).toBeNull();
+});
+
+test("Keep puts the pick back on the applied Cover Style", () => {
+  vi.useFakeTimers();
+  const { onSave } = renderView();
+  fireEvent.click(screen.getByRole("radio", { name: "Dio Green" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Keep Purple Yellow 5-tone" }),
+  );
+  expect(
+    screen.getByRole("radio", { name: "Purple Yellow 5-tone" }),
+  ).toBeChecked();
+  expect(
+    screen.queryByRole("button", { name: /^Apply/ }),
+  ).not.toBeInTheDocument();
+  vi.advanceTimersByTime(AUTOSAVE_MS * 3);
+  expect(onSave).not.toHaveBeenCalled();
+  vi.useRealTimers();
+});
+
+test("an edit autosaves without the Cover Style picked but not applied", () => {
+  vi.useFakeTimers();
+  const { onSave } = renderView();
+  fireEvent.click(screen.getByRole("radio", { name: "Dio Green" }));
+  fireEvent.change(title(), { target: { value: "Edited" } });
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledTimes(1);
+  expect(onSave).toHaveBeenCalledWith({ title: "Edited" });
   vi.useRealTimers();
 });
 
@@ -397,15 +575,19 @@ test("a Queued beat shows its Cover Style but cannot change it", () => {
 
 test("a Draft without its files has no Cover Style to pick", () => {
   renderView({ ...draft, has_files: false });
-  expect(screen.queryByRole("radiogroup", { name: /Cover style/ })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("radiogroup", { name: /Cover style/ }),
+  ).not.toBeInTheDocument();
   expect(document.querySelector(".yt-frame img")).toBeNull();
 });
 
 test("patchOf sends the Cover Style only when it changed", () => {
   expect(patchOf(formOf(draft), draft)).toEqual({});
-  expect(patchOf({ ...formOf(draft), coverStyle: "dio_green" }, draft)).toEqual({
-    cover_style: "dio_green",
-  });
+  expect(patchOf({ ...formOf(draft), coverStyle: "dio_green" }, draft)).toEqual(
+    {
+      cover_style: "dio_green",
+    },
+  );
 });
 
 test("a Cover Style picked while the Beat became Queued is dropped, not sent and refused", () => {
@@ -413,7 +595,9 @@ test("a Cover Style picked while the Beat became Queued is dropped, not sent and
   const { onSave, refetch } = renderView();
   fireEvent.click(screen.getByRole("radio", { name: "Stone Ocean" }));
   refetch({ ...draft, status: "queued" });
-  expect(screen.getByRole("radio", { name: "Purple Yellow 5-tone" })).toBeChecked();
+  expect(
+    screen.getByRole("radio", { name: "Purple Yellow 5-tone" }),
+  ).toBeChecked();
   vi.advanceTimersByTime(AUTOSAVE_MS * 3);
   expect(onSave).not.toHaveBeenCalled();
   fireEvent.change(title(), { target: { value: "Edited" } });
@@ -424,17 +608,158 @@ test("a Cover Style picked while the Beat became Queued is dropped, not sent and
 
 test("patchOf never sends a Cover Style for a Beat that is no longer a Draft", () => {
   const queued: Beat = { ...draft, status: "queued" };
-  expect(patchOf({ ...formOf(queued), coverStyle: "dio_green" }, queued)).toEqual({});
+  expect(
+    patchOf({ ...formOf(queued), coverStyle: "dio_green" }, queued),
+  ).toEqual({});
 });
 
 test("a Draft rendered before Cover Styles says so and renders again in the chosen style", () => {
-  const { onSave } = renderView({ ...draft, rendered: true, video_style: null });
+  const { onSave } = renderView({
+    ...draft,
+    rendered: true,
+    video_style: null,
+    effect: "still",
+  });
   expect(screen.getByText("Rendered before Cover Styles")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Render in Purple Yellow 5-tone" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Render in Purple Yellow 5-tone" }),
+  );
   expect(onSave).toHaveBeenCalledWith({ cover_style: "purple_yellow_5tone" });
 });
 
 test("a Draft rendered in its Cover Style shows no such note", () => {
   renderView({ ...draft, rendered: true, video_style: "purple_yellow_5tone" });
-  expect(screen.queryByText("Rendered before Cover Styles")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("Rendered before Cover Styles"),
+  ).not.toBeInTheDocument();
+});
+
+// --- BeatStars block (a Beat from a Bounce Folder) ------------------------------------------
+
+const bounce: Beat = {
+  ...draft,
+  title: '[FREE] Yeat Type Beat 2026 - "Naughty" | Melodic Guitar Trap',
+  beatstars: {
+    title: "Naughty | Yeat Type Beat",
+    tags: ["yeat type beat", "melodic guitar trap", "delawer type beat"],
+    genres: ["Trap", "Hip Hop"],
+    moods: ["Calm", "Sad", "Melancholy"],
+    instruments: ["Guitar"],
+    samples: true,
+    release: "with_video",
+    error: null,
+    track_id: null,
+    url: null,
+  },
+};
+
+test("a Beat from a Bounce Folder shows what will go to BeatStars", () => {
+  renderView(bounce);
+  const block = screen.getByRole("region", { name: "BeatStars" });
+  expect(block).toHaveTextContent("Naughty | Yeat Type Beat");
+  expect(block).toHaveTextContent("delawer type beat");
+  expect(block).toHaveTextContent("Hip Hop");
+  expect(block).toHaveTextContent("Melancholy");
+  expect(block).toHaveTextContent("Guitar");
+  expect(block).toHaveTextContent("Loops and samples");
+  expect(block).toHaveTextContent("With the video");
+});
+
+test("a private send says BeatStars is skipped", () => {
+  renderView({
+    ...bounce,
+    beatstars: { ...bounce.beatstars!, release: "skipped_private" },
+  });
+  expect(screen.getByRole("region", { name: "BeatStars" })).toHaveTextContent(
+    /Not sent to BeatStars/,
+  );
+});
+
+test("a title that cannot be read yet says so instead of showing a track", () => {
+  renderView({
+    ...bounce,
+    beatstars: {
+      ...bounce.beatstars!,
+      title: "",
+      tags: [],
+      genres: [],
+      error: 'Not a [FREE] A Type Beat 2026 - "NAME" | Genre title: Untitled',
+    },
+  });
+  const block = screen.getByRole("region", { name: "BeatStars" });
+  expect(block).toHaveTextContent("Not ready for BeatStars");
+  expect(block).toHaveTextContent("Untitled");
+  expect(block).not.toHaveTextContent("Moods");
+});
+
+test("a Beat that is not from a Bounce Folder has no BeatStars block", () => {
+  renderView();
+  expect(
+    screen.queryByRole("region", { name: "BeatStars" }),
+  ).not.toBeInTheDocument();
+});
+
+test("Fill from title writes the matched moods and instruments into the block and saves them", () => {
+  vi.useFakeTimers();
+  const { onFill, onSave } = renderView(bounce);
+  fireEvent.click(fillButton());
+  const apply = onFill.mock.calls[0][1];
+  act(() =>
+    apply({
+      description: "d",
+      tags: ["yeat type beat"],
+      beatstars_moods: ["Calm", "Dark", "Sad"],
+      beatstars_instruments: ["Acoustic guitar", "Piano"],
+    }),
+  );
+  const block = screen.getByRole("region", { name: "BeatStars" });
+  expect(block).toHaveTextContent("Dark");
+  expect(block).toHaveTextContent("Acoustic guitar");
+
+  vi.advanceTimersByTime(AUTOSAVE_MS);
+  expect(onSave).toHaveBeenCalledWith({
+    description: "d",
+    tags: ["yeat type beat"],
+    beatstars_moods: ["Calm", "Dark", "Sad"],
+    beatstars_instruments: ["Acoustic guitar", "Piano"],
+  });
+  vi.useRealTimers();
+});
+
+describe("a Queued beat whose BeatStars job failed", () => {
+  const queued: Beat = { ...draft, status: "queued", rendered: true };
+  const failedJob = {
+    id: "j9",
+    beat_id: "b1",
+    kind: "beatstars",
+    status: "failed",
+    progress: 0.1,
+    message: "",
+    error: "TK1: the form refused it",
+  } as unknown as Parameters<typeof DraftBeatView>[0]["failedBeatStars"];
+
+  test("shows the error with Retry and Upload without BeatStars, each calling its action", () => {
+    const onRetry = vi.fn();
+    const onSkipBeatStars = vi.fn();
+    renderView(queued, {
+      failedBeatStars: failedJob,
+      onRetry,
+      onSkipBeatStars,
+    });
+    expect(screen.getByText("BeatStars failed")).toBeInTheDocument();
+    expect(screen.getByText("TK1: the form refused it")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledWith("j9");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Upload without BeatStars" }),
+    );
+    expect(onSkipBeatStars).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows neither button when nothing failed", () => {
+    renderView(queued);
+    expect(
+      screen.queryByRole("button", { name: "Upload without BeatStars" }),
+    ).toBeNull();
+  });
 });

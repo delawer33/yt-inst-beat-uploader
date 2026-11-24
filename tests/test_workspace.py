@@ -4,7 +4,7 @@ import pytest
 from platformdirs import user_config_dir, user_data_dir
 
 from beat_upload import auth
-from beat_upload.errors import AuthError
+from beat_upload.errors import AuthError, DiskFullError
 from beat_upload.workspace import Workspace
 
 
@@ -46,3 +46,12 @@ def test_login_without_secrets_raises(tmp_path: Path) -> None:
     ws = Workspace(config_dir=tmp_path / "cfg", data_dir=tmp_path / "data")
     with pytest.raises(AuthError, match="Client secrets not found"):
         auth.run_login_flow(ws)
+
+
+def test_require_free_space_passes_and_refuses(tmp_path: Path, monkeypatch) -> None:
+    ws = Workspace(config_dir=tmp_path / "c", data_dir=tmp_path / "d" / "deeper")
+    assert ws.free_bytes() > 0  # the nearest existing parent's drive, the data dir not made
+    monkeypatch.setattr(Workspace, "free_bytes", lambda self: 1024**3)
+    ws.require_free_space("the video", minimum=1024**3)
+    with pytest.raises(DiskFullError, match=r"1\.0 GB free .* at least 2 GB needed"):
+        ws.require_free_space("the video")

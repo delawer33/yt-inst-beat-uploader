@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 LINES = ("PRODUCED BY", "DELAWER", "YOU BETTER RUN")
 
 # Placement on the cover, as shares of the cover's width.
-WIDTH_SHARE = 0.27
+WIDTH_SHARE = 0.17
 MARGIN_SHARE = 0.04
 
 _HEIGHTS = (0.095, 0.24, 0.13)  # top, big, bottom line; shares of the label width

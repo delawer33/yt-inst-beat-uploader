@@ -5,6 +5,7 @@ export type CoverStyle = components["schemas"]["CoverStyle"];
 /** Every Cover Style in picker order, default first. The record makes the compiler refuse a
  * style the server adds and this list forgets. */
 const NAMES: Record<CoverStyle, string> = {
+  film_grain: "Film Grain",
   purple_yellow_5tone: "Purple Yellow 5-tone",
   purple_yellow_thick_ink: "Purple Yellow Thick Ink",
   golden_wind: "Golden Wind",

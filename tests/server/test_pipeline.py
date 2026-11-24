@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -32,35 +32,7 @@ from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import AuthError, BeatFolderError, ConfigError, NetworkError, VideoError
 from beat_upload.video import cover_fingerprint
 from beat_upload.workspace import Workspace
-
-MP3 = b"ID3" + b"\x00" * 32
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
-
-
-def upload(name: str, data: bytes) -> UploadFile:
-    return UploadFile(BytesIO(data), filename=name)
-
-
-@pytest.fixture
-def repo(session: Session) -> BeatRepo:
-    return BeatRepo(session)
-
-
-@pytest.fixture
-def template() -> dict:
-    return {
-        "title_template": '[FREE] Trap Type Beat - "{name}"',
-        "description_template": "{name} prod. by me",
-        "tags_template": ["trap", "free"],
-    }
-
-
-@pytest.fixture
-def draft(workspace: Workspace, repo: BeatRepo, template: dict) -> Beat:
-    return create_draft(
-        workspace, repo, upload("Dark Night.mp3", MP3), upload("c.png", PNG), template
-    )
-
+from tests.server.conftest import MP3, PNG, upload  # noqa: E402  (the draft fixture lives there)
 
 # --- create_draft -------------------------------------------------------------------------
 
@@ -233,7 +205,7 @@ async def test_run_render_on_a_draft_renders_and_enqueues_nothing(
     assert job.status == JobStatus.DONE, job.error
     beat = reload_beat(session, draft)
     assert beat.video_path == "video.mp4"
-    assert beat.video_style == CoverStyle.PURPLE_YELLOW_5TONE
+    assert beat.video_style == CoverStyle.FILM_GRAIN
     assert not (beat_dir / "video.part.mp4").exists()
     assert beat.status == BeatStatus.DRAFT  # the owner has not sent it yet
     assert beat_events == [(draft.id, "draft")]  # the Library hears the beat is now Rendered
@@ -762,7 +734,8 @@ def test_post_beats_queues_a_render_and_no_upload(client: TestClient, session: S
     assert body["status"] == "draft" and body["rendered"] is False
     assert body["active_job"]["kind"] == "render"
     assert body["active_job"]["status"] == "queued"
-    assert [j.kind for j in JobRepo(session).for_beat(body["id"])] == [JobKind.RENDER]
+    kinds = [j.kind for j in JobRepo(session).for_beat(body["id"])]
+    assert sorted(kinds) == [JobKind.REEL, JobKind.RENDER]  # the Reel is queued, not an upload
     assert client.get("/api/beats").json()[0]["active_job"]["id"] == body["active_job"]["id"]
 
 
@@ -847,7 +820,7 @@ def recording_render(styles: list[CoverStyle]):  # noqa: ANN201
 
 def test_new_draft_has_the_default_cover_style(client: TestClient, draft: Beat) -> None:
     body = client.get(f"/api/beats/{draft.id}").json()
-    assert body["cover_style"] == "purple_yellow_5tone"
+    assert body["cover_style"] == "film_grain"
 
 
 async def test_render_paints_the_chosen_cover_style(
@@ -883,11 +856,13 @@ async def test_changing_the_style_of_a_rendered_draft_renders_again(
     # A second change while that Render waits adds no Render: it reads the style when it starts.
     client.patch(f"/api/beats/{draft.id}", json={"cover_style": "dio_green"})
     job = JobRepo(session).next_queued()
-    assert job is not None
+    assert job is not None and job.kind == JobKind.RENDER
     await make_worker(app).run_one(job)
-    assert JobRepo(session).next_queued() is None
+    # ... and no second Reel either; the one waiting is all there is left.
+    follow_up = JobRepo(session).next_queued()
+    assert follow_up is not None and follow_up.kind == JobKind.REEL
 
-    assert styles == [CoverStyle.PURPLE_YELLOW_5TONE, CoverStyle.DIO_GREEN]
+    assert styles == [CoverStyle.FILM_GRAIN, CoverStyle.DIO_GREEN]
     video = workspace.beat_dir(draft.id) / "video.mp4"
     assert video.read_bytes() == b"mp4 dio_green"
     assert client.get(f"/api/beats/{draft.id}").json()["rendered"] is True
@@ -1042,11 +1017,12 @@ async def test_switching_back_while_a_render_runs_keeps_the_video_that_matches(
     monkeypatch.setattr(pipeline, "render_video", render_while_owner_switches_back)
     client.patch(f"/api/beats/{draft.id}", json={"cover_style": "stone_ocean"})
     job = JobRepo(session).next_queued()
-    assert job is not None
+    assert job is not None and job.kind == JobKind.RENDER
     await make_worker(app).run_one(job)
 
     assert video.read_bytes() == b"mp4 golden_wind"
     assert not (video.parent / "video.part.mp4").exists()
     body = client.get(f"/api/beats/{draft.id}").json()
     assert body["rendered"] is True and body["video_style"] == "golden_wind"
-    assert JobRepo(session).next_queued() is None
+    waiting = JobRepo(session).next_queued()
+    assert waiting is not None and waiting.kind == JobKind.REEL  # only the Reel is left

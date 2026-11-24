@@ -7,6 +7,7 @@ held to exactly the same limits. Templates for a new beat (title, description, t
 """
 
 import json
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,12 +20,19 @@ from beat_server.db.models import Beat, BeatStatus, new_id
 from beat_server.db.repo import BeatRepo, SettingsRepo
 from beat_server.services.errors import BeatNotFound, BeatStateError
 from beat_upload.beat_folder import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS
+from beat_upload.beatstars.catalog import INSTRUMENTS, MOODS, in_catalog
+from beat_upload.beatstars.naming import MAX_MOODS
+from beat_upload.beatstars.track import MAX_INSTRUMENTS
+from beat_upload.bounce_folder import read_bounce_folder
 from beat_upload.config import MAX_TITLE_LENGTH, PrivacyStatus, YouTubeMetadata
 from beat_upload.cover_style import CoverStyle
-from beat_upload.errors import BeatFolderError
+from beat_upload.errors import BeatFolderError, BounceFolderError, ConfigError, VideoError
 from beat_upload.placeholders import fields_with_placeholder
-from beat_upload.video import cover_fingerprint, render_cover
+from beat_upload.video import clip_frame, cover_fingerprint, render_cover
+from beat_upload.visual import effect as effect_of_id
 from beat_upload.workspace import Workspace
+
+CLIP_COVER_FILENAME = "cover.jpg"  # the Clip's middle frame, in the beat's dir
 
 KEY_TITLE_TEMPLATE = "title_template"
 KEY_DESCRIPTION_TEMPLATE = "description_template"
@@ -35,6 +43,15 @@ DEFAULT_DESCRIPTION_TEMPLATE = ""
 DEFAULT_TAGS_TEMPLATE: list[str] = []
 
 NAME_PLACEHOLDER = "{name}"
+
+# ``{beatstars|DM @delawer33 on Instagram}`` in a description Template: the link to the
+# Beat's BeatStars Track once it exists, else the text after the ``|`` (possibly nothing).
+BEATSTARS_MARKER = re.compile(r"\{beatstars(?:\|(?P<fallback>[^}]*))?\}")
+
+# The DM line of descriptions written before the marker existed; "Put on BeatStars" later
+# swaps it for the link when the description carries no marker.
+DM_LINE = re.compile(r"^.*DM me on Instagram.*$", re.MULTILINE)
+LINK_LINE = "💰 Buy / license this beat: {url}"
 
 AUDIO_BASENAME = "audio"
 COVER_BASENAME = "cover"
@@ -135,9 +152,132 @@ def create_draft(
     return repo.add(beat)
 
 
+def create_draft_from_folder(
+    ws: Workspace, repo: BeatRepo, folder: Path, template: dict[str, Any]
+) -> Beat:
+    """A DRAFT read from a Bounce Folder in place (ADR 0007): the tagged MP3 is the audio and
+    the cover the image, both kept as absolute paths into the folder; nothing is copied. A
+    Clip in place of the cover is kept the same way; its middle frame is written into the
+    beat's dir as the image, so previews and artwork have a still to show.
+
+    ``{name}`` in the Templates becomes empty: the title is written by the owner. Raises
+    ``BounceFolderError`` (no row is added) when the folder does not hold what it should.
+    """
+    if not folder.is_absolute():
+        raise BounceFolderError(f"Give the full path of the Bounce Folder, not {folder}.")
+    bounce = read_bounce_folder(folder)
+    beat_id = new_id()
+    title = render_template(str(template.get(KEY_TITLE_TEMPLATE, DEFAULT_TITLE_TEMPLATE)), "")
+    description = render_template(
+        str(template.get(KEY_DESCRIPTION_TEMPLATE, DEFAULT_DESCRIPTION_TEMPLATE)), ""
+    )
+    facts = bounce.facts
+    beat_dir = ws.beat_dir(beat_id)
+    beat_dir.mkdir(parents=True, exist_ok=False)  # the video is rendered here
+    if bounce.clip is not None:
+        try:
+            clip_frame(bounce.clip, beat_dir / CLIP_COVER_FILENAME)
+        except VideoError:
+            shutil.rmtree(beat_dir)
+            raise
+    beat = Beat(
+        id=beat_id,
+        status=BeatStatus.DRAFT,
+        title=title.strip()[:MAX_TITLE_LENGTH],
+        description=description,
+        tags=[str(t) for t in template.get(KEY_TAGS_TEMPLATE, DEFAULT_TAGS_TEMPLATE)],
+        privacy=PrivacyStatus.PRIVATE.value,
+        audio_path=str(bounce.tagged),
+        image_path=str(bounce.cover) if bounce.cover else CLIP_COVER_FILENAME,
+        clip_path=str(bounce.clip) if bounce.clip else None,
+        bounce_folder=str(bounce.folder),
+        bpm=facts.bpm,
+        music_key=facts.key,
+        name_moods=list(facts.moods),
+        name_instruments=list(facts.instruments),
+        samples=facts.samples,
+    )
+    return repo.add(beat)
+
+
+def attach_bounce_folder(beat: Beat, folder: Path) -> Beat:
+    """Give a Published or Scheduled Beat made before Bounce Folders its folder, so it can be
+    put on BeatStars. The video's audio and cover stay as they are; only the folder and its
+    facts are stored. ``BeatStateError`` for a beat that has one already, is on BeatStars or
+    is not on YouTube; ``BounceFolderError`` when the folder is wrong."""
+    if beat.status not in {BeatStatus.PUBLISHED, BeatStatus.SCHEDULED} or not beat.youtube_id:
+        raise BeatStateError(
+            f"Beat {beat.id} is {beat.status}; a Bounce Folder is attached only to a "
+            "Published or Scheduled beat."
+        )
+    if beat.bounce_folder is not None:
+        raise BeatStateError(f"Beat {beat.id} already has a Bounce Folder: {beat.bounce_folder}")
+    if beat.beatstars_url is not None:
+        raise BeatStateError(f"Beat {beat.id} is already on BeatStars: {beat.beatstars_url}")
+    if not folder.is_absolute():
+        raise BounceFolderError(f"Give the full path of the Bounce Folder, not {folder}.")
+    bounce = read_bounce_folder(folder)
+    facts = bounce.facts
+    beat.bounce_folder = str(bounce.folder)
+    beat.bpm = facts.bpm
+    beat.music_key = facts.key
+    beat.name_moods = list(facts.moods)
+    beat.name_instruments = list(facts.instruments)
+    beat.samples = facts.samples
+    return beat
+
+
+def youtube_description_with_link(description: str, url: str) -> str:
+    """The description of a video already on YouTube with the BeatStars link in it: the marker
+    swapped if there is one, else the old DM line replaced, else a link line after the first
+    line (the title)."""
+    if BEATSTARS_MARKER.search(description):
+        return with_beatstars_link(description, url)
+    if url in description:
+        return description
+    line = LINK_LINE.format(url=url)
+    if DM_LINE.search(description):
+        return DM_LINE.sub(lambda _: line, description, count=1)
+    first, sep, rest = description.partition("\n")
+    return f"{first}\n\n{line}{sep}{rest}" if first else line
+
+
+def with_beatstars_link(description: str, url: str | None) -> str:
+    """``description`` with every ``{beatstars|fallback}`` marker swapped for ``url``, or for
+    its fallback text when there is no Track. The Beat keeps the marker; only what goes to
+    YouTube has it swapped."""
+
+    def swap(match: re.Match[str]) -> str:
+        return url if url else (match["fallback"] or "")
+
+    return BEATSTARS_MARKER.sub(swap, description)
+
+
 def metadata_of(beat: Beat) -> YouTubeMetadata:
-    """The beat's Metadata as ``upload_video`` wants it (validated on the way)."""
-    return YouTubeMetadata.from_mapping(_mapping(beat))
+    """The beat's Metadata as ``upload_video`` wants it (validated on the way), the
+    BeatStars link put in its description (``youtube_description``)."""
+    data = _mapping(beat)
+    data["description"] = youtube_description(beat)
+    return YouTubeMetadata.from_mapping(data)
+
+
+def youtube_description(beat: Beat) -> str:
+    """What YouTube gets as the description: with a Track, its link in place of the marker,
+    else of the DM line, else after the title; without one, the marker's fallback."""
+    url = beat.beatstars_url
+    if url:
+        return youtube_description_with_link(beat.description, url)
+    return with_beatstars_link(beat.description, None)
+
+
+def snippet_of(beat: Beat) -> YouTubeMetadata:
+    """The Metadata of a beat that is already on YouTube, for re-sending its snippet. Like
+    ``metadata_of`` but without the publish time: a time that has passed since the upload
+    must not stop the description from being updated."""
+    data = _mapping(beat)
+    data["description"] = youtube_description(beat)
+    data["publish_at"] = None
+    return YouTubeMetadata.from_mapping(data)
 
 
 def check_no_placeholders(beat: Beat) -> None:
@@ -182,7 +322,25 @@ def apply_patch(beat: Beat, patch: BeatPatch) -> Beat:
     beat.privacy = metadata.privacy_status.value
     if touches_schedule:
         beat.publish_at = to_naive_utc(metadata.publish_at)
+    if patch.beatstars_moods is not None:
+        beat.beatstars_moods = _from_catalog(patch.beatstars_moods, MOODS, MAX_MOODS, "mood")
+    if patch.beatstars_instruments is not None:
+        beat.beatstars_instruments = _from_catalog(
+            patch.beatstars_instruments, INSTRUMENTS, MAX_INSTRUMENTS, "instrument"
+        )
     return beat
+
+
+def _from_catalog(values: list[str], catalog: tuple[str, ...], limit: int, what: str) -> list[str]:
+    """``values`` spelled as the BeatStars ``catalog`` spells them; ``ConfigError`` for one
+    that is not in it or for more than BeatStars takes."""
+    found = in_catalog(values, catalog)
+    unknown = [v for v in values if not in_catalog([v], catalog)]
+    if unknown:
+        raise ConfigError(f"Not a BeatStars {what}: {', '.join(unknown)}.")
+    if len(found) > limit:
+        raise ConfigError(f"BeatStars takes at most {limit} {what}s, got {len(found)}.")
+    return found
 
 
 def set_cover_style(beat: Beat, style: CoverStyle) -> bool:
@@ -200,6 +358,18 @@ def set_cover_style(beat: Beat, style: CoverStyle) -> bool:
         beat.video_path = None  # a sepia video matches no Cover Style, the current one included
     beat.cover_style = style
     return not beat.video_is_current
+
+
+def set_effect(beat: Beat, effect_id: str) -> bool:
+    """Choose the Effect: how the Reel moves (ADR 0012; the YouTube video is Still, so any
+    editable Beat may change it). True when the Reel on disk no longer matches, so a REEL is
+    due; the caller saves and queues it. An unknown Effect -> ``ConfigError`` (422).
+    """
+    effect_of_id(effect_id)
+    if effect_id == beat.effect:
+        return False
+    beat.effect = effect_id
+    return not beat.reel_is_current
 
 
 def preview_of(ws: Workspace, beat: Beat, style: CoverStyle) -> Path:

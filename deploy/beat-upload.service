@@ -16,6 +16,8 @@ After=network-online.target
 ExecStart=<venv>/bin/beat-upload serve --port <port>
 Restart=on-failure
 RestartSec=5
+# Studio opens a real browser window: pass the desktop's display on (see README, BeatStars).
+PassEnvironment=WAYLAND_DISPLAY DISPLAY
 
 [Install]
 WantedBy=default.target

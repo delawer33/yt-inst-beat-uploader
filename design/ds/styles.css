@@ -350,6 +350,15 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* ══ Panel (beat side panel) ════════════════════════════════════════════ */
 .panel { border-left: var(--rule); background: var(--color-bg); display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-lg); }
 .panel.overlay { position: absolute; top: 0; right: 0; bottom: 0; width: var(--panel-w); }
+.panel.fixed { position: fixed; top: 0; right: 0; bottom: 0; width: min(var(--panel-w), 100vw); z-index: 20; }
+/* One thing to paste into Instagram: label, the text, a copy button. */
+.copy-row { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3); align-items: start; padding: var(--space-3) 0; border-bottom: var(--rule-soft); }
+.copy-row > .label { grid-column: 1 / -1; }
+.copy-row > .value { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-body); min-width: 0; }
+.copy-row > .value.empty { color: var(--color-text-45); }
+.copy-row > .hint { grid-column: 1 / -1; font-size: var(--text-small); color: var(--color-text-55); }
+/* "IG": the Beat is posted on Instagram. In .beat-meta and next to a title in a table. */
+.mark-ig { display: inline-block; padding: 1px 5px; font-size: var(--text-micro); letter-spacing: .06em; border: 1px solid var(--color-divider); color: var(--color-text-75); }
 .panel-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-bottom: var(--rule-soft); }
 .panel-head .meta { font-size: var(--text-label); color: var(--color-text-55); }
 .panel-head .btn-ghost { margin-left: auto; font-size: var(--text-small); }

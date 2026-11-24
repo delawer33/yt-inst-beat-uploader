@@ -35,10 +35,33 @@ export interface paths {
          * Create Beat
          * @description A new DRAFT from an audio file and a cover image (multipart form).
          *
-         *     The RENDER is queued here and comes back as ``active_job``; no UPLOAD is created, that
-         *     waits for the owner to send the beat.
+         *     The RENDER is queued here and comes back as ``active_job``, with a REEL behind it; no
+         *     UPLOAD is created, that waits for the owner to send the beat.
          */
         post: operations["create_beat_api_beats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/from-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Beat From Folder
+         * @description A new DRAFT read in place from a Bounce Folder on this machine (ADR 0007).
+         *
+         *     A folder without its WAV, MP3 or cover, or with no BPM and key in a name -> 422 naming
+         *     what is wrong, and no row. The RENDER is queued here like for a dropped pair.
+         */
+        post: operations["create_beat_from_folder_api_beats_from_folder_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -71,8 +94,12 @@ export interface paths {
          * @description Edit Metadata of a draft (DRAFT/QUEUED); invalid values -> 422, later states -> 409.
          *
          *     A Draft may hold Placeholders; a Queued beat may not take one back (409). A new
-         *     ``cover_style`` (Draft only, else 409) queues a Render unless one is already waiting:
-         *     that one reads the style when it starts.
+         *     ``cover_style`` (Draft only, else 409) queues a Render and a Reel unless one is already
+         *     waiting: that one reads the style when it starts. A new ``effect`` queues a Reel only:
+         *     the Effect moves the Reel, the YouTube video is Still (ADR 0012). An Effect paints the
+         *     title into the Reel's frames, so a new title queues a Reel too, and none is queued while
+         *     the title still holds Placeholders or no name: the Instagram panel queues it once the
+         *     title passes.
          */
         patch: operations["patch_beat_api_beats__beat_id__patch"];
         trace?: never;
@@ -88,7 +115,8 @@ export interface paths {
         put?: never;
         /**
          * Fill Beat
-         * @description Fill from title: description and tags for the form, written from the form's title and
+         * @description Fill from title: description and tags (and, for a Bounce Folder beat, BeatStars moods
+         *     and instruments) for the form, written from the form's title and
          *     the owner's Templates. Writes nothing. Not a Draft -> 409, a title with a Placeholder ->
          *     422, the runner failed or answered badly -> 400 with what to fix.
          */
@@ -113,10 +141,82 @@ export interface paths {
          * @description Send the beat: "Save & upload when rendered". The beat becomes QUEUED at once.
          *
          *     The UPLOAD is queued here when the video is already Rendered, and by the RENDER that is
-         *     still running otherwise. A beat whose render failed (no video, no render pending) gets a
-         *     fresh RENDER, so sending is always enough on its own.
+         *     still running otherwise. A public or scheduled Bounce Folder beat also gets a BEATSTARS
+         *     Job; the UPLOAD waits for it, and whichever of the two finishes last queues it. A beat
+         *     whose render failed (no video, no render pending) gets a fresh RENDER, so sending is
+         *     always enough on its own.
          */
         post: operations["upload_beat_api_beats__beat_id__upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/skip-beatstars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Beatstars
+         * @description "Upload without BeatStars": give up on the failed BEATSTARS Job of a Queued beat.
+         *
+         *     The beat is marked skipped by the owner, so its description gets the marker's fallback,
+         *     and the UPLOAD is queued now, or by the RENDER still to run. Any other beat -> 409.
+         */
+        post: operations["skip_beatstars_api_beats__beat_id__skip_beatstars_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/beatstars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put On Beatstars
+         * @description "Put on BeatStars" for a Published or Scheduled Bounce Folder beat with no Track.
+         *
+         *     Queues the BEATSTARS Job: the Track is released now (Published) or at the publish time
+         *     (Scheduled), then the YouTube snippet is sent again so the marker in the description
+         *     becomes the link. Clears the "Upload without BeatStars" mark. Refused for a beat with no
+         *     Bounce Folder, one that already has a Track, and a private one with no schedule.
+         */
+        post: operations["put_on_beatstars_api_beats__beat_id__beatstars_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/bounce-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach Folder
+         * @description Attach a Bounce Folder to a Published or Scheduled beat made before Bounce Folders, so
+         *     "Put on BeatStars" applies to it. 409 for a beat that has one or is on BeatStars, 422 for
+         *     a wrong folder.
+         */
+        post: operations["attach_folder_api_beats__beat_id__bounce_folder_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -189,6 +289,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/beats/{beat_id}/instagram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Instagram */
+        get: operations["get_instagram_api_beats__beat_id__instagram_get"];
+        put?: never;
+        /**
+         * Write Instagram
+         * @description Write the Instagram Post, or write it again (the old one is replaced).
+         */
+        post: operations["write_instagram_api_beats__beat_id__instagram_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/reel/show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Show Reel In Folder
+         * @description Open the file manager with ``reel.mp4`` selected. No Reel on disk yet -> 409.
+         */
+        post: operations["show_reel_in_folder_api_beats__beat_id__reel_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/instagram/artist-handle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Artist Handle
+         * @description Answer the panel's question about one artist: save the handle (or "a style") in the
+         *     Artist Handles Setting and read the panel again.
+         */
+        put: operations["put_artist_handle_api_beats__beat_id__instagram_artist_handle_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/beats/{beat_id}/instagram/posted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Posted
+         * @description The "Posted on Instagram" switch: the owner posts by hand and records it here.
+         */
+        put: operations["set_posted_api_beats__beat_id__instagram_posted_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -234,6 +416,27 @@ export interface paths {
         put?: never;
         /** Retry Job */
         post: operations["retry_job_api_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Effects
+         * @description Every Effect in picker order, Still first; ``files`` are the effect files under
+         *     ``/visual/effects/`` in load order, for the Visual Lab.
+         */
+        get: operations["list_effects_api_effects_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -425,6 +628,16 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ArtistHandleIn
+         * @description One answer to "who is this?": a handle (with or without ``@``) or ``null`` = a style.
+         */
+        ArtistHandleIn: {
+            /** Artist */
+            artist: string;
+            /** Handle */
+            handle: string | null;
+        };
+        /**
          * AuthStatus
          * @enum {string}
          */
@@ -471,11 +684,20 @@ export interface components {
             source_name: string | null;
             cover_style: components["schemas"]["CoverStyle"];
             video_style: components["schemas"]["CoverStyle"] | null;
+            /** Effect */
+            effect: string;
             /** Rendered */
             rendered: boolean;
             active_job: components["schemas"]["JobOut"] | null;
             /** Cover Url */
             cover_url: string | null;
+            beatstars: components["schemas"]["BeatStarsPreview"] | null;
+            /** Beatstars Url */
+            beatstars_url: string | null;
+            /** Bounce Folder */
+            bounce_folder: string | null;
+            /** Instagram Posted */
+            instagram_posted: boolean;
             /** Synced At */
             synced_at: string | null;
             /**
@@ -503,8 +725,43 @@ export interface components {
             tags?: string[] | null;
             privacy?: components["schemas"]["PrivacyStatus"] | null;
             cover_style?: components["schemas"]["CoverStyle"] | null;
+            /** Effect */
+            effect?: string | null;
             /** Publish At */
             publish_at?: string | null;
+            /** Beatstars Moods */
+            beatstars_moods?: string[] | null;
+            /** Beatstars Instruments */
+            beatstars_instruments?: string[] | null;
+        };
+        /**
+         * BeatStarsPreview
+         * @description What will go to BeatStars for a Beat made from a Bounce Folder, read-only in the UI.
+         */
+        BeatStarsPreview: {
+            /** Title */
+            title: string;
+            /** Tags */
+            tags: string[];
+            /** Genres */
+            genres: string[];
+            /** Moods */
+            moods: string[];
+            /** Instruments */
+            instruments: string[];
+            /** Samples */
+            samples: boolean;
+            /**
+             * Release
+             * @enum {string}
+             */
+            release: "with_video" | "skipped_private" | "skipped_by_owner";
+            /** Error */
+            error: string | null;
+            /** Track Id */
+            track_id: string | null;
+            /** Url */
+            url: string | null;
         };
         /**
          * BeatStatus
@@ -524,6 +781,14 @@ export interface components {
              */
             image: string;
         };
+        /**
+         * BounceIn
+         * @description ``POST /api/beats/from-folder``: the absolute path of a Bounce Folder on this machine.
+         */
+        BounceIn: {
+            /** Path */
+            path: string;
+        };
         /** ChannelOut */
         ChannelOut: {
             /** Id */
@@ -535,7 +800,7 @@ export interface components {
          * CoverStyle
          * @enum {string}
          */
-        CoverStyle: "purple_yellow_5tone" | "purple_yellow_thick_ink" | "golden_wind" | "dio_green" | "diamond_pink_cyan" | "stone_ocean" | "blood_3tone";
+        CoverStyle: "purple_yellow_5tone" | "purple_yellow_thick_ink" | "golden_wind" | "dio_green" | "diamond_pink_cyan" | "stone_ocean" | "blood_3tone" | "film_grain";
         /** DayPoint */
         DayPoint: {
             /**
@@ -551,6 +816,28 @@ export interface components {
             avg_view_seconds: number;
             /** Avg View Percent */
             avg_view_percent: number;
+        };
+        /**
+         * EffectOut
+         * @description One Effect the owner can pick (``GET /api/effects``).
+         */
+        EffectOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Blurb */
+            blurb: string;
+        };
+        /**
+         * EffectsOut
+         * @description Every Effect in picker order, Still first, and the engine files the Visual Lab loads.
+         */
+        EffectsOut: {
+            /** Effects */
+            effects: components["schemas"]["EffectOut"][];
+            /** Files */
+            files: string[];
         };
         /**
          * FillIn
@@ -573,6 +860,10 @@ export interface components {
             description: string;
             /** Tags */
             tags: string[];
+            /** Beatstars Moods */
+            beatstars_moods: string[];
+            /** Beatstars Instruments */
+            beatstars_instruments: string[];
         };
         /** GoogleClientIn */
         GoogleClientIn: {
@@ -586,11 +877,42 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** InstagramOut */
+        InstagramOut: {
+            reel: components["schemas"]["ReelOut"];
+            /** Unknown Artists */
+            unknown_artists: string[];
+            /** Tag People */
+            tag_people: string[];
+            post: components["schemas"]["InstagramPostOut"] | null;
+            /** Publish Time */
+            publish_time: string | null;
+            /** Beatstars Url */
+            beatstars_url: string | null;
+            /** Posted */
+            posted: boolean;
+        };
+        /**
+         * InstagramPostOut
+         * @description The Instagram Post, in the order Instagram asks for it. ``caption`` is assembled.
+         */
+        InstagramPostOut: {
+            /** Hook */
+            hook: string;
+            /** Caption */
+            caption: string;
+            /** Hashtags */
+            hashtags: string[];
+            /** Audio Name */
+            audio_name: string;
+            /** Alt Text */
+            alt_text: string;
+        };
         /**
          * JobKind
          * @enum {string}
          */
-        JobKind: "render" | "upload" | "sync" | "stats";
+        JobKind: "render" | "upload" | "sync" | "stats" | "beatstars" | "reel";
         /** JobOut */
         JobOut: {
             /** Id */
@@ -633,6 +955,11 @@ export interface components {
             /** Per Day */
             per_day: components["schemas"]["DayPoint"][];
         };
+        /** PostedIn */
+        PostedIn: {
+            /** Posted */
+            posted: boolean;
+        };
         /**
          * PrivacyIn
          * @description ``POST /api/beats/{id}/privacy``. With ``publish_at`` the beat becomes Scheduled
@@ -649,6 +976,25 @@ export interface components {
          * @enum {string}
          */
         PrivacyStatus: "private" | "public" | "unlisted";
+        /**
+         * ReelOut
+         * @description The Reel of a Beat. ``rendering`` carries the REEL job's progress; ``failed`` its error;
+         *     ``untitled`` means its Effect waits for a title to paint; ``unavailable`` that the Beat
+         *     has no audio and cover on disk.
+         */
+        ReelOut: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "rendering" | "failed" | "untitled" | "unavailable";
+            /** Progress */
+            progress: number | null;
+            /** Message */
+            message: string | null;
+            /** Error */
+            error: string | null;
+        };
         /** SettingsIn */
         SettingsIn: {
             /** Stats Hour */
@@ -659,6 +1005,10 @@ export interface components {
             description_template?: string | null;
             /** Tags Template */
             tags_template?: string[] | null;
+            /** Artist Handles */
+            artist_handles?: {
+                [key: string]: string | null;
+            } | null;
         };
         /** SettingsOut */
         SettingsOut: {
@@ -676,6 +1026,10 @@ export interface components {
             description_template: string;
             /** Tags Template */
             tags_template: string[];
+            /** Artist Handles */
+            artist_handles: {
+                [key: string]: string | null;
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -751,6 +1105,39 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_create_beat_api_beats_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_beat_from_folder_api_beats_from_folder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceIn"];
             };
         };
         responses: {
@@ -935,6 +1322,103 @@ export interface operations {
             };
         };
     };
+    skip_beatstars_api_beats__beat_id__skip_beatstars_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_on_beatstars_api_beats__beat_id__beatstars_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attach_folder_api_beats__beat_id__bounce_folder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_cover_api_beats__beat_id__cover_get: {
         parameters: {
             query?: never;
@@ -1016,6 +1500,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_instagram_api_beats__beat_id__instagram_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_instagram_api_beats__beat_id__instagram_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_reel_in_folder_api_beats__beat_id__reel_show_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_artist_handle_api_beats__beat_id__instagram_artist_handle_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtistHandleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_posted_api_beats__beat_id__instagram_posted_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                beat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstagramOut"];
                 };
             };
             /** @description Validation Error */
@@ -1119,6 +1764,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_effects_api_effects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EffectsOut"];
                 };
             };
         };

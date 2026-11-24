@@ -7,16 +7,22 @@ Nothing here types a password.
 The form, as of October 2026: "Create Track" opens an Uppy dialog; the first file creates
 the track and lands on ``content/tracks/edit/TK<id>``, one page with every section. Fields
 carry ``data-qa`` hooks (``input_title``, ``select_key``, ``input_tag``, ``input_genre``,
-``input_mood``); each file slot has an "Add" button that opens the same Uppy dialog. Changes
-save as they are made; "Publish track" makes it Public. Monetization is inherited from
-Track Preferences and is never touched, nor is the paid "Boost Track".
+``input_mood``, ``input_instruments``); each file slot has an "Add" button that opens the
+same Uppy dialog. Changes save as they are made; "Publish track" makes it Public, or
+Scheduled when the Release Date (``release-date-input``, a calendar in the browser's local
+time) lies in the future. Monetization is inherited from Track Preferences and is never
+touched, nor is the paid "Boost Track".
 """
 
 import base64
+import os
 import re
+import subprocess
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,8 +38,11 @@ StatusFn = Callable[[str], None]
 STUDIO_URL = "https://studio.beatstars.com"
 TRACKS_URL = f"{STUDIO_URL}/content/tracks/uploaded"
 LOGIN_TIMEOUT = 600.0  # seconds the owner has to sign in
+NETWORK_CHANGED_ATTEMPTS = 4  # loads of the first page while the network settles
+NETWORK_CHANGED_PAUSE = 5  # seconds between them
 SIGN_IN_GRACE = 20.0  # seconds before a page without Studio counts as signed out
-FILE_TIMEOUT = 300.0  # seconds one file may take to upload and process
+FILE_TIMEOUT = 300.0  # seconds one file may take to upload and process, at the least
+SLOW_UPLOAD_BYTES_PER_S = 100_000  # a file gets as long as this upload speed would need
 ARTWORK_ATTEMPTS = 3
 SETTLE = 6  # seconds a freshly loaded track page needs before it takes files
 SAVE_QUIET = 5  # seconds with nothing saving before a change counts as saved
@@ -41,12 +50,28 @@ SAVE_QUIET = 5  # seconds with nothing saving before a change counts as saved
 WINDOW_CLASS = "beat-upload-beatstars"
 VIEWPORT = {"width": 1600, "height": 1000}  # narrower and the sidebar covers the form
 
+# A release date this close counts as "now": the picker takes minutes, and a date in the
+# past cannot be picked.
+RELEASE_NOW_WINDOW = timedelta(minutes=2)
+_MONTHS = (
+    "January", "February", "March", "April", "May", "June", "July", "August", "September",
+    "October", "November", "December",
+)  # fmt: skip
+
 _TRACK_ID = re.compile(r"/tracks/edit/(TK\d+)")
 _MS = 1000
 
 
+# Navigations wait for the DOM only: Studio's "load" event can hang on a third-party request
+# (it never fired under the systemd service), and every step waits for its own selector.
+READY = "domcontentloaded"
+
+
 def edit_url(track_id: str) -> str:
     return f"{STUDIO_URL}/content/tracks/edit/{track_id}"
+
+
+BROWSERS_DIRNAME = "ms-playwright"  # next to the Studio profile, in the data dir
 
 
 def public_url(track_id: str) -> str:
@@ -65,17 +90,45 @@ def studio(profile: Path, on_status: StatusFn) -> Iterator["Page"]:
             "playwright install chromium"
         ) from None
     profile.mkdir(parents=True, exist_ok=True)
+    # Not ~/.cache/ms-playwright: that goes whenever the owner clears the cache for space.
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(profile.parent / BROWSERS_DIRNAME))
     with sync_playwright() as p:
+        # Under systemd XDG_SESSION_TYPE is "unspecified": Chromium then neither paints nor
+        # loads properly in its window on a hidden workspace (every page ~30 s, clicks and
+        # screenshots time out). With "wayland" and the hint it runs as it does from a shell.
+        env = dict(os.environ)
+        if env.get("WAYLAND_DISPLAY"):
+            env["XDG_SESSION_TYPE"] = "wayland"
+        if not Path(p.chromium.executable_path).is_file():
+            _install_chromium(on_status)
         context = p.chromium.launch_persistent_context(
-            str(profile), headless=False, viewport=VIEWPORT, args=[f"--class={WINDOW_CLASS}"]
+            str(profile),
+            headless=False,
+            viewport=VIEWPORT,
+            args=[f"--class={WINDOW_CLASS}", "--ozone-platform-hint=auto"],
+            env=env,
         )
         try:
             page = context.pages[0] if context.pages else context.new_page()
-            page.goto(TRACKS_URL)
+            _goto_studio(page)
             _wait_for_sign_in(page, on_status)
             yield page
         finally:
             context.close()
+
+
+def _goto_studio(page: "Page") -> None:
+    """Open the tracks page. A route flapping while Chromium starts (a VPN switch, a docker
+    interface going up or down) fails the first load with ``net::ERR_NETWORK_CHANGED``;
+    a moment later it loads, so the load is tried again a few times."""
+    for attempt in range(NETWORK_CHANGED_ATTEMPTS):
+        try:
+            page.goto(TRACKS_URL, wait_until=READY)
+            return
+        except _playwright_error() as e:
+            if "ERR_NETWORK_CHANGED" not in str(e) or attempt == NETWORK_CHANGED_ATTEMPTS - 1:
+                raise
+            page.wait_for_timeout(NETWORK_CHANGED_PAUSE * _MS)
 
 
 def publish_package(
@@ -84,25 +137,61 @@ def publish_package(
     on_status: StatusFn,
     draft: str | None = None,
     publish: bool = True,
+    release_at: datetime | None = None,
+    on_created: Callable[[str], None] = lambda _: None,
 ) -> str:
     """Create (or finish ``draft``), fill and publish one track; returns its ``TK`` id.
-    With ``publish`` False the filled track stays a draft for the owner to look over."""
+    With ``publish`` False the filled track stays a draft for the owner to look over.
+    ``release_at`` (aware) is when it goes public; ``None`` or a moment that has passed is
+    now. ``on_created`` gets the id the moment Studio has made the track, before anything
+    else can fail; any later failure names the id and how to finish the draft."""
     if draft is None:
-        track_id = _create_track(page, package.master)
+        track_id = _create_track(page, package.master, on_created)
     else:
         track_id = draft
-        page.goto(edit_url(track_id))
-        page.wait_for_selector("[data-qa=input_title]")
-    on_status(f"{track_id}: master uploaded")
+        on_created(track_id)
     try:
-        _fill_and_publish(page, package, track_id, on_status, publish)
+        if draft is not None:
+            page.goto(edit_url(track_id), wait_until=READY)
+            page.wait_for_selector("[data-qa=input_title]")
+        on_status(f"{track_id}: master uploaded")
+        _fill_and_publish(page, package, track_id, on_status, publish, release_at)
     except BeatStarsError as e:
         raise BeatStarsError(f"{track_id}: {e}; finish it with --draft {track_id}") from e
+    except _playwright_error() as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        raise BeatStarsError(f"{track_id}: {first}; finish it with --draft {track_id}") from e
     return track_id
 
 
+def _install_chromium(on_status: StatusFn) -> None:
+    """Download Playwright's Chromium (~170 MB) into ``PLAYWRIGHT_BROWSERS_PATH``."""
+    on_status("Downloading the browser for BeatStars (~170 MB)")
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout).strip().splitlines()[-1:]
+        raise BeatStarsError(
+            f"Could not download the browser for BeatStars: {' '.join(tail) or 'no output'}"
+        )
+
+
+def _playwright_error() -> type[Exception]:
+    from playwright.sync_api import Error
+
+    return Error
+
+
 def _fill_and_publish(
-    page: "Page", package: TrackPackage, track_id: str, on_status: StatusFn, publish: bool
+    page: "Page",
+    package: TrackPackage,
+    track_id: str,
+    on_status: StatusFn,
+    publish: bool,
+    release_at: datetime | None,
 ) -> None:
     track = package.track
     page.wait_for_timeout(SETTLE * _MS)  # a file added before the form settles never attaches
@@ -122,9 +211,17 @@ def _fill_and_publish(
     _set_chips(page, "input_tag", track.tags, typed=True)
     _set_chips(page, "input_genre", track.genres)
     _set_chips(page, "input_mood", track.moods)
+    _set_chips(page, "input_instruments", track.instruments)
     samples = page.locator("mat-checkbox", has_text="3rd party loops").locator("input")
     if samples.is_checked() != track.samples:
         samples.click()
+    if track.samples:
+        _fill_sample_row(page, track.sample_name, track.sample_source)
+    scheduled = release_at is not None and release_at - datetime.now(release_at.tzinfo) > (
+        RELEASE_NOW_WINDOW
+    )
+    if scheduled:
+        _set_release(page, release_at)
     _wait_saved(page)
     _check_fields(page, package)
     if not publish:
@@ -132,11 +229,71 @@ def _fill_and_publish(
         return
 
     page.locator("[data-cy=publish_btn-button]").click()
-    page.wait_for_url(TRACKS_URL + "*", timeout=60 * _MS)
-    toast = page.get_by_text("successfully published")
-    toast.wait_for(timeout=30 * _MS)
+    page.wait_for_url(TRACKS_URL + "*", timeout=60 * _MS, wait_until=READY)
+    toast = page.get_by_text(re.compile(r"successfully (published|scheduled)"))
+    toast.first.wait_for(timeout=30 * _MS)
     page.keyboard.press("Escape")  # the "share your content" dialog
-    on_status(f"{track_id}: published")
+    on_status(
+        f"{track_id}: {'scheduled for ' + release_at.isoformat() if scheduled else 'published'}"
+    )
+
+
+def _fill_sample_row(page: "Page", name: str, source: str) -> None:
+    """The first "Sample or Loop" / "Source" row; Studio will not publish with it empty."""
+    sample = page.locator('input[placeholder="What\'s the name?"]').first
+    sample.wait_for(timeout=10 * _MS)
+    if not sample.input_value().strip():
+        _type(sample, name)
+    source_input = page.locator('input[placeholder="Source"]').first
+    if not source_input.input_value().strip():
+        _type(source_input, source)
+
+
+def _release_label(local: datetime) -> str:
+    """How the Release Date field shows ``local``: 'October 11, 2026 at 1:30 PM'."""
+    hour12 = local.hour % 12 or 12
+    meridiem = "AM" if local.hour < 12 else "PM"
+    date = f"{_MONTHS[local.month - 1]} {local.day}, {local.year}"
+    return f"{date} at {hour12}:{local.minute:02d} {meridiem}"
+
+
+def _set_release(page: "Page", release_at: datetime) -> None:
+    """Pick ``release_at`` in the Release Date calendar. The calendar works in the browser's
+    local time zone, so the moment is converted to it; a day is clicked, then hour and
+    minute are typed, then the tick confirms."""
+    local = release_at.astimezone()
+    field = page.locator("[data-cy=release-date-input]")
+    field.scroll_into_view_if_needed()
+    field.click(force=True)  # a placeholder span covers the input
+    popup = page.locator(".mtx-datetimepicker-popup")
+    popup.wait_for()
+    day = f"{_MONTHS[local.month - 1]} {local.day}, {local.year}"
+    cell = popup.locator(f'button.mtx-calendar-body-cell[aria-label="{day}"]')
+    for _ in range(36):  # Studio allows dates up to 2037
+        if cell.count():
+            break
+        popup.get_by_role("button", name="Next month").click()
+        page.wait_for_timeout(300)
+    if cell.count() == 0:
+        raise BeatStarsError(f"The release date {day} is not in the calendar")
+    if cell.get_attribute("aria-disabled") == "true":
+        raise BeatStarsError(f"Studio does not take {day} as a release date")
+    cell.click()
+    for label, value in (("Hour", local.hour), ("Minute", local.minute)):
+        box = popup.locator(f"input[aria-label={label}]")
+        box.fill(f"{value:02d}")
+        box.press("Tab")
+    popup.locator("button:has(i.vb-icon-check-m-regular-solid)").click()
+    popup.wait_for(state="detached")
+    shown = page.locator(".wrapper-input .readonly-placeholder").inner_text().strip()
+    if shown != _release_label(local):
+        raise BeatStarsError(f"Release date shows {shown!r}, wanted {_release_label(local)!r}")
+
+
+def kill_studio_browser() -> None:
+    """End the Studio browser from outside its thread (``WINDOW_CLASS`` names its windows):
+    every Playwright call waiting on it then raises and the thread ends."""
+    subprocess.run(["pkill", "-f", "--", f"--class={WINDOW_CLASS}"], check=False)
 
 
 def check_public_page(page: "Page", track_id: str, bpm: int) -> str:
@@ -145,7 +302,7 @@ def check_public_page(page: "Page", track_id: str, bpm: int) -> str:
 
     public = page.context.new_page()
     try:
-        public.goto(public_url(track_id))
+        public.goto(public_url(track_id), wait_until=READY)
         try:
             public.get_by_text("WAV Lease").first.wait_for(state="attached", timeout=90 * _MS)
         except PlaywrightTimeoutError:
@@ -195,15 +352,15 @@ def _wait_for_sign_in(page: "Page", on_status: StatusFn) -> None:
             asked = True
         page.wait_for_timeout(2 * _MS)
     if asked:
-        page.goto(TRACKS_URL)
+        page.goto(TRACKS_URL, wait_until=READY)
 
 
 def _signed_in(page: "Page") -> bool:
     return page.url.startswith(STUDIO_URL) and page.get_by_text("Create Track").count() > 0
 
 
-def _create_track(page: "Page", master: Path) -> str:
-    page.goto(TRACKS_URL)
+def _create_track(page: "Page", master: Path, on_created: Callable[[str], None]) -> str:
+    page.goto(TRACKS_URL, wait_until=READY)
     page.get_by_role("button", name="Create Track").first.click()
     before = _listed_track_ids(page)
     page.wait_for_timeout(2 * _MS)
@@ -211,9 +368,10 @@ def _create_track(page: "Page", master: Path) -> str:
     if dismiss.count():  # the "updates" onboarding shown on the first Create Track
         dismiss.first.click()
     _dialog_file_input(page).set_input_files(master)
+    master_deadline = time.monotonic() + file_timeout(master)
     # Studio usually routes to the new track by itself, but not always: a track can be created
     # while the page stays on the list. Then the new id is the one the list did not have.
-    deadline = time.monotonic() + FILE_TIMEOUT
+    deadline = master_deadline
     while (match := _TRACK_ID.search(page.url)) is None:
         if time.monotonic() > deadline:
             raise BeatStarsError(
@@ -224,14 +382,20 @@ def _create_track(page: "Page", master: Path) -> str:
         if page.locator("mat-dialog-container").count() == 0:
             new = [t for t in _listed_track_ids(page, reload=True) if t not in before]
             if new:
-                page.goto(edit_url(new[0]))
-    page.wait_for_selector("[data-qa=input_title]")
-    return match[1]
+                page.goto(edit_url(new[0]), wait_until=READY)
+    track_id = match[1]
+    on_created(track_id)
+    try:
+        page.wait_for_selector("[data-qa=input_title]")
+    except _playwright_error() as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        raise BeatStarsError(f"{track_id}: {first}; finish it with --draft {track_id}") from e
+    return track_id
 
 
 def _listed_track_ids(page: "Page", reload: bool = False) -> list[str]:
     if reload:
-        page.goto(TRACKS_URL)
+        page.goto(TRACKS_URL, wait_until=READY)
     page.locator("a[href*='/tracks/edit/TK']").first.wait_for(timeout=60 * _MS)
     hrefs = page.eval_on_selector_all("a[href*='/tracks/edit/TK']", "els => els.map(e => e.href)")
     return list(dict.fromkeys(m[1] for h in hrefs if (m := _TRACK_ID.search(h))))
@@ -248,6 +412,12 @@ def _slot(page: "Page", label: str) -> "Locator":
     return page.locator("div", has_text=label).filter(has=page.locator("button")).last
 
 
+def file_timeout(file: Path) -> float:
+    """Seconds ``file`` may take to upload and process: ``FILE_TIMEOUT``, or longer for a
+    big file on a slow line (a 250 MB stems zip at 300 KB/s needs ~14 minutes)."""
+    return max(FILE_TIMEOUT, file.stat().st_size / SLOW_UPLOAD_BYTES_PER_S)
+
+
 def _ensure_slot(page: "Page", label: str, file: Path) -> None:
     slot = _slot(page, label)
     add = slot.get_by_role("button", name="Add")
@@ -255,7 +425,7 @@ def _ensure_slot(page: "Page", label: str, file: Path) -> None:
         return  # already holds a file
     add.first.click()
     _dialog_file_input(page).set_input_files(file)
-    deadline = time.monotonic() + FILE_TIMEOUT
+    deadline = time.monotonic() + file_timeout(file)
     while True:
         page.wait_for_timeout(2 * _MS)
         text = _slot(page, label).inner_text()
@@ -348,6 +518,7 @@ def _check_fields(page: "Page", package: TrackPackage) -> None:
         "tags": _chips(page.locator("[data-qa=input_tag]")),
         "genres": _chips(page.locator("[data-qa=input_genre]")),
         "moods": _chips(page.locator("[data-qa=input_mood]")),
+        "instruments": _chips(page.locator("[data-qa=input_instruments]")),
     }
     want = {
         "title": track.title,
@@ -356,6 +527,7 @@ def _check_fields(page: "Page", package: TrackPackage) -> None:
         "tags": track.tags,
         "genres": track.genres,
         "moods": track.moods,
+        "instruments": track.instruments,
     }
     wrong = [
         f"{k}: {got[k]!r} != {want[k]!r}"

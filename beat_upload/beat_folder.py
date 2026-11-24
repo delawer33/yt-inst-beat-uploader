@@ -11,9 +11,11 @@ from beat_upload.errors import BeatFolderError
 
 AUDIO_EXTENSIONS = frozenset({".mp3", ".wav"})
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp"})
+CLIP_EXTENSIONS = frozenset({".mp4", ".mov", ".webm", ".mkv"})  # a Clip in a Bounce Folder
 
 CONFIG_FILENAME = "config.yaml"
 VIDEO_FILENAME = "video.mp4"
+REEL_FILENAME = "reel.mp4"
 
 
 @dataclass(frozen=True)

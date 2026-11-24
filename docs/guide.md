@@ -124,6 +124,9 @@ The page is three rows, what on the left and how on the right:
   progress, right there.
 - **Templates** — the title, description and tag templates every new Beat starts from;
   `{name}` becomes the audio file name without extension.
+- **Artist Handles** — the Instagram account of each artist a title names, one line per
+  artist, and names marked "Style, not an artist" (Guitar, Reggaeton) that are never tagged.
+  The Instagram panel asks for a new artist's handle once; fix a wrong one here.
 
 #### Add a beat from the web UI
 
@@ -146,7 +149,8 @@ into a few bands, each band gets one fixed colour and ink outlines go on top, so
 comes out in the channel's series. The **Label** (PRODUCED BY / DELAWER / YOU BETTER RUN, in
 the Parental Advisory layout) is stamped top right on every one. A new draft renders in
 Purple Yellow 5-tone; the tiles under the preview show your cover in each of the seven
-styles, and picking another one renders the draft again. Only a Draft can change its style.
+styles. Picking one only previews it; **Apply** renders the draft again in that style, and
+**Keep** goes back to the current one. Only a Draft can change its style.
 
 The draft's page puts the form on the left and the YouTube preview on the right: the video's
 first frame as the server renders it (cover, Cover Style, Label, letterboxed in 16:9), the title as you type it, the channel, the publish time when
@@ -243,7 +247,7 @@ youtube:
                                   # makes it public then; needs privacy_status: private
 cover_style: stone_ocean          # optional, default purple_yellow_5tone; also
                                   # purple_yellow_thick_ink, golden_wind, dio_green,
-                                  # diamond_pink_cyan, blood_3tone
+                                  # diamond_pink_cyan, blood_3tone, film_grain
 ```
 
 `publish_at` must be at least 5 minutes ahead when the upload runs; a time that has already

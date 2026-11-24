@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visual Lab · Beat Upload</title>
+<style>
+@font-face { font-family: "League Gothic"; src: url("../fonts/LeagueGothic-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../fonts/IBMPlexMono-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../fonts/IBMPlexMono-SemiBold.ttf"); font-weight: 600; }
+:root{--bg:#0b0b0e;--panel:#141418;--panel2:#1b1b21;--line:#2a2a33;--fg:#ededf0;--muted:#8c8c99;--accent:#ffc61a;--accent-ink:#1c0838;
+  --display:"League Gothic","Impact","Arial Narrow",sans-serif;--mono:"IBM Plex Mono","SFMono-Regular",Menlo,monospace;--sans:system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--sans);padding:0 16px 40px}
+a{color:var(--accent)}
+h1{font:400 44px/1 var(--display);letter-spacing:.01em;margin:0;text-transform:uppercase}
+.eyebrow{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.wrap{max-width:1180px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding:22px 0 16px;border-bottom:1px solid var(--line)}
+header p{margin:4px 0 0;color:var(--muted);max-width:60ch}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px 0}
+.btn{font:600 12px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:10px 14px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary,.btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.file{position:relative;overflow:hidden}
+.btn.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.field input,.field select{font:14px var(--mono);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:8px 10px;min-width:0}
+.field input[type=number]{width:84px}
+.field input[type=text]{width:220px}
+main{display:grid;grid-template-columns:360px minmax(0,1fr);gap:28px;align-items:start;padding:8px 0 32px}
+.stage{position:sticky;top:12px}
+.phone{position:relative;width:360px;max-width:100%;aspect-ratio:9/16;background:#000;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+.phone canvas{width:100%;height:100%;display:block}
+/* YouTube mode: the lab's column drops its cap and the stage spans the window, so the player is the size YouTube gives it on this screen */
+body.yt .wrap{max-width:none}
+body.yt main{grid-template-columns:1fr}
+body.yt .stage{position:static}
+body.yt .phone{display:none}
+.watch{display:none;background:#0f0f0f;color:#f1f1f1;font:14px/1.3 Roboto,"YouTube Sans",Arial,sans-serif;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:100%}
+body.yt .watch{display:block}
+.w-head{display:flex;align-items:center;gap:16px;height:56px;padding:0 16px;border-bottom:1px solid #222}
+.w-logo{font:700 19px/1 Roboto,Arial,sans-serif;letter-spacing:-.04em;display:flex;align-items:center;gap:4px}
+.w-logo i{display:inline-block;width:28px;height:20px;background:#f00;border-radius:6px;position:relative}
+.w-logo i::after{content:"";position:absolute;left:11px;top:5px;border-left:8px solid #fff;border-top:5px solid transparent;border-bottom:5px solid transparent}
+.w-search{flex:0 1 540px;height:40px;border:1px solid #303030;border-radius:20px;background:#121212;color:#888;display:flex;align-items:center;padding:0 16px;margin-left:auto;margin-right:auto}
+.w-modes{display:flex;gap:6px;margin-left:auto}
+.w-modes button{font:600 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;background:#272727;color:#f1f1f1;border:0;border-radius:4px;padding:8px 10px;cursor:pointer}
+.w-modes button.on{background:var(--accent);color:var(--accent-ink)}
+.w-body{display:grid;grid-template-columns:minmax(0,1280px) 402px;gap:0 24px;padding:24px;justify-content:start}
+.watch .player{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;width:100%}
+.watch .player canvas{width:100%;height:100%;display:block;object-fit:contain}
+.watch .player:fullscreen{border-radius:0}
+.watch .player:fullscreen canvas{width:100vw;height:100vh}
+/* theater: the player takes the window's width and the window's height minus the header, like YouTube's */
+.watch.theater .w-body{grid-template-columns:minmax(0,1280px) 402px}
+.watch.theater .player{grid-column:1/-1;width:100%;max-width:none;border-radius:0;aspect-ratio:auto;height:calc(100vh - 56px - 48px);margin:-24px -24px 24px;width:calc(100% + 48px)}
+.w-title{margin:12px 0 0;font:600 20px/1.3 Roboto,"YouTube Sans",Arial,sans-serif;color:#f1f1f1}
+.w-ch{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.w-av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#ffc61a,#a33);flex:none}
+.w-ch b{display:block;font-size:16px;font-weight:500}
+.w-ch small{display:block;color:#aaa;font-size:12px}
+.w-sub{background:#f1f1f1;color:#0f0f0f;border:0;border-radius:18px;padding:0 16px;height:36px;font:500 14px Roboto,Arial,sans-serif;margin-left:12px}
+.w-pills{display:flex;gap:8px;margin-left:auto}
+.w-pills span{background:#272727;color:#f1f1f1;border-radius:18px;height:36px;padding:0 16px;display:inline-flex;align-items:center;font-size:14px;font-weight:500}
+.w-desc{background:#272727;border-radius:12px;padding:12px;margin-top:12px;font-size:14px;white-space:pre-line;color:#f1f1f1}
+.w-desc small{display:block;font-weight:500;margin-bottom:6px}
+.w-side{display:grid;gap:8px;align-content:start}
+.sug{display:grid;grid-template-columns:168px minmax(0,1fr);gap:8px;align-items:start}
+.sug .th{aspect-ratio:16/9;background:#272727;border-radius:8px;overflow:hidden;position:relative}
+.sug .th canvas{width:100%;height:100%;display:block}
+.sug .th i{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.8);color:#fff;font:500 12px Roboto,Arial,sans-serif;padding:1px 4px;border-radius:4px}
+.sug b{display:block;font:500 14px/1.3 Roboto,Arial,sans-serif;color:#f1f1f1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sug small{display:block;color:#aaa;font-size:12px;margin-top:4px}
+.sug.me{outline:1px solid var(--accent);outline-offset:4px;border-radius:4px}
+@media (max-width:1100px){.w-body,.watch.theater .w-body{grid-template-columns:1fr}.w-side{margin-top:16px}.w-search{display:none}}
+.reels{position:absolute;inset:0;pointer-events:none;color:#fff;font:600 4.5% var(--sans)}
+.r-top{position:absolute;top:4.5%;left:5%;font-size:5%;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.r-shade{position:absolute;left:0;right:0;bottom:0;height:30%;background:linear-gradient(transparent,rgba(0,0,0,.6))}
+.r-side{position:absolute;right:3.5%;bottom:14%;display:flex;flex-direction:column;gap:5.5%;width:9%}
+.r-side i{display:block;width:100%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.85)}
+.r-bottom{position:absolute;left:4.5%;right:18%;bottom:3.5%;display:grid;gap:4%}
+.r-bottom b{display:block;width:36%;height:12px;background:rgba(255,255,255,.92);border-radius:3px}
+.r-bottom span{display:block;height:9px;background:rgba(255,255,255,.6);border-radius:3px}
+.r-bottom em{display:block;width:46%;height:9px;background:rgba(255,255,255,.4);border-radius:3px}
+.ytui{position:absolute;inset:0;pointer-events:none}
+.y-shade{position:absolute;left:0;right:0;bottom:0;height:26%;background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.y-bar{position:absolute;left:2%;right:2%;bottom:12%;height:3px;background:rgba(255,255,255,.35)}
+.y-bar i{display:block;width:37%;height:100%;background:#f00}
+.meters{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px}
+.meter{height:6px;background:var(--panel2);border-radius:2px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--accent)}
+.hits{display:flex;gap:8px;margin-top:10px;font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.hits span{padding:6px 8px;border:1px solid var(--line);border-radius:3px}
+.hits span.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.status{margin-top:10px;font:12px var(--mono);color:var(--muted);min-height:18px}
+.styles{display:grid;gap:8px}
+.style{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;cursor:pointer;text-align:left;color:var(--fg);font:inherit}
+.style:hover{border-color:var(--muted)}
+.style.on{border-color:var(--accent);background:var(--panel2)}
+.style .n{font:400 34px/1 var(--display);color:var(--muted)}
+.style.on .n{color:var(--accent)}
+.style b{display:block;font:400 22px/1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+.style p{margin:4px 0 0;color:var(--muted);font-size:13px;max-width:60ch}
+.style .how{font:600 10px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:right;white-space:nowrap}
+.style .how em{display:block;font-style:normal;color:var(--fg)}
+.fam{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);padding:10px 2px 2px}
+.knobs{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:14px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.sw{width:30px;height:30px;border-radius:4px;border:2px solid transparent;cursor:pointer;padding:0;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+.sw i{display:block}
+.sw.on{border-color:var(--fg)}
+.fmt{display:flex;gap:6px}
+.note{color:var(--muted);max-width:70ch;font-size:13px}
+code{font:12px var(--mono);background:var(--panel2);padding:2px 5px;border-radius:3px}
+@media (max-width:860px){main,body.yt main{grid-template-columns:1fr}.stage{position:static}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <div class="eyebrow">Beat Upload · Visual Lab</div>
+    <h1>Effects by ear</h1>
+    <p>Тот же движок, что рендерит видео. Кинь бит и обложку (или запусти демо-бит), выбери Effect и палитру. Эффект, который работает здесь, рендер нарисует так же: файл в <code>beat_upload/visual/effects/</code> плюс строка в реестре.</p>
+  </div>
+  <div class="bar">
+    <button class="btn primary" id="playBtn">▶ Демо-бит</button>
+    <label class="btn file">Бит (mp3/wav)<input type="file" id="audioFile" accept="audio/*"></label>
+    <label class="btn file">Обложка<input type="file" id="coverFile" accept="image/*"></label>
+    <label class="btn file">Видео<input type="file" id="videoFile" accept="video/*"></label>
+  </div>
+</header>
+
+<div class="bar">
+  <div class="field"><label for="title">Title</label><input type="text" id="title" value="Night Drive"></div>
+  <div class="field"><label for="artists">Artists</label><input type="text" id="artists" value="Juice WRLD x Lil Peep"></div>
+  <div class="field"><label for="bpm">BPM</label><input type="number" id="bpm" value="140" min="40" max="240"></div>
+  <div class="field"><label for="key">Key</label><input type="text" id="key" value="Fmin" style="width:84px"></div>
+</div>
+
+<main>
+  <div class="stage">
+    <div class="phone"><canvas id="stage" width="540" height="960"></canvas>
+      <div class="reels" id="reels" aria-hidden="true"><div class="r-top">Reels</div><div class="r-shade"></div><div class="r-side"><i></i><i></i><i></i><i></i></div><div class="r-bottom"><b></b><span></span><span></span><em></em></div></div>
+      <div class="ytui" id="ytui" hidden aria-hidden="true"><div class="y-shade"></div><div class="y-bar"><i></i></div></div>
+    </div>
+    <div class="watch" id="watch" aria-hidden="true">
+      <div class="w-head"><span class="w-logo"><i></i>YouTube</span><span class="w-search">Введите запрос</span><span class="w-modes"><button type="button" id="modeNormal" class="on">Обычный</button><button type="button" id="modeTheater">Театр</button><button type="button" id="modeFull">На весь экран</button></span></div>
+      <div class="w-body">
+      <div class="player" id="player"><canvas id="ytStage" width="960" height="540"></canvas></div>
+      <div>
+        <h2 class="w-title" id="wTitle"></h2>
+        <div class="w-ch"><span class="w-av"></span><span><b>delawer</b><small>1,2 тыс. подписчиков</small></span><button class="w-sub" type="button">Подписаться</button><div class="w-pills"><span>👍 24</span><span>Поделиться</span></div></div>
+        <div class="w-desc" id="wDesc"></div>
+      </div>
+      <div class="w-side" id="wSide"></div>
+      </div>
+    </div>
+    <div class="meters" id="meters"><div class="meter"><i></i></div><div class="meter"><i></i></div><div class="meter"><i></i></div><div class="meter"><i></i></div><div class="meter"><i></i></div><div class="meter"><i></i></div></div>
+    <div class="hits"><span id="hKick">kick</span><span id="hSnare">snare</span><span id="hHat">hat</span><span id="hBeat">beat</span></div>
+    <div class="status" id="status">Нажми «Демо-бит» или загрузи файл. Звук стартует только по клику.</div>
+  </div>
+  <div>
+    <div class="eyebrow" style="margin-bottom:10px">Effects · клик переключает</div>
+    <div class="styles" id="styles"></div>
+    <div class="knobs">
+      <div class="field"><label>Формат</label><div class="fmt"><button class="btn on" id="fmtReel" type="button">Reel 9:16</button><button class="btn" id="fmtYt" type="button">YouTube 16:9</button></div></div>
+      <div class="field"><label>Cover Style (палитра)</label><div class="swatches" id="swatches"></div></div>
+      <div class="field"><label for="intensity">Жёсткость реакции</label><input type="range" id="intensity" min="0.3" max="2" step="0.1" value="1"></div>
+      <div class="field"><label for="videoMode">Видео как источник</label><select id="videoMode"><option value="cuts" selected>стоп-кадр по ударам</option><option value="live">живое под эффектом</option></select></div>
+      <div class="field"><label for="cutRate">Склейка</label><select id="cutRate"><option value="kick" selected>кик и снэр</option><option value="kick2">каждый 2-й кик</option><option value="beat">по долям</option><option value="8">восьмые</option></select></div>
+      <div class="field"><label for="pump">Качка кадра на кике</label><input type="range" id="pump" min="0" max="0.12" step="0.01" value="0"></div>
+      <div class="field"><label for="reelsOn">Оверлей Reels / плеера</label><select id="reelsOn"><option value="1" selected>on</option><option value="0">off</option></select></div>
+      <div class="field"><label for="labelOn">Label</label><select id="labelOn"><option value="0">off</option><option value="1">on</option></select></div>
+    </div>
+    <p class="note">Рендер считает те же признаки в Python (numpy) и кормит движок покадрово; удар-другой может лечь иначе, чем здесь. Крутилки тут для вкуса: рендер идёт на значениях по умолчанию.</p>
+  </div>
+</main>
+</div>
+<script src="engine.js"></script>
+<script>
+(async function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const E = window.BeatVisual, A = E.A;
+  // the effects come from the server, so the list here and the Render's list are one list
+  const effects = await fetch('/api/effects').then(r => r.json());
+  for (const file of effects.files) await new Promise((ok, err) => { const s = document.createElement('script'); s.src = 'effects/' + file; s.onload = ok; s.onerror = () => err(new Error(file)); document.head.appendChild(s); });
+  const offered = new Set(effects.effects.map(e => e.id));
+  E.attach($('stage'));
+  // the watch-page mock: the engine draws into its player in YouTube mode, a small canvas mirrors it as the suggested-video thumbnail
+  const SUGG = [['FREE Juice WRLD x Lil Peep Type Beat — "Lost"', 'prodbyraven · 48 тыс. просмотров · 3 дня назад', '2:41'], ['[FREE] Melodic Guitar Type Beat 2026', 'kxne · 120 тыс. просмотров · 2 недели назад', '3:05'], ['(FREE) Yeat x Ken Carson Rage Type Beat', 'oygn beats · 9,1 тыс. просмотров · 1 день назад', '2:18'], ['FREE Sad Guitar Type Beat — "Runaway"', 'noevdv · 310 тыс. просмотров · 1 месяц назад', '2:56']];
+  $('wSide').innerHTML = '<div class="sug me"><div class="th"><canvas id="ytThumb" width="336" height="189"></canvas><i id="wDur">2:30</i></div><span><b id="wSugTitle"></b><small>delawer · 0 просмотров · только что</small></span></div>' + SUGG.map(x => '<div class="sug"><div class="th"><i>' + x[2] + '</i></div><span><b>' + x[0] + '</b><small>' + x[1] + '</small></span></div>').join('');
+  const thumbCtx = $('ytThumb').getContext('2d');
+  function viewMode(m) { $('watch').classList.toggle('theater', m === 'theater'); $('modeNormal').classList.toggle('on', m === 'normal'); $('modeTheater').classList.toggle('on', m === 'theater'); }
+  $('modeNormal').addEventListener('click', () => viewMode('normal')); $('modeTheater').addEventListener('click', () => viewMode('theater'));
+  $('modeFull').addEventListener('click', () => { const el = $('player'); if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen().catch(() => { $('status').textContent = 'Браузер не дал полный экран'; }); });
+  function words() { const t = E.meta.title, a = E.meta.artists, k = E.meta.key, b = E.meta.bpm; const title = (a ? a + ' Type Beat — "' + t + '"' : t) + ' (FREE)'; $('wTitle').textContent = title; $('wSugTitle').textContent = title; $('wDesc').textContent = title + '\n' + [b ? b + ' BPM' : '', k].filter(Boolean).join(' · ') + '\nFree for non-profit. Purchase a lease at beatstars.com/delawer'; }
+
+  // ---- meta and knobs from the inputs
+  function readMeta() { E.meta.title = $('title').value || 'Untitled'; E.meta.artists = $('artists').value || ''; E.meta.bpm = +$('bpm').value || 0; E.meta.key = $('key').value || ''; }
+  function readKnobs() { E.knobs.intensity = +$('intensity').value; E.knobs.cutRate = $('cutRate').value; E.knobs.pump = +$('pump').value; E.knobs.label = $('labelOn').value === '1'; }
+  ['title', 'artists', 'bpm', 'key'].forEach(id => $(id).addEventListener('input', () => { readMeta(); words(); if (!userCover) E.makeDefaultCover(); }));
+  ['intensity', 'cutRate', 'pump', 'labelOn'].forEach(id => $(id).addEventListener('input', readKnobs));
+  readMeta(); readKnobs(); words();
+
+  // ---- audio: a file or the demo beat, analysed live with Web Audio exactly as the first lab did
+  let actx = null, analyser = null, anL = null, srcNode = null, gain = null, t0 = 0, prevFreq = new Uint8Array(1024);
+  const fluxHist = { k: [], s: [], h: [] }; let lastHit = { k: -1, s: -1, h: -1 }; const ref = [1, 1, 1, 1, 1, 1];
+  let demoTimer = null, fileBuffer = null, mode = 'demo';
+  const BANDS = [[20, 60], [60, 150], [150, 400], [400, 2000], [2000, 8000], [8000, 20000]];
+  function ensureAudio() {
+    if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    gain = actx.createGain(); gain.gain.value = 0.9;
+    analyser = actx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.55;
+    anL = actx.createAnalyser(); anL.fftSize = 2048; anL.smoothingTimeConstant = 0;
+    actx.resume(); gain.connect(analyser); gain.connect(anL); gain.connect(actx.destination);
+  }
+  function stopAll() {
+    if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+    if (srcNode) { try { srcNode.stop(); } catch (e) { } srcNode.disconnect(); srcNode = null; }
+    A.playing = false; $('playBtn').textContent = mode === 'demo' ? '▶ Демо-бит' : '▶ Играть';
+  }
+  function playFile() {
+    ensureAudio(); stopAll();
+    srcNode = actx.createBufferSource(); srcNode.buffer = fileBuffer; srcNode.loop = true; srcNode.connect(gain);
+    srcNode.start(); t0 = actx.currentTime; A.playing = true; $('playBtn').textContent = '■ Стоп';
+  }
+  // the demo beat: 140 BPM, F minor, 808 + snare + hats + pad + pluck
+  const DEMO_BPM = 140; let NOISE = null;
+  function noiseBuf() { const n = actx.sampleRate * 1.5, b = actx.createBuffer(1, n, actx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
+  const f = n => 440 * Math.pow(2, (n - 69) / 12);
+  const CHORDS = [[53, 56, 60, 63], [49, 53, 56, 61], [44, 48, 51, 56], [51, 55, 58, 63]];
+  const MELODY = [65, 63, 60, 63, 65, 68, 65, 63, 60, 63, 65, 63, 60, 58, 56, 60, 63, 65, 68, 65, 63, 60, 63, 65, 63, 60, 58, 56, 58, 60, 63, 60];
+  function kick(t) { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.09); g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.75); o.connect(g).connect(gain); o.start(t); o.stop(t + 0.8); const c = actx.createBufferSource(); c.buffer = NOISE; const cg = actx.createGain(); cg.gain.setValueAtTime(0.4, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.02); c.connect(cg).connect(gain); c.start(t); c.stop(t + 0.03); }
+  function snare(t) { const n = actx.createBufferSource(); n.buffer = NOISE; const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.7; const g = actx.createGain(); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); n.connect(bp).connect(g).connect(gain); n.start(t); n.stop(t + 0.2); const o = actx.createOscillator(), og = actx.createGain(); o.frequency.setValueAtTime(190, t); og.gain.setValueAtTime(0.5, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.1); o.connect(og).connect(gain); o.start(t); o.stop(t + 0.12); }
+  function hat(t, open) { const n = actx.createBufferSource(); n.buffer = NOISE; const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000; const g = actx.createGain(); g.gain.setValueAtTime(open ? 0.25 : 0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + (open ? 0.25 : 0.05)); n.connect(hp).connect(g).connect(gain); n.start(t); n.stop(t + 0.3); }
+  function pad(t, notes, dur) { notes.forEach((n, i) => { for (const det of [-6, 6]) { const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f(n); o.detune.value = det; const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; const g = actx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.045, t + 0.4); g.gain.setValueAtTime(0.045, t + dur - 0.3); g.gain.linearRampToValueAtTime(0, t + dur); const pan = actx.createStereoPanner(); pan.pan.value = (i % 2 ? 0.5 : -0.5) * (det > 0 ? 1 : -1); o.connect(lp).connect(g).connect(pan).connect(gain); o.start(t); o.stop(t + dur + 0.05); } }); }
+  function pluck(t, n, pan) { const o = actx.createOscillator(); o.type = 'triangle'; o.frequency.value = f(n); const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(4000, t); lp.frequency.exponentialRampToValueAtTime(600, t + 0.3); const g = actx.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45); const p = actx.createStereoPanner(); p.pan.value = pan; o.connect(lp).connect(g).connect(p).connect(gain); o.start(t); o.stop(t + 0.5); }
+  function playDemo() {
+    ensureAudio(); stopAll(); if (!NOISE) NOISE = noiseBuf();
+    const step = 60 / DEMO_BPM / 4; let i = 0, next = actx.currentTime + 0.1; t0 = next; A.playing = true; $('playBtn').textContent = '■ Стоп';
+    demoTimer = setInterval(() => {
+      while (next < actx.currentTime + 0.25) {
+        const s = i % 16, bar = Math.floor(i / 16);
+        if (s === 0) pad(next, CHORDS[bar % 4], 60 / DEMO_BPM * 4);
+        if (s === 0 || s === 10 || (bar % 2 === 1 && s === 7)) kick(next);
+        if (s === 4 || s === 12) snare(next);
+        if (s % 2 === 0) hat(next, false); if (s === 14 && bar % 4 === 3) { hat(next + step / 2, false); hat(next + step, true); }
+        if (bar % 4 === 3 && s >= 12) hat(next + step / 2, false);
+        const m = MELODY[i % 32]; if (s % 2 === 0 && m) pluck(next, m, (i % 4 ? 0.3 : -0.3));
+        next += step; i++;
+      }
+    }, 50);
+  }
+  $('playBtn').addEventListener('click', () => { if (A.playing) { stopAll(); return; } if (mode === 'file' && fileBuffer) playFile(); else playDemo(); });
+  $('audioFile').addEventListener('change', async e => {
+    const file = e.target.files[0]; if (!file) return; ensureAudio(); $('status').textContent = 'Декодирую ' + file.name + '…';
+    try { const buf = await file.arrayBuffer(); fileBuffer = await actx.decodeAudioData(buf); mode = 'file'; $('status').textContent = file.name + ' · ' + fileBuffer.duration.toFixed(0) + ' с · играет по кругу'; playFile(); }
+    catch (err) { $('status').textContent = 'Не смог декодировать файл: ' + err.message; }
+  });
+  function analyse() {
+    if (!analyser) { A.t = performance.now() / 1000; A.phase = 0; E.pushSpec(null); return; }
+    const sr = actx.sampleRate, binHz = sr / analyser.fftSize;
+    analyser.getByteFrequencyData(A.freq); anL.getFloatTimeDomainData(A.timeL);
+    const t = actx.currentTime - t0; A.t = actx.currentTime;
+    const k = E.knobs.intensity;
+    BANDS.forEach((b, i) => { const lo = Math.floor(b[0] / binHz), hi = Math.min(1023, Math.ceil(b[1] / binHz)); let s = 0; for (let j = lo; j <= hi; j++) s += A.freq[j]; s /= (hi - lo + 1); ref[i] = Math.max(ref[i] * 0.996, s, 8); A.bands[i] = Math.min(1, (s / ref[i]) * k); });
+    A.level = (A.bands[1] * 0.5 + A.bands[3] * 0.3 + A.bands[4] * 0.2);
+    const flux = (lo, hi) => { let s = 0; for (let j = lo; j <= hi; j++) { const d = A.freq[j] - prevFreq[j]; if (d > 0) s += d; } return s / (hi - lo + 1); };
+    const fk = flux(1, Math.ceil(150 / binHz)), fs = flux(Math.ceil(150 / binHz), Math.ceil(600 / binHz)) + flux(Math.ceil(2000 / binHz), Math.ceil(5000 / binHz)), fh = flux(Math.ceil(6000 / binHz), Math.ceil(16000 / binHz));
+    prevFreq.set(A.freq);
+    const hit = (key, val, refr, mult) => { const h = fluxHist[key]; h.push(val); if (h.length > 45) h.shift(); const mean = h.reduce((a, b) => a + b, 0) / h.length; const now = A.t; const ok = val > mean * mult + 2 && now - lastHit[key] > refr; if (ok) lastHit[key] = now; return ok; };
+    A.kickHit = A.playing && hit('k', fk, 0.14, 1.6); A.snareHit = A.playing && hit('s', fs, 0.12, 1.7); A.hatHit = A.playing && hit('h', fh, 0.06, 1.5);
+    if (A.kickHit) A.kicks++;
+    A.kick = Math.max(A.kick * 0.86, A.kickHit ? 1 : 0); A.snare = Math.max(A.snare * 0.84, A.snareHit ? 1 : 0); A.hat = Math.max(A.hat * 0.75, A.hatHit ? 1 : 0);
+    const bpm = mode === 'demo' ? DEMO_BPM : E.meta.bpm;
+    if (bpm > 0 && A.playing) { const beats = t * bpm / 60; const ph = beats - Math.floor(beats); A.beatHit = ph < A.phase; A.phase = ph; A.bar = (beats / 4) - Math.floor(beats / 4); A.beats = beats; A.secs = t; } else { A.phase = 0; A.bar = 0; A.beatHit = false; A.beats = 0; A.secs = 0; }
+    const row = new Float32Array(64); for (let i = 0; i < 64; i++) { const hz = 40 * Math.pow(300, i / 63), b = Math.min(1023, Math.round(hz / binHz)); row[i] = Math.min(1, (A.freq[b] / 255) * k); } E.pushSpec(row);
+  }
+
+  // ---- cover and video sources
+  let userCover = false;
+  $('coverFile').addEventListener('change', e => { const file = e.target.files[0]; if (!file) return; const url = URL.createObjectURL(file); const img = new Image(); img.onload = () => { if (E.video.el) { E.video.el.pause(); E.video.el = null; } E.setCover(img); userCover = true; URL.revokeObjectURL(url); $('status').textContent = 'Обложка: ' + file.name; }; img.src = url; });
+  $('videoFile').addEventListener('change', e => { const file = e.target.files[0]; if (!file) return; const url = URL.createObjectURL(file); const el = document.createElement('video'); el.muted = true; el.loop = true; el.playsInline = true; el.preload = 'auto'; el.src = url; el.addEventListener('loadeddata', () => { E.video.el = el; E.video.lastT = -1; E.setCover(el); userCover = true; el.play().catch(() => { }); $('status').textContent = 'Видео: ' + file.name + ' · ' + el.videoWidth + '×' + el.videoHeight + ' · по кругу, без звука'; }, { once: true }); el.load(); });
+  $('videoMode').addEventListener('change', e => { E.video.mode = e.target.value; E.video.lastT = -1; });
+
+  // ---- the effect list, the swatches, the format
+  const FAMS = { gen: 'Свет · частицы, сигил, кристалл, приборы', poster: 'Плакат · бумага, сетка, шрифт', type: 'Шрифт · название как картинка', retro: 'Ретро · пиксель, LED, экран', film: 'Плёнка · кино и фото', object: 'Предмет · винил, конверт', soft: 'Мягкое · градиенты, вода', comic: 'Манга · панель и линии', paper: 'Коллаж · рваная бумага', mirror: 'Зеркало · калейдоскоп', hud: 'Интерфейс · камера, чертёж', cut: 'Монтаж · удар = склейка', ascii: 'ASCII · обложка знаками', ridge: 'Ridge · спектр как ландшафт', riso: 'Riso · обложка растром' };
+  let num = 0;
+  $('styles').innerHTML = Object.keys(FAMS).map(fam => { const list = E.STYLES.filter(s => s.fam === fam); return list.length ? '<div class="fam">' + FAMS[fam] + '</div>' + list.map(s => '<button class="style" data-id="' + s.id + '" type="button"><span class="n">' + String(++num).padStart(2, '0') + '</span><span><b>' + s.name + '</b><p>' + s.blurb + '</p></span><span class="how">' + (offered.has(s.id) ? 'в приложении<em>' + s.id + '</em>' : 'только лаб<em>' + s.id + '</em>') + '</span></button>').join('') : ''; }).join('');
+  function pick(id) { E.pick(id); document.querySelectorAll('.style').forEach(el => el.classList.toggle('on', el.dataset.id === id)); }
+  document.querySelectorAll('.style').forEach(el => el.addEventListener('click', () => pick(el.dataset.id)));
+  $('swatches').innerHTML = E.PALETTES.map(p => '<button class="sw" type="button" data-id="' + p.id + '" title="' + p.id + '">' + p.c.slice(0, 4).map(h => '<i style="background:' + h + '"></i>').join('') + '</button>').join('');
+  function setPal(id) { E.setPal(id); document.querySelectorAll('.sw').forEach(el => el.classList.toggle('on', el.dataset.id === id)); }
+  document.querySelectorAll('.sw').forEach(el => el.addEventListener('click', () => setPal(el.dataset.id)));
+  function overlay() { const on = $('reelsOn').value === '1'; $('reels').hidden = !on || E.FMT === 'yt'; $('ytui').hidden = true; }
+  $('reelsOn').addEventListener('change', overlay);
+  function applyFormat(fm) { E.attach(fm === 'yt' ? $('ytStage') : $('stage')); E.setFormat(fm); document.body.classList.toggle('yt', fm === 'yt'); $('watch').setAttribute('aria-hidden', fm !== 'yt'); $('fmtReel').classList.toggle('on', fm === 'reel'); $('fmtYt').classList.toggle('on', fm === 'yt'); document.querySelectorAll('.style').forEach(el => { const s = E.STYLES.find(x => x.id === el.dataset.id); el.hidden = fm === 'yt' && s.wide === false; }); overlay(); }
+  $('fmtReel').addEventListener('click', () => applyFormat('reel')); $('fmtYt').addEventListener('click', () => applyFormat('yt'));
+
+  // ---- meters and the loop
+  const meterEls = [...document.querySelectorAll('#meters i')]; const hitTimers = { k: 0, s: 0, h: 0, b: 0 };
+  function ui() {
+    meterEls.forEach((el, i) => el.style.width = Math.round(A.bands[i] * 100) + '%');
+    const now = performance.now(); if (A.kickHit) hitTimers.k = now; if (A.snareHit) hitTimers.s = now; if (A.hatHit) hitTimers.h = now; if (A.beatHit) hitTimers.b = now;
+    $('hKick').classList.toggle('on', now - hitTimers.k < 90); $('hSnare').classList.toggle('on', now - hitTimers.s < 90); $('hHat').classList.toggle('on', now - hitTimers.h < 60); $('hBeat').classList.toggle('on', now - hitTimers.b < 80);
+  }
+  function loop() { analyse(); E.cutClock(); E.syncVideo(); try { E.drawFrame(); if (E.FMT === 'yt') thumbCtx.drawImage($('ytStage'), 0, 0, 336, 189); } catch (err) { $('status').textContent = 'Ошибка эффекта ' + (E.current && E.current.id) + ': ' + err.message; } ui(); requestAnimationFrame(loop); }
+  const ready = document.fonts ? Promise.all([document.fonts.load('100px "League Gothic"'), document.fonts.load('600 14px "IBM Plex Mono"')]).catch(() => { }) : Promise.resolve();
+  await ready;
+  E.makeDefaultCover(); setPal(E.PALETTES[0].id); pick((effects.effects.find(e => e.id !== 'still') || {}).id || E.STYLES[0].id); overlay(); loop();
+  window.__lab = E;
+})();
+</script>
+</body>
+</html>

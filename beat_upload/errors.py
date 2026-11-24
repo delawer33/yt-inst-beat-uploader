@@ -44,6 +44,10 @@ class VideoError(BeatUploadError):
     """ffmpeg is unavailable or failed to render the video."""
 
 
+class DiskFullError(BeatUploadError):
+    """The data dir's drive has too little free space for a render or a Track Package."""
+
+
 class UploadError(BeatUploadError):
     """The YouTube Data API rejected the upload."""
 
@@ -54,3 +58,7 @@ class AnalyticsError(BeatUploadError):
 
 class BeatStarsError(BeatUploadError):
     """A Track Package is incomplete or malformed, or the BeatStars Studio form refused it."""
+
+
+class BounceFolderError(BeatUploadError):
+    """A Bounce Folder is missing, lacks a file, holds two of one kind, or names no BPM/key."""

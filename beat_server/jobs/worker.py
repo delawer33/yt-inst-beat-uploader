@@ -31,6 +31,19 @@ MISSING_CONNECTION_ERROR = "Google connection is missing or expired. Reconnect i
 # A ``NetworkError`` (laptop asleep, Wi-Fi not up yet, Google unreachable) does not fail the
 # job: it goes back to QUEUED with a growing delay. 6 attempts = 2+4+8+16+32 min of waiting.
 MAX_ATTEMPTS = 6
+# A final state that will not commit (full disk) is retried this often, this far apart.
+FINAL_SAVE_ATTEMPTS = 4
+FINAL_SAVE_DELAY = 5.0
+FINAL_FIELDS = (
+    "status",
+    "error",
+    "progress",
+    "message",
+    "attempts",
+    "started_at",
+    "finished_at",
+    "not_before",
+)
 RETRY_BASE_DELAY = 120.0
 
 
@@ -81,6 +94,11 @@ class JobContext:
         """Log ``line`` and show it as the job's current message (progress unchanged)."""
         log.info("job %s (%s): %s", self.job.id, self.job.kind, line)
         self._update(message=line)
+
+    def new_session(self) -> Session:
+        """A session of its own, for a write that must land while a ``to_thread`` worker runs
+        (the handler's ``session`` stays on the loop thread). The caller closes it."""
+        return self._session_factory()
 
     def credentials(self) -> Credentials:
         """Raises ``AuthError``; the worker then pauses the job until reconnect.
@@ -219,9 +237,35 @@ class Worker:
                 job.status = JobStatus.DONE
                 job.progress = 1.0
             job.finished_at = utcnow()
-            self._save(session, job)
+            await self._save_final(session, job)
         finally:
             session.close()
+
+    async def _save_final(self, session: Session, job: Job) -> None:
+        """The job's last state must land: a commit that fails (a full disk, a locked
+        database) would leave the row RUNNING until the next restart, and the owner would
+        watch a job that is not there. Retry a few times with a pause, then give up loudly."""
+        # A rollback reverts the row's pending attributes to what the DB holds (RUNNING),
+        # so the final values are kept aside and put back before every retry.
+        final = {name: getattr(job, name) for name in FINAL_FIELDS}
+        for attempt in range(1, FINAL_SAVE_ATTEMPTS + 1):
+            try:
+                self._save(session, job)
+                return
+            except Exception:  # noqa: BLE001
+                if attempt == FINAL_SAVE_ATTEMPTS:
+                    raise
+                log.exception(
+                    "job %s (%s): saving its final state failed, retry %d/%d",
+                    job.id,
+                    job.kind,
+                    attempt,
+                    FINAL_SAVE_ATTEMPTS - 1,
+                )
+                session.rollback()
+                for name, value in final.items():
+                    setattr(job, name, value)
+                await asyncio.sleep(FINAL_SAVE_DELAY)
 
     def _save(self, session: Session, job: Job) -> None:
         JobRepo(session).save(job)

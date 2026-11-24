@@ -5,12 +5,18 @@ A Render is two ffmpeg runs. ``render_cover`` paints one frame: the cover scaled
 ``render_video`` then loops that frame for the length of the audio. The Draft page's preview
 is ``render_cover`` too, so it shows exactly what the video will.
 
+A Clip (CONTEXT.md) in place of the cover goes the same way: ``render_clip`` runs the clip,
+looped and muted, through the very same filter graph, so it comes out in the Cover Style with
+the Label, for the video and for the Reel alike. ``clip_frame`` takes one frame out of it to
+stand as the cover wherever a still is wanted (previews, artwork).
+
 ``render_video`` optionally reports progress: with ``on_progress`` ffmpeg runs with
 ``-progress pipe:1`` and every ``out_time_us`` line becomes a fraction of the audio duration
 (from ``ffprobe``). Without it the behaviour is the plain blocking call the CLI has always used.
 """
 
 import hashlib
+import os
 import shutil
 import subprocess
 import tempfile
@@ -26,8 +32,15 @@ from beat_upload.errors import VideoError
 
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
+REEL_WIDTH = 1080
+REEL_HEIGHT = 1920
+REEL_LIFT = 120  # the cover sits this far above the centre, clear of Instagram's caption
 
 ProgressFn = Callable[[float], None]  # fraction 0..1
+
+# A Render's share of the laptop: x264 otherwise takes every core and ~2 GB at 1080p.
+RENDER_CPUS = 4
+RENDER_MEMORY_MAX = "2G"
 
 _MICROSECONDS = 1_000_000.0
 _TIME_KEYS = frozenset({"out_time_us", "out_time_ms"})  # both are microseconds in ffmpeg
@@ -53,6 +66,44 @@ def probe_duration(audio: Path) -> float:
         return float(result.stdout.strip())
     except ValueError as e:
         raise VideoError(f"ffprobe returned no duration for {audio.name}") from e
+
+
+def clip_size(clip: Path) -> tuple[int, int]:
+    """Width and height of the first video stream of ``clip``, as ffmpeg will decode it
+    (a rotation tag is applied)."""
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height:stream_side_data=rotation",
+        "-of", "default=noprint_wrappers=1",
+        str(clip),
+    ]  # fmt: skip
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise VideoError(f"ffprobe failed on the clip {clip.name}:\n{result.stderr.strip()}")
+    values = dict(line.split("=", 1) for line in result.stdout.split() if "=" in line)
+    try:
+        w, h = int(values["width"]), int(values["height"])
+    except (KeyError, ValueError):
+        raise VideoError(f"The clip {clip.name} has no video stream.") from None
+    if int(float(values.get("rotation", 0))) % 180:
+        w, h = h, w
+    return w, h
+
+
+def clip_frame(clip: Path, output: Path) -> Path:
+    """The frame from the middle of ``clip`` as a JPEG: the cover a Clip stands in for."""
+    ensure_ffmpeg()
+    middle = probe_duration(clip) / 2
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-ss", f"{middle:.3f}", "-i", str(clip),
+        "-frames:v", "1", "-update", "1", "-q:v", "2",
+        str(output),
+    ]  # fmt: skip
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not output.is_file():
+        raise VideoError(f"ffmpeg could not read a frame of {clip.name}:\n{result.stderr.strip()}")
+    return output
 
 
 def parse_ffmpeg_progress(line: str, duration: float) -> float | None:
@@ -167,6 +218,112 @@ def render_cover(
     return output
 
 
+def render_square_cover(image: Path, output: Path, style: CoverStyle, side: int) -> Path:
+    """``image`` centre-cropped to a ``side``-pixel square, painted in ``style`` with the Label:
+    the video's look for a store's square artwork (BeatStars)."""
+    ensure_ffmpeg()
+    label_width, margin = label.placement(side)
+    with tempfile.TemporaryDirectory(prefix="label-", dir=output.parent) as tmp:
+        label_png = Path(tmp) / "label.png"
+        label.render_label(label_width).save(label_png)
+        graph = (
+            f"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale={side}:{side}:flags=lanczos,"
+            f"format=rgb24[fit];"
+            f"{cover_style_graph(style, 'fit', 'styled', (side, side))};"
+            f"[styled][1:v]overlay=x=W-w-{margin}:y={margin}:format=rgb[cover]"
+        )
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", str(image),
+            "-i", str(label_png),
+            "-filter_complex", graph,
+            "-map", "[cover]",
+            "-frames:v", "1",
+            "-update", "1",
+            "-q:v", "2",
+            str(output),
+        ]  # fmt: skip
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise VideoError(f"ffmpeg failed on the square cover:\n{result.stderr.strip()}")
+    return output
+
+
+def reel_fit(width: int, height: int) -> tuple[int, int]:
+    """Pure. The cover's size in the Reel: 1080 wide, or, when that would be taller than the
+    1920 frame, scaled to fit the frame height instead. Aspect kept, both even."""
+    scale = min(REEL_WIDTH / width, REEL_HEIGHT / height)
+    w = min(REEL_WIDTH, max(2, round(width * scale / 2) * 2))
+    h = min(REEL_HEIGHT, max(2, round(height * scale / 2) * 2))
+    return w, h
+
+
+def reel_graph(style: CoverStyle, size: tuple[int, int]) -> str:
+    """Pure. Filter graph from ``[0:v]`` (the cover) and ``[1:v]`` (the Label) to ``[out]``,
+    the 1080x1920 Reel frame.
+
+    The cover is painted in ``style`` and stamped as in ``cover_graph``. Behind it goes a copy
+    of the painted cover (no Label) scaled to fill the frame, blurred and darkened; the cover
+    is laid over it ``REEL_LIFT`` px above the centre.
+    """
+    w, h = size
+    _, margin = label.placement(w)
+    return (
+        f"[0:v]scale={w}:{h}:flags=lanczos,format=rgb24[fit];"
+        f"{cover_style_graph(style, 'fit', 'styled', size)};"
+        "[styled]split[a][b];"
+        f"[a]scale={REEL_WIDTH}:{REEL_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={REEL_WIDTH}:{REEL_HEIGHT},gblur=sigma=40,eq=brightness=-0.25[bg];"
+        f"[b][1:v]overlay=x=W-w-{margin}:y={margin}:format=rgb[marked];"
+        f"[bg][marked]overlay=x=(W-w)/2:y=(H-h)/2-{REEL_LIFT}[out]"
+    )
+
+
+def render_reel_cover(image: Path, output: Path, style: CoverStyle = DEFAULT_COVER_STYLE) -> Path:
+    """One 1080x1920 frame of the Reel (``reel_graph``) as a PNG or JPEG."""
+    ensure_ffmpeg()
+    size = reel_fit(*image_size(image))
+    label_width, _ = label.placement(size[0])
+    if label_width < MIN_LABEL_WIDTH:
+        w, h = size
+        raise VideoError(
+            f"The cover {image.name} is too narrow for the Label ({w}x{h} in the frame); "
+            "use a cover no taller than four times its width."
+        )
+    with tempfile.TemporaryDirectory(prefix="label-", dir=output.parent) as tmp:
+        label_png = Path(tmp) / "label.png"
+        label.render_label(label_width).save(label_png)
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", str(image),
+            "-i", str(label_png),
+            "-filter_complex", reel_graph(style, size),
+            "-map", "[out]",
+            "-frames:v", "1",
+            "-update", "1",
+            str(output),
+        ]  # fmt: skip
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise VideoError(f"ffmpeg failed on the Reel cover:\n{result.stderr.strip()}")
+    return output
+
+
+def render_reel(
+    audio: Path,
+    image: Path,
+    output: Path,
+    on_progress: ProgressFn | None = None,
+    style: CoverStyle = DEFAULT_COVER_STYLE,
+) -> Path:
+    """The Reel frame (``render_reel_cover``) looped for the whole of ``audio``, encoded like
+    ``render_video``."""
+    ensure_ffmpeg()
+    with tempfile.TemporaryDirectory(prefix="reel-", dir=output.parent) as tmp:
+        cover = render_reel_cover(image, Path(tmp) / "cover.png", style)
+        return _loop(audio, cover, output, on_progress)
+
+
 def render_video(
     audio: Path,
     image: Path,
@@ -182,6 +339,91 @@ def render_video(
         return _loop(audio, cover, output, on_progress)
 
 
+def clip_command(
+    audio: Path, clip: Path, label_png: Path, graph: str, out: str, output: Path
+) -> list[str]:
+    """Pure. ffmpeg running ``clip`` (looped, its sound dropped) and ``label_png`` through
+    ``graph`` to its ``[out]`` pad, with ``audio`` beside, for as long as the audio lasts."""
+    return [
+        "ffmpeg", "-y",
+        "-stream_loop", "-1", "-i", str(clip),
+        "-i", str(label_png),
+        "-i", str(audio),
+        "-filter_complex", graph,
+        "-map", f"[{out}]", "-map", "2:a",
+        "-c:v", "libx264",
+        "-threads", str(RENDER_CPUS),
+        "-c:a", "aac",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-shortest",
+        str(output),
+    ]  # fmt: skip
+
+
+def render_clip(
+    audio: Path,
+    clip: Path,
+    output: Path,
+    on_progress: ProgressFn | None = None,
+    style: CoverStyle = DEFAULT_COVER_STYLE,
+    fmt: str = "yt",
+) -> Path:
+    """The Still Effect with a Clip for a cover: ``clip`` looped for the length of ``audio``
+    through ``cover_graph`` (``fmt`` "yt", the 1080p video) or ``reel_graph`` ("reel"), so it
+    looks exactly as a cover image would, only moving."""
+    ensure_ffmpeg()
+    if fmt == "yt":
+        size = fit_in_frame(*clip_size(clip))
+        graph, out = cover_graph(style, size), "cover"
+    else:
+        size = reel_fit(*clip_size(clip))
+        graph, out = reel_graph(style, size), "out"
+    label_width, _ = label.placement(size[0])
+    if label_width < MIN_LABEL_WIDTH:
+        w, h = size
+        raise VideoError(
+            f"The clip {clip.name} is too narrow for the Label ({w}x{h} in the frame); "
+            "use a clip no taller than four times its width."
+        )
+    with tempfile.TemporaryDirectory(prefix="clip-", dir=output.parent) as tmp:
+        label_png = Path(tmp) / "label.png"
+        label.render_label(label_width).save(label_png)
+        cmd = clip_command(audio, clip, label_png, graph, out, output)
+        return _encode(cmd[:-1], audio, output, on_progress)
+
+
+def _yield_to_desktop() -> None:
+    """In the ffmpeg child before it starts: the lowest CPU priority, which on Linux also
+    lowers its disk priority: within its cores (``_limited``) ffmpeg still gets only what
+    the desktop leaves over."""
+    os.nice(19)
+
+
+@cache
+def _can_scope() -> bool:
+    """Whether ``systemd-run --user --scope`` works here (a user systemd session)."""
+    if shutil.which("systemd-run") is None:
+        return False
+    probe = ["systemd-run", "--user", "--scope", "--quiet", "true"]
+    return subprocess.run(probe, capture_output=True).returncode == 0
+
+
+def _limited(cmd: list[str]) -> list[str]:
+    """``cmd`` in its own systemd scope: at most ``RENDER_CPUS`` cores and
+    ``RENDER_MEMORY_MAX`` of RAM with no swap, so a Render never makes the desktop stutter.
+    Without a user systemd session ``cmd`` runs as is; ``-threads`` still caps the cores."""
+    if not _can_scope():
+        return cmd
+    return [
+        "systemd-run", "--user", "--scope", "--quiet", "--collect",
+        "-p", f"CPUQuota={RENDER_CPUS * 100}%",
+        "-p", f"MemoryMax={RENDER_MEMORY_MAX}",
+        "-p", "MemorySwapMax=0",
+        "--", *cmd,
+    ]  # fmt: skip
+
+
 def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None) -> Path:
     cmd = [
         "ffmpeg",
@@ -190,24 +432,37 @@ def _loop(audio: Path, cover: Path, output: Path, on_progress: ProgressFn | None
         "-i", str(cover),
         "-i", str(audio),
         "-c:v", "libx264",
+        "-threads", str(RENDER_CPUS),
         "-c:a", "aac",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",  # moov atom first; YouTube otherwise flags nonStreamableMov
         "-shortest",
     ]  # fmt: skip
 
+    return _encode(cmd, audio, output, on_progress)
+
+
+def _encode(cmd: list[str], audio: Path, output: Path, on_progress: ProgressFn | None) -> Path:
+    """Run ``cmd`` (ffmpeg without its output) writing ``output``; with ``on_progress``, ffmpeg
+    reports and every line becomes a fraction of ``audio``'s duration."""
     if on_progress is None:
-        result = subprocess.run([*cmd, str(output)], capture_output=True, text=True)
+        result = subprocess.run(
+            _limited([*cmd, str(output)]),
+            capture_output=True,
+            text=True,
+            preexec_fn=_yield_to_desktop,
+        )
         if result.returncode != 0:
             raise VideoError(f"ffmpeg failed:\n{result.stderr.strip()}")
         return output
 
     duration = probe_duration(audio)
     with subprocess.Popen(
-        [*cmd, "-loglevel", "error", "-progress", "pipe:1", "-nostats", str(output)],
+        _limited([*cmd, "-loglevel", "error", "-progress", "pipe:1", "-nostats", str(output)]),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        preexec_fn=_yield_to_desktop,
     ) as proc:
         assert proc.stdout is not None and proc.stderr is not None
         # stderr is tiny at loglevel error, so draining stdout first cannot block ffmpeg.

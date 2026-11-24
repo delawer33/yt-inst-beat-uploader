@@ -15,6 +15,32 @@ The legacy on-disk form of a Beat: a directory holding exactly one audio file, o
 a `config.yaml`. Accepted as an import source only; it is no longer where a Beat lives.
 _Avoid_: Folder, project folder
 
+**Bounce Folder**:
+The folder the owner exports a finished beat into: one untagged WAV, one tagged MP3, one cover
+image or one Clip, and optionally a `stems` folder. Its name (or the WAV's) carries the BPM,
+key, moods, instruments and whether foreign samples are used; never the beat's name, which
+comes from the title. A Draft made from it goes to YouTube and to BeatStars.
+_Avoid_: Beat Folder, source folder, export
+
+**Clip**:
+A short video the owner puts in the Bounce Folder in the cover image's place. The Render
+treats it exactly as it treats a cover, only moving: looped for the length of the beat, its
+own sound dropped, painted in the Cover Style with the Label, and under an Effect the Effect's
+treatments run on the moving picture. Its middle frame stands as the cover wherever a still is
+wanted: the Draft page, the previews, the BeatStars artwork.
+_Avoid_: video source, loop, footage, background video
+
+**BeatStars Track**:
+A Beat's page for sale on BeatStars, made from its Bounce Folder when the owner sends it.
+It goes public together with the video, or at the same scheduled time; a Beat sent as
+private or unlisted gets none until the owner puts it on BeatStars later ("Put on
+BeatStars" on the Published or Scheduled Beat's page: the same Job, released now or at the
+publish time, then the YouTube description is sent again with the link; it also works after
+"Upload without BeatStars"). The video's description links to it. The Draft page shows what will go to it (title, tags and genres
+made from the YouTube title, moods, instruments, samples, release) and says so when the
+title cannot be read yet.
+_Avoid_: Listing, store page, product
+
 **Library**:
 The full set of Beats known to the application — both the ones added here and the ones already
 published on the channel before it existed.
@@ -49,25 +75,30 @@ already be rendering or Rendered; that is the state of its Job, not of the Beat.
 _Avoid_: New, pending, unsent
 
 **Rendered**:
-A Draft whose video file is ready in the Cover Style the owner chose, so sending it will
-not wait for a Render. Choosing another Cover Style makes it un-Rendered until the new
-Render is done.
+A Draft whose video file is ready in the Cover Style the owner chose, so sending it will not
+wait for a Render. Choosing another Cover Style makes it un-Rendered until the new Render is
+done. The Effect and the title do not touch it: they gate the Reel (ADR 0012), which an
+Effect paints the title into, so no Reel starts until the title names the beat.
 _Avoid_: Encoded, prepared
 
 **Queued**:
-A Beat the owner has sent, waiting for its Upload. Still Queued while its Render finishes.
+A Beat the owner has sent, waiting for its Upload. Still Queued while its Render finishes and,
+for a public or scheduled Bounce Folder beat, while its BeatStars Track is made; it stays Queued
+when that fails.
 Metadata stays editable until the Upload starts.
 _Avoid_: Sent, submitted
 
 **Job**:
-One unit of background work on a Beat (render, upload, publish, stats refresh) with a status
+One unit of background work on a Beat (render, Reel, BeatStars, upload, publish, stats refresh) with a status
 and a log. What the UI shows progress for. A Job says what is happening to a Beat right now;
 the Beat's status says what the owner has done with it.
 _Avoid_: Task, operation
 
 **Template**:
 The title, description and tags every new Beat starts from, kept in Settings. `{name}` in a
-Template is the audio file's name; a Template may also carry Placeholders.
+Template is the audio file's name; a Template may also carry Placeholders. The description
+Template may carry `{beatstars|<fallback>}`: at Upload it becomes the link to the Beat's
+BeatStars Track, or the fallback text when the Beat has none. Fill from title leaves it alone.
 _Avoid_: Preset, default, boilerplate
 
 **Placeholder**:
@@ -82,14 +113,41 @@ title gives the artists and substyle, the audio file name gives BPM and key, and
 keywords are added for the recommendations. What the owner already wrote in place of a
 Placeholder stays. "Artist" is whatever stands before "Type Beat" in the title, a name or a
 style; a title names none, one or two, and the result follows.
+For a Beat from a Bounce Folder the same call also matches the moods and instruments the
+owner wrote in the folder's name (misspelled or in Russian) to the BeatStars lists: moods
+first, topped up to three from the substyle; instruments only the owner's. A word outside
+the lists is dropped.
 _Avoid_: Autofill, generate, regenerate
 
 **Cover Style**:
-One of seven named looks a Render paints the cover in: the cover goes grey, its brightness
-is cut into a few bands, each band gets one fixed colour and ink outlines go on top. Chosen
-per Beat by the mood of the beat; the colours come from the Cover Style, not from the cover,
-so every video on the channel reads as one series.
+One of eight named looks a Render paints the cover in. Seven turn the cover grey, cut its
+brightness into a few bands, give each band one fixed colour and lay ink outlines on top;
+the colours come from the Cover Style, not from the cover, so every video on the channel
+reads as one series. "Film Grain" is the eighth: the cover's own colours under static grain.
+Chosen per Beat by the mood of the beat.
 _Avoid_: Palette, filter, sepia, theme
+
+**Effect**:
+How the Reel moves to the beat: a ray-traced object turning in studio light, particles, or
+cuts and treatments driven by the beat's own kicks, snares and bars. Chosen per Beat next to
+the Cover Style; it moves the Reel alone, the YouTube video stays Still (ADR 0012). "Still"
+is the default and the look every video had before Effects: the cover standing for the whole
+beat. The objects (Crown, Chain, Dagger, Doubloon, Gem) and the particles (Burst, Flow) ignore
+the cover and paint the header in tiny mono type; "VJ Cut" cuts between treatments of it.
+_Avoid_: Visualizer, animation, style, filter, motion
+
+**Bake**:
+An object Effect (Chain, Crown, Gem) drawn once as a 24-second loop at full quality and kept
+in the data dir; a Reel with that Effect is the loop repeated under the header, so it takes
+ffmpeg a minute instead of Chromium half an hour. The gem has one Bake per stone. Made by
+`beat-upload bake`; an Effect without its Bake still renders frame by frame.
+_Avoid_: Cache, pre-render, template clip
+
+**Visual Lab**:
+The page where the owner designs Effects by ear: a beat plays in the browser and the frame
+reacts live, on the very engine the Render runs. An Effect that works in the Visual Lab is
+an Effect the Render can paint.
+_Avoid_: Lab, playground, prototype page
 
 **Label**:
 The channel's own mark stamped on every cover during the Render, in the layout of the
@@ -97,6 +155,32 @@ Parental Advisory label: a black box with three lines, PRODUCED BY / DELAWER / Y
 top right. Always on, always black and white, drawn after the Cover Style so it keeps its
 shape.
 _Avoid_: Badge, watermark, logo, stamp, Parental Advisory
+
+**Reel**:
+A Beat's vertical video for Instagram: the whole beat in the Beat's Effect; with Still, the
+cover in its Cover Style with the Label, full width, on a blurred copy of the same cover.
+Rendered together with the YouTube video and again when the Cover Style, the Effect or (with
+an Effect) the title changes; the owner cuts the snippet in Instagram and posts it by hand.
+_Avoid_: Vertical video, story, short, snippet
+
+**Instagram Post**:
+What the owner types into Instagram for a Beat's Reel, by hand: the on-screen hook, the
+caption with its five hashtags, the Artist Handles to tag, the audio name, the alt text and
+the publish time. Written once per Beat when the owner first asks for it, kept, and written
+again only on request. The owner marks it posted; nothing is sent to Instagram.
+_Avoid_: Caption, Instagram data, post text
+
+**Posted on Instagram**:
+The owner's own mark on a Beat, a switch in the Instagram panel, saying the Reel is on
+Instagram. Stored with the Beat; the Library shows a small "IG" on posted Beats. Nothing is
+checked against Instagram.
+_Avoid_: Published (that is YouTube)
+
+**Artist Handle**:
+The Instagram account of an artist a title names, as the owner wrote it down once; remembered
+for every later Beat with that artist. A style named in place of an artist ("Guitar Type
+Beat") has none.
+_Avoid_: Username, nickname, tag
 
 **Workspace**:
 Everything belonging to one channel owner: their credentials, their Library, their files.

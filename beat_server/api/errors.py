@@ -7,6 +7,7 @@ the status below. Registered in ``create_app``; later slices reuse it as is.
     ConflictError    -> 409  (server-side: the beat's state does not allow the operation)
     AuthError        -> 409  (no usable Google credentials; the user must (re)connect)
     ConfigError      -> 422  (metadata failed validation)
+    BounceFolderError -> 422 (the folder pasted does not hold a beat)
     BeatUploadError  -> 400  (everything else the user can act on)
 """
 
@@ -14,13 +15,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from beat_server.services.errors import ConflictError, NotFoundError
-from beat_upload.errors import AuthError, BeatUploadError, ConfigError
+from beat_upload.errors import AuthError, BeatUploadError, BounceFolderError, ConfigError
 
 STATUS_BY_ERROR: list[tuple[type[BeatUploadError], int]] = [
     (NotFoundError, 404),
     (ConflictError, 409),
     (AuthError, 409),
     (ConfigError, 422),
+    (BounceFolderError, 422),
     (BeatUploadError, 400),
 ]
 

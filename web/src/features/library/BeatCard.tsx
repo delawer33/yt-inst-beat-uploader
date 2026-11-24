@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { formatViews } from "@/lib/format";
 import { jobState, percentOf } from "./filters";
 import type { Beat } from "./queries";
+import { InstagramMark } from "./InstagramMark";
 import { STATUS_BADGE, STATUS_LABEL } from "./status";
 
 type Badge = { text: string; className: string };
@@ -45,6 +46,7 @@ export function BeatCard({ beat, failed = false }: { beat: Beat; failed?: boolea
             {formatViews(beat.views)}
           </span>
         )}
+        {beat.instagram_posted && <InstagramMark />}
       </div>
     </Link>
   );

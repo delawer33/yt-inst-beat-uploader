@@ -8,7 +8,7 @@ other edit. Nothing is saved here: the answer goes into the owner's form (ADR 00
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import PurePath
 from typing import Any
 
@@ -16,6 +16,9 @@ from beat_server.db.models import Beat, BeatStatus
 from beat_server.services.beats import KEY_DESCRIPTION_TEMPLATE, KEY_TAGS_TEMPLATE
 from beat_server.services.errors import BeatStateError, FillError
 from beat_upload.audio_name import audio_name_facts
+from beat_upload.beatstars.catalog import INSTRUMENTS, MOODS, in_catalog
+from beat_upload.beatstars.naming import MAX_MOODS, spelled_key
+from beat_upload.beatstars.track import MAX_INSTRUMENTS
 from beat_upload.config import MAX_TAGS_LENGTH, YouTubeMetadata
 from beat_upload.errors import ConfigError
 from beat_upload.placeholders import placeholders_in
@@ -27,8 +30,10 @@ FILL_SCHEMA: dict[str, Any] = {
     "properties": {
         "description": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
+        "beatstars_moods": {"type": "array", "items": {"type": "string"}},
+        "beatstars_instruments": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["description", "tags"],
+    "required": ["description", "tags", "beatstars_moods", "beatstars_instruments"],
     "additionalProperties": False,
 }
 
@@ -37,7 +42,8 @@ Rules, in this order:
 1. The shape and wording come from the Templates. Keep every line, emoji, link and sentence of
    the description Template; only the [[...]] Placeholders change. `{{name}}` in a Template
    stood for the audio file's name; the title may have renamed the beat since, so write the
-   name the title gives it (the quoted name).
+   name the title gives it (the quoted name). A `{{beatstars|...}}` marker in the description
+   stays exactly as written, braces and all: the server swaps it for the link later.
 2. Fill the Placeholders from the title. "Artist" is whatever stands before "Type Beat" in the
    title; the substyle is what follows the last "|". Where the Template repeats the title, write
    the title exactly as given.
@@ -58,13 +64,36 @@ Rules, in this order:
 10. Never write < or > anywhere. Never change the title.
 Answer only through the structured output, and write nothing before it: `description` is the
 complete finished description, every line of it, ready to paste into YouTube; `tags` is the
-list of tags."""
+list of tags. `beatstars_moods` and `beatstars_instruments` are described at the end of the
+prompt; where it does not ask for them, answer empty lists."""
+
+BEATSTARS_RULES = """\
+This beat also goes to BeatStars, whose forms take only the values of two fixed lists. The
+owner wrote moods and instruments in the Bounce Folder's name, possibly misspelled or in
+Russian. Match each word to the closest value of the list, using its spelling from the list.
+- `beatstars_moods`: first the owner's moods that match a Mood, in the owner's order; then add
+  Moods that fit the substyle of the title until there are three. At most five in all.
+- `beatstars_instruments`: only the owner's instruments that match an Instrument. Never add
+  one of your own. If none of the owner's words matches, answer an empty list.
+- A word that matches nothing in the list is left out. Write only values copied from the lists.
+
+Moods:
+{moods}
+
+Instruments:
+{instruments}
+
+The owner's moods: {name_moods}
+The owner's instruments: {name_instruments}
+"""
 
 
 @dataclass(frozen=True)
 class Filled:
     description: str
     tags: list[str]
+    beatstars_moods: list[str] = field(default_factory=list)
+    beatstars_instruments: list[str] = field(default_factory=list)
 
 
 class FillService:
@@ -96,7 +125,7 @@ class FillService:
 
         prompt = build_prompt(beat, title, description, tags, templates)
         answer = self._run(prompt, FILL_SCHEMA)
-        filled = _parse(answer)
+        filled = _parse(answer, beat.bounce_folder is not None)
         try:
             YouTubeMetadata.from_mapping(
                 {"title": title, "description": filled.description, "tags": filled.tags}
@@ -112,11 +141,16 @@ class FillService:
 def build_prompt(
     beat: Beat, title: str, description: str, tags: list[str], templates: dict[str, Any]
 ) -> str:
-    facts = audio_name_facts(beat.source_name) if beat.source_name else None
-    if facts is not None:
-        bpm_key = f"BPM {facts.bpm}, key {facts.spelled_key}"
+    audio_facts = audio_name_facts(beat.source_name) if beat.source_name else None
+    if beat.bpm is not None and beat.music_key is not None:  # from the Bounce Folder's name
+        bpm_key = f"BPM {beat.bpm}, key {spelled_key(beat.music_key)}"
+        origin = "the Bounce Folder's name"
+    elif audio_facts is not None:
+        bpm_key = f"BPM {audio_facts.bpm}, key {audio_facts.spelled_key}"
+        origin = "the file name"
     else:
         bpm_key = "not known"
+        origin = "the file name"
     source = PurePath(beat.source_name).name if beat.source_name else "not known"
     tags_template = "\n".join(str(t) for t in templates.get(KEY_TAGS_TEMPLATE, []))
     return f"""\
@@ -129,7 +163,7 @@ Title:
 {title}
 
 Audio file name: {source}
-BPM and key from the file name: {bpm_key}
+BPM and key from {origin}: {bpm_key}
 
 Description Template:
 ```
@@ -150,10 +184,23 @@ Current tags, one per line:
 ```
 {"\n".join(tags)}
 ```
-"""
+{_beatstars_section(beat)}"""
 
 
-def _parse(answer: dict[str, Any]) -> Filled:
+def _beatstars_section(beat: Beat) -> str:
+    if beat.bounce_folder is None:
+        return (
+            "\nThis beat does not go to BeatStars: answer empty beatstars_moods and instruments.\n"
+        )
+    return "\n" + BEATSTARS_RULES.format(
+        moods=", ".join(MOODS),
+        instruments=", ".join(INSTRUMENTS),
+        name_moods=", ".join(beat.name_moods) or "none",
+        name_instruments=", ".join(beat.name_instruments) or "none",
+    )
+
+
+def _parse(answer: dict[str, Any], bounce: bool = False) -> Filled:
     description = answer.get("description")
     tags = answer.get("tags")
     if not isinstance(description, str) or not (
@@ -166,4 +213,18 @@ def _parse(answer: dict[str, Any]) -> Filled:
         if tag and tag.lower() not in seen:
             seen.add(tag.lower())
             clean.append(tag)
-    return Filled(description=description.strip(), tags=clean)
+    if not bounce:
+        return Filled(description=description.strip(), tags=clean)
+    return Filled(
+        description=description.strip(),
+        tags=clean,
+        beatstars_moods=in_catalog(_strings(answer.get("beatstars_moods")), MOODS)[:MAX_MOODS],
+        beatstars_instruments=in_catalog(
+            _strings(answer.get("beatstars_instruments")), INSTRUMENTS
+        )[:MAX_INSTRUMENTS],
+    )
+
+
+def _strings(value: Any) -> list[str]:
+    """The strings of a list answer; anything else is no answer."""
+    return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []

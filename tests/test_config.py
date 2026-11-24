@@ -178,7 +178,7 @@ def test_load_from_file_with_publish_at(tmp_path: Path) -> None:
 def test_cover_style_defaults_and_reads_the_top_level_key(tmp_path: Path) -> None:
     config = tmp_path / "config.yaml"
     config.write_text("youtube:\n  title: Beat\n", encoding="utf-8")
-    assert load_cover_style(config) is CoverStyle.PURPLE_YELLOW_5TONE
+    assert load_cover_style(config) is CoverStyle.FILM_GRAIN
     config.write_text("youtube:\n  title: Beat\ncover_style: blood_3tone\n", encoding="utf-8")
     assert load_cover_style(config) is CoverStyle.BLOOD_3TONE
     assert load_youtube_metadata(config).title == "Beat"

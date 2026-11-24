@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { Job } from "@/api/events";
+import { InstagramButton } from "@/features/instagram/InstagramButton";
 import { useJobs, useRetryJob } from "@/features/jobs/queries";
 import { useBeats, type Beat, type Privacy } from "@/features/library/queries";
 import { useAuthStatus } from "@/features/settings/authQueries";
@@ -14,9 +15,18 @@ import {
   tagsLength,
 } from "./metadata";
 import { fillHint, sendHint } from "./placeholders";
-import type { BeatPatch, FillIn, FillOut } from "./queries";
-import { useDeleteBeat, useFillBeat, usePatchBeat, useUploadBeat } from "./queries";
+import type { BeatPatch, Effect, FillIn, FillOut } from "./queries";
+import {
+  useDeleteBeat,
+  useEffects,
+  useFillBeat,
+  usePatchBeat,
+  useSkipBeatStars,
+  useUploadBeat,
+} from "./queries";
+import { BeatStarsBlock } from "./BeatStarsBlock";
 import { CoverStylePicker } from "./CoverStylePicker";
+import { EffectPicker } from "./EffectPicker";
 import { coverStyleName, type CoverStyle } from "./coverStyles";
 import { TagInput } from "./TagInput";
 import { YouTubePreview } from "./YouTubePreview";
@@ -27,6 +37,8 @@ export const AUTOSAVE_MS = 800;
 const JOB_LABEL: Record<Job["kind"], string> = {
   render: "Render",
   upload: "Upload",
+  beatstars: "BeatStars",
+  reel: "Reel",
   sync: "Sync",
   stats: "Stats",
 };
@@ -40,6 +52,11 @@ export type DraftForm = {
   /** Local `datetime-local` value, or null for "publish now". */
   publishAt: string | null;
   coverStyle: CoverStyle;
+  /** The Effect's id (`GET /api/effects`); "still" is the one every video had before. */
+  effect: string;
+  /** BeatStars moods and instruments (a Bounce Folder Beat); empty otherwise. */
+  beatstarsMoods: string[];
+  beatstarsInstruments: string[];
 };
 
 export function formOf(beat: Beat): DraftForm {
@@ -48,8 +65,13 @@ export function formOf(beat: Beat): DraftForm {
     description: beat.description,
     tags: beat.tags,
     privacy: beat.privacy,
-    publishAt: beat.publish_at ? toDateTimeLocal(serverDate(beat.publish_at)) : null,
+    publishAt: beat.publish_at
+      ? toDateTimeLocal(serverDate(beat.publish_at))
+      : null,
     coverStyle: beat.cover_style,
+    effect: beat.effect,
+    beatstarsMoods: beat.beatstars?.moods ?? [],
+    beatstarsInstruments: beat.beatstars?.instruments ?? [],
   };
 }
 
@@ -85,6 +107,9 @@ export function rebase(
     // Only a Draft may change its Cover Style: once the Beat has left Draft, a pick the
     // server never took is dropped instead of being sent (and refused) with every save.
     coverStyle: to.status === "draft" ? adopt("coverStyle") : next.coverStyle,
+    effect: adopt("effect"), // the Effect moves the Reel only, so a Queued beat may change it too
+    beatstarsMoods: adopt("beatstarsMoods"),
+    beatstarsInstruments: adopt("beatstarsInstruments"),
   };
 }
 
@@ -110,11 +135,14 @@ function isoOf(local: string | null): string | null {
 export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   const patch: BeatPatch = {};
   if (form.title !== beat.title) patch.title = form.title;
-  if (form.description !== beat.description) patch.description = form.description;
+  if (form.description !== beat.description)
+    patch.description = form.description;
   if (!same(form.tags, beat.tags)) patch.tags = form.tags;
 
   const publishAt = isoOf(form.publishAt);
-  const current = beat.publish_at ? minuteIso(serverDate(beat.publish_at)) : null;
+  const current = beat.publish_at
+    ? minuteIso(serverDate(beat.publish_at))
+    : null;
   if (publishAt !== current) patch.publish_at = publishAt;
   // YouTube only schedules private videos, so a schedule decides the privacy.
   const privacy: Privacy = form.publishAt === null ? form.privacy : "private";
@@ -122,7 +150,26 @@ export function patchOf(form: DraftForm, beat: Beat): BeatPatch {
   if (beat.status === "draft" && form.coverStyle !== beat.cover_style) {
     patch.cover_style = form.coverStyle;
   }
+  if (form.effect !== beat.effect) {
+    patch.effect = form.effect;
+  }
+  if (beat.beatstars) {
+    if (!same(form.beatstarsMoods, beat.beatstars.moods)) {
+      patch.beatstars_moods = form.beatstarsMoods;
+    }
+    if (!same(form.beatstarsInstruments, beat.beatstars.instruments)) {
+      patch.beatstars_instruments = form.beatstarsInstruments;
+    }
+  }
   return patch;
+}
+
+/** `patch` without its Cover Style and Effect: what the autosave may send. Pure. */
+export function withoutCoverStyle(patch: BeatPatch): BeatPatch {
+  const rest = { ...patch };
+  delete rest.cover_style;
+  delete rest.effect;
+  return rest;
 }
 
 /** A schedule the owner has started typing but not finished is not worth saving. */
@@ -133,7 +180,11 @@ function savable(form: DraftForm): boolean {
 /** "Draft saved 14:03". */
 function savedLabel(at: Date | null): string {
   if (at === null) return "";
-  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const time = at.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
   return `Draft saved ${time}`;
 }
 
@@ -151,11 +202,27 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
   const auth = useAuthStatus();
   const jobs = useJobs(beat.id);
   const retry = useRetryJob();
+  const skip = useSkipBeatStars();
+  const effects = useEffects();
   const navigate = useNavigate();
 
-  const failed = beat.active_job === null && !beat.rendered
-    ? (jobs.data ?? []).find((job) => job.kind === "render" && job.status === "failed") ?? null
-    : null;
+  const failed =
+    beat.active_job === null && !beat.rendered
+      ? ((jobs.data ?? []).find(
+          (job) => job.kind === "render" && job.status === "failed",
+        ) ?? null)
+      : null;
+
+  // A Queued beat with nothing running whose newest BeatStars job failed (jobs: newest first).
+  const lastBeatStars = (jobs.data ?? []).find(
+    (job) => job.kind === "beatstars",
+  );
+  const failedBeatStars =
+    beat.status === "queued" &&
+    beat.active_job === null &&
+    lastBeatStars?.status === "failed"
+      ? lastBeatStars
+      : null;
 
   const saved = [autosave, send]
     .map((m) => (m.isSuccess ? m.submittedAt : 0))
@@ -169,16 +236,24 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
       beat={beat}
       channel={auth.data?.channel?.title ?? null}
       library={beats.data ?? []}
+      effects={effects.data ?? []}
       failedRender={failed}
+      failedBeatStars={failedBeatStars}
+      onSkipBeatStars={() => skip.mutate(beat.id)}
+      skipping={skip.isPending}
       onSave={(body) => autosave.mutate({ id: beat.id, patch: body })}
       onSend={(body) => {
         const go = () => upload.mutate(beat.id);
         if (Object.keys(body).length === 0) go();
         else send.mutate({ id: beat.id, patch: body }, { onSuccess: go });
       }}
-      onDelete={() => remove.mutate(beat.id, { onSuccess: () => void navigate("/") })}
+      onDelete={() =>
+        remove.mutate(beat.id, { onSuccess: () => void navigate("/") })
+      }
       onRetry={(id) => retry.mutate(id)}
-      onFill={(form, apply) => fill.mutate({ id: beat.id, form }, { onSuccess: apply })}
+      onFill={(form, apply) =>
+        fill.mutate({ id: beat.id, form }, { onSuccess: apply })
+      }
       filling={fill.isPending}
       fillError={fill.error?.message ?? null}
       saving={autosave.isPending || send.isPending || upload.isPending}
@@ -188,6 +263,7 @@ export function DraftBeatPage({ beat }: { beat: Beat }) {
         send.error?.message ??
         upload.error?.message ??
         remove.error?.message ??
+        skip.error?.message ??
         null
       }
       savedAt={saved > 0 ? new Date(saved) : null}
@@ -199,7 +275,13 @@ type ViewProps = {
   beat: Beat;
   channel: string | null;
   library: { id: string; title: string; tags: string[] }[];
+  /** The Effects the owner can pick; empty until loaded (the picker then stays out). */
+  effects?: Effect[];
   failedRender: Job | null;
+  /** The failed BEATSTARS Job of a Queued beat: offers Retry or sending without BeatStars. */
+  failedBeatStars?: Job | null;
+  onSkipBeatStars?: () => void;
+  skipping?: boolean;
   onSave: (patch: BeatPatch) => void;
   onSend: (patch: BeatPatch) => void;
   onDelete: () => void;
@@ -224,7 +306,11 @@ export function DraftBeatView({
   beat,
   channel,
   library,
+  effects = [],
   failedRender,
+  failedBeatStars = null,
+  onSkipBeatStars,
+  skipping = false,
   onSave,
   onSend,
   onDelete,
@@ -253,14 +339,20 @@ export function DraftBeatView({
     setSent(form);
     onSave(patch);
   };
-  const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
+  const [coverSize, setCoverSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const pending = useRef<BeatPatch | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dirty = patchOf(form, baseline);
-  const dirtyKey = JSON.stringify(dirty);
-  pending.current = dirty;
+  // A picked Cover Style or Effect is only a pick until "Apply": every pick would otherwise
+  // start a new Render. The buttons below still send it along with the rest.
+  const autosaved = withoutCoverStyle(dirty);
+  const dirtyKey = JSON.stringify(autosaved);
+  pending.current = autosaved;
 
   /**
    * An armed autosave is dropped the moment the owner presses a button: the explicit action
@@ -277,7 +369,8 @@ export function DraftBeatView({
   // Autosave: one PATCH of everything that changed, once the typing stops.
   useEffect(() => {
     const body = pending.current;
-    if (body === null || Object.keys(body).length === 0 || !savable(form)) return;
+    if (body === null || Object.keys(body).length === 0 || !savable(form))
+      return;
     timer.current = setTimeout(() => {
       timer.current = null;
       save(body);
@@ -296,7 +389,9 @@ export function DraftBeatView({
   const tagsLen = tagsLength(form.tags);
   const scheduled = form.publishAt !== null;
   const tooLong =
-    form.title.length > MAX_TITLE || form.description.length > MAX_DESCRIPTION || tagsLen > MAX_TAGS;
+    form.title.length > MAX_TITLE ||
+    form.description.length > MAX_DESCRIPTION ||
+    tagsLen > MAX_TAGS;
   const blocked = saving || tooLong || !savable(form);
   const titleHint = fillHint(form.title);
   const placeholdersLeft = sendHint(form);
@@ -310,11 +405,29 @@ export function DraftBeatView({
         </Link>
         <span className="text-muted">/</span>
         <span>{beat.title || "New beat"}</span>
-        <span className={clsx("tag", beat.status === "queued" ? "tag-accent" : "tag-outline")}>
+        <span
+          className={clsx(
+            "tag",
+            beat.status === "queued" ? "tag-accent" : "tag-outline",
+          )}
+        >
           {beat.status === "queued" ? "Queued" : "Draft"}
         </span>
-        <span className="end text-muted num" role="status">
-          {savedLabel(lastSaved)}
+        <span className="end flex items-center gap-4">
+          <InstagramButton beat={beat} />
+          {beat.beatstars?.url != null && (
+            <a
+              className="num"
+              href={beat.beatstars.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              BeatStars ↗
+            </a>
+          )}
+          <span className="text-muted num" role="status">
+            {savedLabel(lastSaved)}
+          </span>
         </span>
       </div>
 
@@ -373,7 +486,9 @@ export function DraftBeatView({
                   {JOB_LABEL[job.kind]}
                 </span>
                 <span className="time num">
-                  {job.status === "queued" ? "queued" : `${Math.round(job.progress * 100)}%`}
+                  {job.status === "queued"
+                    ? "queued"
+                    : `${Math.round(job.progress * 100)}%`}
                 </span>
               </div>
               <div className="progress thin striped">
@@ -386,7 +501,9 @@ export function DraftBeatView({
           {failedRender && (
             <div className="note" role="alert">
               <div className="note-title">Render failed</div>
-              {failedRender.error && <pre className="log">{failedRender.error}</pre>}
+              {failedRender.error && (
+                <pre className="log">{failedRender.error}</pre>
+              )}
               <div className="job-actions">
                 <button
                   type="button"
@@ -399,10 +516,45 @@ export function DraftBeatView({
             </div>
           )}
 
+          {failedBeatStars && (
+            <div className="note" role="alert">
+              <div className="note-title">BeatStars failed</div>
+              {failedBeatStars.error && (
+                <pre className="log">{failedBeatStars.error}</pre>
+              )}
+              <span className="text-soft">
+                Retry continues the same Studio draft. Without BeatStars the
+                video goes up with the fallback line in the description.
+              </span>
+              <div className="job-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onRetry(failedBeatStars.id)}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={skipping}
+                  onClick={() => onSkipBeatStars?.()}
+                >
+                  Upload without BeatStars
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="field">
             <label htmlFor="title">
               Title
-              <span className={clsx("counter", form.title.length > MAX_TITLE && "text-accent")}>
+              <span
+                className={clsx(
+                  "counter",
+                  form.title.length > MAX_TITLE && "text-accent",
+                )}
+              >
                 {form.title.length} / {MAX_TITLE}
               </span>
             </label>
@@ -417,13 +569,34 @@ export function DraftBeatView({
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                disabled={filling || titleHint !== null || beat.status !== "draft"}
+                disabled={
+                  filling || titleHint !== null || beat.status !== "draft"
+                }
                 aria-busy={filling || undefined}
                 // The armed autosave keeps running: if the fill fails, the edit still saves.
                 onClick={() => {
                   onFill(
-                    { title: form.title, description: form.description, tags: form.tags },
-                    (filled) => setForm((f) => ({ ...f, ...filled })),
+                    {
+                      title: form.title,
+                      description: form.description,
+                      tags: form.tags,
+                    },
+                    ({
+                      description,
+                      tags,
+                      beatstars_moods,
+                      beatstars_instruments,
+                    }) =>
+                      setForm((f) => ({
+                        ...f,
+                        description,
+                        tags,
+                        // A Beat that is not from a Bounce Folder gets none back: keep the form's.
+                        ...(beat.beatstars && {
+                          beatstarsMoods: beatstars_moods,
+                          beatstarsInstruments: beatstars_instruments,
+                        }),
+                      })),
                   );
                 }}
               >
@@ -437,7 +610,10 @@ export function DraftBeatView({
             <label htmlFor="description">
               Description
               <span
-                className={clsx("counter", form.description.length > MAX_DESCRIPTION && "text-accent")}
+                className={clsx(
+                  "counter",
+                  form.description.length > MAX_DESCRIPTION && "text-accent",
+                )}
               >
                 {form.description.length} / {MAX_DESCRIPTION}
               </span>
@@ -449,7 +625,9 @@ export function DraftBeatView({
               value={form.description}
               // The fill is about to replace it; typing now would be lost.
               readOnly={filling}
-              aria-invalid={form.description.length > MAX_DESCRIPTION || undefined}
+              aria-invalid={
+                form.description.length > MAX_DESCRIPTION || undefined
+              }
               onChange={(e) => set("description", e.target.value)}
             />
           </div>
@@ -457,7 +635,9 @@ export function DraftBeatView({
           <div className="field">
             <label htmlFor="tags">
               Tags
-              <span className={clsx("counter", tagsLen > MAX_TAGS && "text-accent")}>
+              <span
+                className={clsx("counter", tagsLen > MAX_TAGS && "text-accent")}
+              >
                 {tagsLen} / {MAX_TAGS}
               </span>
             </label>
@@ -474,7 +654,11 @@ export function DraftBeatView({
               <span className="group-label" id="privacy-label">
                 Privacy
               </span>
-              <div className="seg" role="radiogroup" aria-labelledby="privacy-label">
+              <div
+                className="seg"
+                role="radiogroup"
+                aria-labelledby="privacy-label"
+              >
                 {(["public", "unlisted", "private"] as const).map((value) => (
                   <label key={value} className="seg-opt">
                     <input
@@ -494,7 +678,11 @@ export function DraftBeatView({
               <span className="group-label" id="publish-label">
                 Publish
               </span>
-              <div className="seg" role="radiogroup" aria-labelledby="publish-label">
+              <div
+                className="seg"
+                role="radiogroup"
+                aria-labelledby="publish-label"
+              >
                 <label className="seg-opt">
                   <input
                     type="radio"
@@ -509,7 +697,9 @@ export function DraftBeatView({
                     type="radio"
                     name="publish"
                     checked={scheduled}
-                    onChange={() => set("publishAt", toDateTimeLocal(defaultPublishAt()))}
+                    onChange={() =>
+                      set("publishAt", toDateTimeLocal(defaultPublishAt()))
+                    }
                   />
                   Schedule
                 </label>
@@ -529,9 +719,18 @@ export function DraftBeatView({
                 onChange={(e) => set("publishAt", e.target.value)}
               />
               <span className="drop-hint">
-                Your local time. Uploaded as private; YouTube makes it public then.
+                Your local time. Uploaded as private; YouTube makes it public
+                then.
               </span>
             </div>
+          )}
+
+          {beat.beatstars && (
+            <BeatStarsBlock
+              preview={beat.beatstars}
+              moods={form.beatstarsMoods}
+              instruments={form.beatstarsInstruments}
+            />
           )}
 
           {fillError && (
@@ -554,8 +753,8 @@ export function DraftBeatView({
 
           {beat.status === "draft" && !beat.has_files && (
             <span className="drop-hint">
-              Audio and cover are missing, so this Draft cannot be rendered or sent. Delete it
-              and drop the two files again.
+              Audio and cover are missing, so this Draft cannot be rendered or
+              sent. Delete it and drop the two files again.
             </span>
           )}
 
@@ -564,7 +763,12 @@ export function DraftBeatView({
               <button
                 type="button"
                 className="btn btn-primary btn-flush btn-grow"
-                disabled={blocked || filling || !beat.has_files || placeholdersLeft !== null}
+                disabled={
+                  blocked ||
+                  filling ||
+                  !beat.has_files ||
+                  placeholdersLeft !== null
+                }
                 onClick={() => {
                   cancelAutosave();
                   setSent(form);
@@ -591,7 +795,11 @@ export function DraftBeatView({
                 className="btn btn-secondary"
                 disabled={deleting}
                 onClick={() => {
-                  if (!window.confirm(`Delete the draft “${beat.title || "Untitled"}” and its files?`))
+                  if (
+                    !window.confirm(
+                      `Delete the draft “${beat.title || "Untitled"}” and its files?`,
+                    )
+                  )
                     return;
                   cancelAutosave();
                   onDelete();
@@ -601,7 +809,6 @@ export function DraftBeatView({
               </button>
             )}
           </div>
-
         </div>
 
         <div className="col-preview">
@@ -615,31 +822,51 @@ export function DraftBeatView({
             publishAt={isoOf(form.publishAt)}
             library={library}
           />
-          {beat.status === "draft" && beat.rendered && beat.video_style === null && (
-            <div className="note" role="status">
-              <div className="note-title">Rendered before Cover Styles</div>
-              <span className="text-soft">
-                The video on disk is the old sepia one, without the Label. Render it again to get
-                the look above.
-              </span>
-              <div className="job-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={saving}
-                  onClick={() => save({ cover_style: form.coverStyle })}
-                >
-                  Render in {coverStyleName(form.coverStyle)}
-                </button>
+          {beat.status === "draft" &&
+            beat.rendered &&
+            beat.video_style === null && (
+              <div className="note" role="status">
+                <div className="note-title">Rendered before Cover Styles</div>
+                <span className="text-soft">
+                  The video on disk is the old sepia one, without the Label.
+                  Render it again to get the look above.
+                </span>
+                <div className="job-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={saving}
+                    onClick={() => save({ cover_style: form.coverStyle })}
+                  >
+                    Render in {coverStyleName(form.coverStyle)}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
           {beat.has_files && (
             <CoverStylePicker
               beatId={beat.id}
               value={form.coverStyle}
+              applied={baseline.cover_style}
               disabled={beat.status !== "draft" || saving}
               onChange={(style) => set("coverStyle", style)}
+              onApply={() => {
+                cancelAutosave();
+                save(patchOf(form, baseline));
+              }}
+            />
+          )}
+          {beat.has_files && effects.length > 0 && (
+            <EffectPicker
+              effects={effects}
+              value={form.effect}
+              applied={baseline.effect}
+              disabled={saving}
+              onChange={(effect) => set("effect", effect)}
+              onApply={() => {
+                cancelAutosave();
+                save(patchOf(form, baseline));
+              }}
             />
           )}
         </div>

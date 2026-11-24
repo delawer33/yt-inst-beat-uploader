@@ -1,15 +1,27 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import type { Job } from "@/api/events";
+import { InstagramButton } from "@/features/instagram/InstagramButton";
 import { JobHistory } from "@/features/jobs/JobHistory";
 import { JOB_LABEL } from "@/features/jobs/job";
 import { useJobs, useRetryJob } from "@/features/jobs/queries";
 import { STATUS_LABEL, STATUS_TAG } from "@/features/library/status";
-import { useSetPrivacy, type Beat, type PrivacyChange } from "@/features/library/queries";
+import {
+  useSetPrivacy,
+  type Beat,
+  type PrivacyChange,
+} from "@/features/library/queries";
 import { DailyBars } from "@/features/stats/DailyBars";
 import { useBeatStats, type DayPoint } from "@/features/stats/queries";
-import { formatDate, formatDateTime, formatViews, serverDate, toDateTimeLocal } from "@/lib/format";
+import {
+  formatDate,
+  formatDateTime,
+  formatViews,
+  serverDate,
+  toDateTimeLocal,
+} from "@/lib/format";
 import { defaultPublishAt } from "./metadata";
+import { useAttachFolder, usePutOnBeatStars } from "./queries";
 import { PrivacySelect, type PrivacyChoice } from "./PrivacySelect";
 
 /** A Beat that has left the owner's hands: Uploading, Uploaded, Scheduled or Published. */
@@ -18,6 +30,8 @@ export function PublishedBeatPage({ beat }: { beat: Beat }) {
   const stats = useBeatStats(beat.id);
   const retry = useRetryJob();
   const setPrivacy = useSetPrivacy();
+  const putOnBeatStars = usePutOnBeatStars();
+  const attachFolder = useAttachFolder();
 
   return (
     <PublishedBeatView
@@ -32,6 +46,12 @@ export function PublishedBeatPage({ beat }: { beat: Beat }) {
       onPrivacy={(change) => setPrivacy.mutate({ id: beat.id, ...change })}
       privacyPending={setPrivacy.isPending}
       privacyError={setPrivacy.error?.message ?? null}
+      onPutOnBeatStars={() => putOnBeatStars.mutate(beat.id)}
+      putPending={putOnBeatStars.isPending}
+      putError={putOnBeatStars.error?.message ?? null}
+      onAttachFolder={(path) => attachFolder.mutate({ id: beat.id, path })}
+      attachPending={attachFolder.isPending}
+      attachError={attachFolder.error?.message ?? null}
     />
   );
 }
@@ -48,6 +68,12 @@ type ViewProps = {
   onPrivacy: (change: PrivacyChange) => void;
   privacyPending?: boolean;
   privacyError?: string | null;
+  onPutOnBeatStars?: () => void;
+  putPending?: boolean;
+  putError?: string | null;
+  onAttachFolder?: (path: string) => void;
+  attachPending?: boolean;
+  attachError?: string | null;
 };
 
 /**
@@ -71,6 +97,12 @@ export function PublishedBeatView({
   onPrivacy,
   privacyPending = false,
   privacyError = null,
+  onPutOnBeatStars = () => {},
+  putPending = false,
+  putError = null,
+  onAttachFolder,
+  attachPending = false,
+  attachError = null,
 }: ViewProps) {
   const title = beat.title || "Untitled";
   const job = beat.active_job;
@@ -83,19 +115,42 @@ export function PublishedBeatView({
         </Link>
         <span className="text-muted">/</span>
         <span>{title}</span>
-        <span className={`tag ${STATUS_TAG[beat.status]}`} data-status={beat.status}>
+        <span
+          className={`tag ${STATUS_TAG[beat.status]}`}
+          data-status={beat.status}
+        >
           {STATUS_LABEL[beat.status]}
         </span>
-        {beat.youtube_url !== null && (
-          <a className="end num" href={beat.youtube_url} target="_blank" rel="noreferrer">
-            {shortUrl(beat.youtube_url)} ↗
-          </a>
-        )}
+        <span className="end flex items-center gap-4">
+          <InstagramButton beat={beat} />
+          {beat.beatstars?.url != null && (
+            <a
+              className="num"
+              href={beat.beatstars.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              BeatStars ↗
+            </a>
+          )}
+          {beat.youtube_url !== null && (
+            <a
+              className="num"
+              href={beat.youtube_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortUrl(beat.youtube_url)} ↗
+            </a>
+          )}
+        </span>
       </div>
 
       <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-7">
         <div className="cover">
-          {beat.cover_url !== null && <img src={beat.cover_url} alt={`Cover of ${title}`} />}
+          {beat.cover_url !== null && (
+            <img src={beat.cover_url} alt={`Cover of ${title}`} />
+          )}
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           <h1 className="display">{title}</h1>
@@ -120,6 +175,22 @@ export function PublishedBeatView({
 
       {job !== null && <CurrentJob job={job} />}
 
+      {canPutOnBeatStars(beat) && (
+        <PutOnBeatStars
+          onPut={onPutOnBeatStars}
+          disabled={putPending || job?.kind === "beatstars"}
+          error={putError}
+        />
+      )}
+
+      {canAttachFolder(beat) && (
+        <AttachFolder
+          onAttach={onAttachFolder}
+          disabled={attachPending}
+          error={attachError}
+        />
+      )}
+
       {beat.youtube_id !== null &&
         (statsError !== null ? (
           <div className="note" role="alert">
@@ -133,13 +204,127 @@ export function PublishedBeatView({
         ))}
 
       <div className="grid grid-cols-2 gap-7">
-        <JobHistory jobs={jobs} onRetry={onRetry} retryingId={retryingId} error={jobsError} />
+        <JobHistory
+          jobs={jobs}
+          onRetry={onRetry}
+          retryingId={retryingId}
+          error={jobsError}
+        />
         <Metadata
           beat={beat}
           onPrivacy={onPrivacy}
           pending={privacyPending}
           error={privacyError}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Put on BeatStars" applies to a Published or Scheduled beat from a Bounce Folder (the API
+ * sends `beatstars` only for those) that has no Track yet.
+ */
+function canPutOnBeatStars(beat: Beat): boolean {
+  return (
+    beat.beatstars != null &&
+    beat.beatstars.url == null &&
+    (beat.status === "published" || beat.status === "scheduled")
+  );
+}
+
+/**
+ * A Published or Scheduled beat made before Bounce Folders (the API sends no `beatstars`
+ * for it) gets its folder here; then "Put on BeatStars" applies.
+ */
+function canAttachFolder(beat: Beat): boolean {
+  return (
+    beat.beatstars == null &&
+    beat.beatstars_url == null &&
+    beat.youtube_id !== null &&
+    (beat.status === "published" || beat.status === "scheduled")
+  );
+}
+
+function AttachFolder({
+  onAttach,
+  disabled,
+  error,
+}: {
+  onAttach?: (path: string) => void;
+  disabled: boolean;
+  error: string | null;
+}) {
+  const [path, setPath] = useState("");
+  return (
+    <form
+      className="note"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (path.trim()) onAttach?.(path.trim());
+      }}
+    >
+      <label className="note-title" htmlFor="attach-path">
+        Not on BeatStars: Bounce Folder path
+      </label>
+      <input
+        id="attach-path"
+        className="input"
+        type="text"
+        value={path}
+        placeholder="/home/you/bounces/Jungle_104bpm_Amin_calm-dark"
+        spellCheck={false}
+        disabled={disabled}
+        onChange={(e) => setPath(e.target.value)}
+      />
+      {error && (
+        <span role="alert" className="text-accent">
+          {error}
+        </span>
+      )}
+      <div className="job-actions">
+        <button
+          type="submit"
+          className="btn btn-primary btn-sm"
+          disabled={disabled || !path.trim()}
+        >
+          Attach folder
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function PutOnBeatStars({
+  onPut,
+  disabled,
+  error,
+}: {
+  onPut: () => void;
+  disabled: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="note" role="status">
+      <div className="note-title">Not on BeatStars</div>
+      <span className="text-soft">
+        Puts the beat on BeatStars, then adds the link to the YouTube
+        description.
+      </span>
+      {error && (
+        <span role="alert" className="text-accent">
+          {error}
+        </span>
+      )}
+      <div className="job-actions">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={disabled}
+          onClick={onPut}
+        >
+          Put on BeatStars
+        </button>
       </div>
     </div>
   );
@@ -155,7 +340,9 @@ function CurrentJob({ job }: { job: Job }) {
           <span className="dot-live pulse">● </span>
           {JOB_LABEL[job.kind]}
         </span>
-        <span className="time num">{job.status === "queued" ? "queued" : `${percent}%`}</span>
+        <span className="time num">
+          {job.status === "queued" ? "queued" : `${percent}%`}
+        </span>
       </div>
       <div className="progress thin striped">
         <i style={{ width: `${percent}%` }} />
@@ -184,7 +371,9 @@ function Metadata({
         <b>Metadata</b>
         <span className="text-muted">read-only · edit on YouTube</span>
       </div>
-      <div className="text-soft whitespace-pre-wrap">{beat.description || "—"}</div>
+      <div className="text-soft whitespace-pre-wrap">
+        {beat.description || "—"}
+      </div>
       {beat.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {beat.tags.map((tag) => (
@@ -240,17 +429,29 @@ type PrivacyControlProps = {
  * Schedule button; only that button sends. Public on a Scheduled beat is the one
  * irreversible step, so it asks "Publish now?" first.
  */
-export function PrivacyControl({ beat, onChange, pending = false, error = null }: PrivacyControlProps) {
-  const current: PrivacyChoice = beat.status === "scheduled" ? "scheduled" : beat.privacy;
+export function PrivacyControl({
+  beat,
+  onChange,
+  pending = false,
+  error = null,
+}: PrivacyControlProps) {
+  const current: PrivacyChoice =
+    beat.status === "scheduled" ? "scheduled" : beat.privacy;
   const [picking, setPicking] = useState(false);
   const [publishAt, setPublishAt] = useState(() =>
-    toDateTimeLocal(beat.publish_at ? serverDate(beat.publish_at) : defaultPublishAt()),
+    toDateTimeLocal(
+      beat.publish_at ? serverDate(beat.publish_at) : defaultPublishAt(),
+    ),
   );
   const scheduling = picking || current === "scheduled";
   const publishAtInvalid = Number.isNaN(new Date(publishAt).getTime());
-  const publishAtIso = publishAtInvalid ? null : new Date(publishAt).toISOString();
+  const publishAtIso = publishAtInvalid
+    ? null
+    : new Date(publishAt).toISOString();
   const unchanged =
-    beat.publish_at !== null && publishAtIso !== null && publishAtIso === serverDate(beat.publish_at).toISOString();
+    beat.publish_at !== null &&
+    publishAtIso !== null &&
+    publishAtIso === serverDate(beat.publish_at).toISOString();
 
   function onPick(choice: PrivacyChoice) {
     if (choice === "scheduled") {
@@ -259,7 +460,12 @@ export function PrivacyControl({ beat, onChange, pending = false, error = null }
     }
     setPicking(false);
     if (choice === current) return; // changed their mind about scheduling; nothing to send
-    if (current === "scheduled" && choice === "public" && !window.confirm("Publish now?")) return;
+    if (
+      current === "scheduled" &&
+      choice === "public" &&
+      !window.confirm("Publish now?")
+    )
+      return;
     onChange({ privacy: choice, publish_at: null });
   }
 
@@ -296,13 +502,17 @@ export function PrivacyControl({ beat, onChange, pending = false, error = null }
               type="button"
               className="btn btn-primary btn-sm"
               disabled={pending || publishAtIso === null || unchanged}
-              onClick={() => publishAtIso && onChange({ privacy: "private", publish_at: publishAtIso })}
+              onClick={() =>
+                publishAtIso &&
+                onChange({ privacy: "private", publish_at: publishAtIso })
+              }
             >
               Schedule
             </button>
           </div>
           <span className="drop-hint">
-            Your local time. Stays private; YouTube makes it public at this time.
+            Your local time. Stays private; YouTube makes it public at this
+            time.
           </span>
         </div>
       )}

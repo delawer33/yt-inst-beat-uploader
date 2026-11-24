@@ -51,7 +51,8 @@ Hover and pressed come from the accent ramp (600 / 700) or a 7% / 14% ink tint. 
 | `.progress` (+ `.thin`, `.striped`), `.job` (+ `.failed`), `.job-line`, `.job-actions`, `.log` (+ `.clip`), `.queue-row` (+ `.running`, `.last`), `.section-head`, `.note` | Jobs, progress, logs, queue, inline error | components/jobs.html |
 | `.sidebar`, `.brand`, `.nav-item` + `.count` (+ `.live`), `.sidebar-foot` + `.foot-group` / `.foot-line` / `.foot-note`; `.page`, `.page-head`, `.toolbar` + `.toolbar-end`, `.page-body`, `.page-foot`, `.dimmed` | App chrome | components/navigation.html |
 | `.banner` + `.btn-inverse`; `.toast` (+ `.fixed`) | Needs-your-hand banner; ink toast | components/banner-toast.html |
-| `.panel` (+ `.overlay`), `.panel-head` + `.meta`, `.panel-body`, `.panel-hero`, `.file-meta`, `.action-bar` | Beat side panel | components/panel.html |
+| `.panel` (+ `.overlay` inside a positioned frame, `.fixed` over the whole window, e.g. the Instagram panel), `.panel-head` + `.meta`, `.panel-body`, `.panel-hero`, `.file-meta`, `.action-bar` | Beat side panel | components/panel.html |
+| `.copy-row` + `.label` / `.value` (`.empty`) / `.hint` + a `.btn-sm` copy button; `.mark-ig` | One thing to paste into Instagram; the "IG" mark of a posted Beat (beat card meta, table row) | components/panel.html, components/beat-card.html |
 | `.dialog-backdrop`, `.dialog`, `.dialog-head/-title/-sub/-body/-actions`, `.steps` + `.step` (`.done/.active/.todo`) + `.mark` | Modal with stepped progress | components/dialog.html |
 | `.table` (+ `.r`, `.expand`) | Data tables, history | components/jobs.html, beat-card.html |
 | `.settings-row` + `.what` / `.how`, `.account` + `.title` / `.end` | Settings | components/settings.html |

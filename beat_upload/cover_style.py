@@ -3,7 +3,8 @@
 A gradient map plus ink outlines, in the manner of JoJo's colour pages: the cover goes grey,
 its brightness is cut into 3-5 bands, each band becomes one fixed colour, and edge lines are
 multiplied on top. The colours come from the style, not from the cover, so any picture comes
-out in the same series. Decided in ``docs/cover-styles-prd.md``.
+out in the same series. Decided in ``docs/cover-styles-prd.md``. ``FILM_GRAIN`` (2026-11-09)
+is the one exception: the cover keeps its own colours under a static layer of grain.
 """
 
 from dataclasses import dataclass
@@ -20,9 +21,11 @@ class CoverStyle(StrEnum):
     DIAMOND_PINK_CYAN = "diamond_pink_cyan"
     STONE_OCEAN = "stone_ocean"
     BLOOD_3TONE = "blood_3tone"
+    FILM_GRAIN = "film_grain"
 
 
-DEFAULT_COVER_STYLE = CoverStyle.PURPLE_YELLOW_5TONE
+# The one style the channel uses; the seven gradient maps stay as choices.
+DEFAULT_COVER_STYLE = CoverStyle.FILM_GRAIN
 
 # Applied to the grey cover before it is cut into bands; the cuts below are on its output.
 CONTRAST = 1.3
@@ -99,8 +102,20 @@ def cover_style_graph(style: CoverStyle, src: str, dst: str, size: tuple[int, in
     into ``[dst]``.
 
     Both blend inputs are forced to gbrp: otherwise ffmpeg negotiates grey for the whole
-    graph and the result comes out black and white.
+    graph and the result comes out black and white. ``FILM_GRAIN`` is no gradient map: a
+    mid-grey plate of static noise, made at half size so the grain is coarse, overlaid on the
+    original colours.
     """
+    if style == CoverStyle.FILM_GRAIN:  # the DB hands a plain str
+        w, h = size
+        return (
+            f"[{src}]split[{dst}_pic][{dst}_plate];"
+            f"[{dst}_plate]scale=iw/2:ih/2,hue=s=0,lutyuv=y=128,"
+            f"noise=c0s=100:c0f=u:all_seed=3,eq=contrast=1.5,"
+            f"scale={w}:{h}:flags=bilinear,format=rgb24[{dst}_grain];"
+            f"[{dst}_pic]format=rgb24[{dst}_rgb];"
+            f"[{dst}_rgb][{dst}_grain]blend=all_mode=overlay:all_opacity=0.9,format=rgb24[{dst}]"
+        )
     return (
         f"[{src}]split[{dst}_map][{dst}_ink];"
         f"[{dst}_map]{gradient_map_filter(style)}[{dst}_colour];"

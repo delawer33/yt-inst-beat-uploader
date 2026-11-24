@@ -13,12 +13,17 @@ from beat_upload import label, video
 from beat_upload.cover_style import CoverStyle
 from beat_upload.errors import VideoError
 from beat_upload.video import (
+    clip_command,
     cover_fingerprint,
     cover_graph,
     fit_in_frame,
     parse_ffmpeg_progress,
     probe_duration,
+    reel_fit,
+    reel_graph,
     render_cover,
+    render_reel,
+    render_reel_cover,
     render_video,
 )
 
@@ -153,7 +158,7 @@ def test_fit_in_frame(size: tuple[int, int], expected: tuple[int, int]) -> None:
 
 
 def test_label_sits_on_the_cover_not_the_frame() -> None:
-    assert label.placement(1080) == (292, 43)  # 27 % wide, 4 % margin of the cover
+    assert label.placement(1080) == (184, 43)  # 17 % wide, 4 % margin of the cover
 
 
 def test_cover_graph_styles_and_stamps_before_the_pad() -> None:
@@ -183,7 +188,7 @@ def test_render_cover_feeds_the_label_as_second_input(
         seen.append(cmd)
         label = Path(cmd[cmd.index("-i", cmd.index("-i") + 1) + 1])
         with Image.open(label) as im:
-            assert im.width == 292  # 27 % of the cover's 1080 px in the frame
+            assert im.width == 184  # 17 % of the cover's 1080 px in the frame
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(video, "ensure_ffmpeg", lambda: None)
@@ -238,3 +243,116 @@ def test_a_sliver_of_a_cover_is_refused_with_a_reason(
     Image.new("RGB", (60, 4000), "red").save(cover)
     with pytest.raises(VideoError, match="too narrow for the Label"):
         render_cover(cover, tmp_path / "out.png")
+
+
+# --- the Reel ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [
+        ((3000, 3000), (1080, 1080)),  # square: full width
+        ((1280, 720), (1080, 608)),  # wide: full width, short
+        ((1001, 1333), (1080, 1438)),  # odd sizes come out even
+        ((1000, 3000), (640, 1920)),  # taller than the frame: fit the height instead
+    ],
+)
+def test_reel_fit(size: tuple[int, int], expected: tuple[int, int]) -> None:
+    assert reel_fit(*size) == expected
+
+
+def test_reel_graph_paints_stamps_and_lays_the_cover_over_a_blurred_copy() -> None:
+    g = reel_graph(CoverStyle.STONE_OCEAN, (1080, 1080))
+    assert g.startswith("[0:v]scale=1080:1080")
+    style = g.index("lutrgb=")
+    split = g.index("[styled]split[a][b]")
+    blur = g.index("gblur=sigma=40,eq=brightness=-0.25[bg]")
+    stamp = g.index("[b][1:v]overlay=x=W-w-43:y=43")
+    lay = g.index("[bg][marked]overlay=x=(W-w)/2:y=(H-h)/2-120[out]")
+    assert style < split < blur < stamp < lay
+    assert "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" in g
+
+
+def test_reel_graph_stamps_a_tall_cover_at_its_own_width() -> None:
+    w, h = reel_fit(1000, 3000)
+    g = reel_graph(CoverStyle.STONE_OCEAN, (w, h))
+    assert g.startswith(f"[0:v]scale={w}:{h}")
+    assert f"overlay=x=W-w-{label.placement(w)[1]}" in g
+
+
+def test_render_reel_cover_feeds_the_label_and_the_reel_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cover = tmp_path / "cover.jpg"
+    Image.new("RGB", (1000, 1000), "red").save(cover)
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(video, "ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    render_reel_cover(cover, tmp_path / "out.png", CoverStyle.BLOOD_3TONE)
+    cmd = seen[0]
+    assert cmd[cmd.index("-filter_complex") + 1].endswith("[out]")
+    assert cmd[cmd.index("-map") + 1] == "[out]"
+    assert not list(tmp_path.glob("label-*"))
+
+
+def test_a_sliver_of_a_cover_is_refused_for_the_reel_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video, "ensure_ffmpeg", lambda: None)
+    cover = tmp_path / "sliver.png"
+    Image.new("RGB", (60, 4000), "red").save(cover)
+    with pytest.raises(VideoError, match="too narrow for the Label"):
+        render_reel_cover(cover, tmp_path / "out.png")
+
+
+def test_render_reel_loops_the_reel_frame(
+    tmp_path: Path, fake_ffmpeg: type[FakePopen], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    styles: list[CoverStyle] = []
+
+    def fake_reel_cover(image: Path, output: Path, style: CoverStyle) -> Path:
+        styles.append(style)
+        output.write_bytes(b"png")
+        return output
+
+    monkeypatch.setattr(video, "render_reel_cover", fake_reel_cover)
+    seen: list[float] = []
+    out = render_reel(
+        tmp_path / "a.mp3", tmp_path / "c.png", tmp_path / "reel.mp4", seen.append,
+        CoverStyle.DIO_GREEN,
+    )  # fmt: skip
+    assert styles == [CoverStyle.DIO_GREEN]
+    assert out == tmp_path / "reel.mp4" and seen[-1] == 1.0
+    assert fake_ffmpeg.calls[0][fake_ffmpeg.calls[0].index("-loop") + 3].endswith("cover.png")
+    assert not list(tmp_path.glob("reel-*"))
+
+
+def test_a_render_is_capped_in_cores_and_memory(
+    tmp_path: Path, fake_ffmpeg: type[FakePopen], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(video, "_can_scope", lambda: True)
+    render_video(tmp_path / "a.mp3", tmp_path / "c.png", tmp_path / "v.mp4", lambda f: None)
+    cmd = fake_ffmpeg.calls[0]
+    assert cmd[:3] == ["systemd-run", "--user", "--scope"]
+    assert "CPUQuota=400%" in cmd and "MemoryMax=2G" in cmd and "MemorySwapMax=0" in cmd
+    ffmpeg = cmd[cmd.index("--") + 1 :]
+    assert ffmpeg[0] == "ffmpeg" and ffmpeg[ffmpeg.index("-threads") + 1] == "4"
+
+
+def test_clip_command_loops_the_clip_drops_its_sound_and_stops_with_the_audio(
+    tmp_path: Path,
+) -> None:
+    cmd = clip_command(
+        tmp_path / "a.mp3", tmp_path / "c.mp4", tmp_path / "l.png", "[0:v]null[cover]", "cover",
+        tmp_path / "v.mp4",
+    )  # fmt: skip
+    assert cmd[cmd.index("-stream_loop") + 1] == "-1"
+    assert cmd[cmd.index("-i") + 1] == str(tmp_path / "c.mp4")
+    assert "-map" in cmd and cmd[cmd.index("-map") + 1] == "[cover]"
+    assert "2:a" in cmd  # the beat, never the clip's own sound
+    assert "-shortest" in cmd and cmd[-1] == str(tmp_path / "v.mp4")
